@@ -56,3 +56,8 @@ src/components/StoreMap.tsx  Live store map
 - **Real store layouts** – load layouts per store instead of the demo store,
   and let users pick their store.
 - **Shared lists** – sync a household list across phones.
+
+## Live app
+
+Every push to `main` is tested, built and published to GitHub Pages:
+https://calmeddy.github.io/aisle-wise/
