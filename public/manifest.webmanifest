@@ -1,0 +1,12 @@
+{
+  "name": "Aisle Wise",
+  "short_name": "Aisle Wise",
+  "description": "A grocery list that sorts itself into the shortest walk through the store.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f6f7f4",
+  "theme_color": "#1f8a4c",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
