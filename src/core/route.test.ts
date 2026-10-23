@@ -1,91 +1,131 @@
 import { describe, expect, it } from 'vitest';
-import { demoStore } from './demoStore';
-import { walkDistance } from './distance';
-import { findSection, normalize } from './locate';
-import { groupIntoStops, planRoute, routeLength } from './route';
-import type { ListItem, Stop } from './types';
+import { demoLayout } from './demoLayout';
+import { Floor, UNREACHABLE } from './floor';
+import { footprint, shelves, spotPoint } from './geometry';
+import { groupIntoStops, locateItem, matchCategory, normalize } from './locate';
+import { planRoute, routeLength } from './route';
+import type { Aisle, ListItem, StoreLayout } from './types';
+import { checkLayout } from './validate';
 
 const item = (name: string): ListItem => ({ id: name, name, done: false });
-const locate = (i: ListItem) => findSection(i.name, demoStore);
-const sectionIds = (stops: Stop[]) => stops.map((s) => s.section.id);
 
-describe('walkDistance', () => {
-  const store = { depth: 60, aisleXs: [0, 10, 20] };
+const tiny = (places: StoreLayout['places']): StoreLayout => ({
+  id: 't', name: 'Tiny', width: 20, height: 12, places,
+  entrance: { x: 0, y: 11 }, checkout: { x: 19, y: 11 },
+});
+const vAisle = (x: number, length = 8): Aisle => ({
+  kind: 'aisle', id: `v${x}`, label: `V${x}`, x, y: 2, orientation: 'vertical', length, width: 2, categories: [],
+});
 
-  it('walks straight within the same aisle', () => {
-    expect(walkDistance({ x: 10, y: 5 }, { x: 10, y: 50 }, store)).toBe(45);
+describe('geometry', () => {
+  it('turns an aisle sideways', () => {
+    const v = vAisle(3);
+    const h: Aisle = { ...v, orientation: 'horizontal' };
+    expect(footprint(v)).toEqual({ x: 3, y: 2, w: 4, h: 8 });
+    expect(footprint(h)).toEqual({ x: 3, y: 2, w: 8, h: 4 });
+    expect(shelves(h)).toEqual([{ x: 3, y: 2, w: 8, h: 1 }, { x: 3, y: 5, w: 8, h: 1 }]);
   });
 
-  it('goes around the front when that is shorter', () => {
-    expect(walkDistance({ x: 10, y: 5 }, { x: 20, y: 5 }, store)).toBe(20);
-  });
-
-  it('goes around the back when that is shorter', () => {
-    expect(walkDistance({ x: 10, y: 55 }, { x: 20, y: 55 }, store)).toBe(20);
+  it('spreads categories along the aisle', () => {
+    const v = vAisle(3);
+    expect(spotPoint(v, 0, 2)).toEqual({ x: 4, y: 4 });
+    expect(spotPoint(v, 1, 2)).toEqual({ x: 4, y: 8 });
   });
 });
 
-describe('findSection', () => {
+describe('Floor', () => {
+  it('walks around shelves rather than through them', () => {
+    const floor = new Floor(tiny([vAisle(3)]));
+    // Either side of the left shelf (x=3), halfway down the aisle.
+    const outside = { x: 2, y: 6 };
+    const inside = { x: 4, y: 6 };
+    expect(floor.walkable({ x: 3, y: 6 })).toBe(false);
+    // Out the bottom end (y=10) and back up: 4 down, 2 across, 4 up.
+    expect(floor.distance(outside, inside)).toBe(10);
+  });
+
+  it('reports places sealed off by shelves', () => {
+    const boxed = tiny([
+      { kind: 'aisle', id: 'top', label: 'Top', x: 5, y: 0, orientation: 'horizontal', length: 6, width: 2, categories: [] },
+      { kind: 'aisle', id: 'l', label: 'L', x: 4, y: 0, orientation: 'vertical', length: 8, width: 0, categories: [] },
+      { kind: 'aisle', id: 'r', label: 'R', x: 11, y: 0, orientation: 'vertical', length: 8, width: 0, categories: [] },
+      { kind: 'aisle', id: 'bot', label: 'Bottom', x: 5, y: 6, orientation: 'horizontal', length: 6, width: 0, categories: [] },
+      { kind: 'area', id: 'room', label: 'Locked room', x: 6, y: 4, w: 4, h: 1, categories: [] },
+    ]);
+    const floor = new Floor(boxed);
+    expect(floor.distance(boxed.entrance, { x: 7, y: 4 })).toBe(UNREACHABLE);
+    expect(checkLayout(boxed, floor).join(' ')).toContain('Locked room can’t be reached');
+  });
+
+  it('finds every demo place reachable', () => {
+    const floor = new Floor(demoLayout);
+    expect(checkLayout(demoLayout, floor).filter((p) => p.includes('reach'))).toEqual([]);
+  });
+});
+
+describe('locating items', () => {
   it('normalizes plurals and punctuation', () => {
     expect(normalize('2x Bananas!')).toBe('x banana');
     expect(normalize('Strawberries')).toBe('strawberry');
   });
 
   it('prefers the longest keyword', () => {
-    expect(findSection('almond milk', demoStore)?.id).toBe('dairy');
-    expect(findSection('almonds', demoStore)?.id).toBe('a4f');
-    expect(findSection('ice cream', demoStore)?.id).toBe('a8b');
-    expect(findSection('cream', demoStore)?.id).toBe('dairy');
+    expect(matchCategory('almond milk')?.id).toBe('dairy');
+    expect(matchCategory('almonds')?.id).toBe('snacks');
+    expect(matchCategory('ice cream')?.id).toBe('icecream');
+  });
+
+  it('finds the place that stocks the category', () => {
+    expect(locateItem('pasta', demoLayout)?.label).toBe('Aisle 2 · Pasta & Rice');
+    expect(locateItem('ice cream', demoLayout)?.placeId).toBe('f2');
+    expect(locateItem('bread', demoLayout)?.label).toBe('Bakery');
   });
 
   it('uses what the user taught it first', () => {
-    expect(findSection('Grandma’s sauce', demoStore)).toBeUndefined();
-    expect(findSection('Grandma’s sauce', demoStore, { 'grandma s sauce': 'a2b' })?.id).toBe('a2b');
+    expect(locateItem('Grandma sauce', demoLayout)).toBeUndefined();
+    expect(locateItem('milk', demoLayout, { milk: 'a3' })?.placeId).toBe('a3');
+    expect(locateItem('Grandma’s sauce', demoLayout, { 'grandma s sauce': 'a2:canned' })?.label)
+      .toBe('Aisle 2 · Canned Goods & Soup');
+  });
+
+  it('falls back to the category when a taught place was deleted', () => {
+    expect(locateItem('milk', demoLayout, { milk: 'gone' })?.placeId).toBe('dairy');
   });
 });
 
 describe('planRoute', () => {
-  it('groups items in the same section into one stop', () => {
-    const { stops, unplaced } = groupIntoStops(
-      [item('milk'), item('yogurt'), item('apples'), item('flux capacitor')],
-      locate,
-    );
+  const floor = new Floor(demoLayout);
+  const locate = (i: ListItem) => locateItem(i.name, demoLayout);
+  const plan = <T extends { point: { x: number; y: number } }>(start: { x: number; y: number }, stops: T[]) =>
+    planRoute(start, stops, demoLayout.checkout, floor.distance);
+
+  it('groups items picked up at the same spot', () => {
+    const { stops, unplaced } = groupIntoStops([item('milk'), item('yogurt'), item('apples'), item('flux capacitor')], locate);
     expect(stops).toHaveLength(2);
     expect(unplaced.map((i) => i.name)).toEqual(['flux capacitor']);
   });
 
-  it('starts with what is nearest the entrance and re-plans from a new position', () => {
-    const { stops } = groupIntoStops(
-      [item('apples'), item('steak'), item('pasta'), item('milk')],
-      locate,
-    );
-    const fromDoor = planRoute(demoStore.entrance, stops, demoStore);
-    expect(sectionIds(fromDoor)[0]).toBe('fruit');
-
-    const atMeat = demoStore.sections.find((s) => s.id === 'meat')!.point;
-    const fromMeat = planRoute(atMeat, stops, demoStore);
-    expect(sectionIds(fromMeat)[0]).toBe('meat');
+  it('re-plans from wherever the shopper is', () => {
+    const { stops } = groupIntoStops([item('apples'), item('steak'), item('pasta'), item('milk')], locate);
+    expect(plan(demoLayout.entrance, stops)[0].placeId).toBe('produce');
+    const atMeat = stops.find((s) => s.placeId === 'meat')!.point;
+    expect(plan(atMeat, stops)[0].placeId).toBe('meat');
   });
 
-  it('finds a route at least as short as the list order', () => {
+  it('is never longer than walking the list in order', () => {
     const names = ['soda', 'bread', 'steak', 'cereal', 'shampoo', 'eggs', 'ice cream', 'apples', 'rice', 'diapers'];
     const { stops } = groupIntoStops(names.map(item), locate);
-    const planned = planRoute(demoStore.entrance, stops, demoStore);
-    expect(routeLength(demoStore.entrance, planned, demoStore)).toBeLessThanOrEqual(
-      routeLength(demoStore.entrance, stops, demoStore),
-    );
+    const planned = plan(demoLayout.entrance, stops);
+    expect(routeLength(demoLayout.entrance, planned, demoLayout.checkout, floor.distance))
+      .toBeLessThanOrEqual(routeLength(demoLayout.entrance, stops, demoLayout.checkout, floor.distance));
   });
 
-  it('handles long lists with the heuristic and still beats list order', () => {
-    const { stops } = groupIntoStops(
-      demoStore.sections.map((s) => ({ id: s.id, name: s.id, done: false })),
-      (i) => demoStore.sections.find((s) => s.id === i.id),
-    );
+  it('handles long lists with the heuristic', () => {
+    const stops = demoLayout.places.map((p) => ({ id: p.id, point: spotPoint(p) }));
     expect(stops.length).toBeGreaterThan(12);
-    const planned = planRoute(demoStore.entrance, stops, demoStore);
-    expect(new Set(sectionIds(planned)).size).toBe(stops.length);
-    expect(routeLength(demoStore.entrance, planned, demoStore)).toBeLessThan(
-      routeLength(demoStore.entrance, stops, demoStore),
-    );
+    const planned = plan(demoLayout.entrance, stops);
+    expect(new Set(planned.map((s) => s.id)).size).toBe(stops.length);
+    expect(routeLength(demoLayout.entrance, planned, demoLayout.checkout, floor.distance))
+      .toBeLessThan(routeLength(demoLayout.entrance, stops, demoLayout.checkout, floor.distance));
   });
 });

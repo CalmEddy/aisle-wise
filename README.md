@@ -6,21 +6,38 @@ re-orders it as you move.
 
 ## How it works
 
-1. **Add items** – type `milk, apples, pasta` and each item is matched to a
-   section of the store (e.g. "almond milk" → Dairy, "almonds" → Aisle 4).
-2. **Plan the route** – items in the same section are grouped into one stop,
-   and the stops are ordered for the shortest walk from where you are to the
-   checkout. Store walking is modelled as parallel aisles joined by a front
-   and back cross-aisle (`src/core/distance.ts`). Up to 12 stops are solved
-   exactly; longer lists use nearest-neighbour + 2-opt (`src/core/route.ts`).
-3. **Follow along** – the app knows where you are because:
-   - checking off an item moves you to that item's section, and
-   - you can tap a "You're near" chip (Aisle 3, Dairy, …) at any time.
-   Each position change re-plans the rest of the list immediately.
-4. **Teach it** – items it can't place show up under "Where is this?". Pick a
-   section once and it remembers for next time.
+1. **Add items** – type `milk, apples, pasta`. Each item is matched to a
+   kind of product (e.g. "almond milk" → Dairy, "almonds" → Snacks) and then
+   to the aisle or area in your store that stocks it.
+2. **Plan the route** – items picked up at the same spot are grouped into one
+   stop, and stops are ordered for the shortest walk from where you are to
+   the checkout. The store floor is a grid; shelves block walking, so
+   distances are real paths around them (`src/core/floor.ts`). Up to 12
+   stops are solved exactly; longer lists use nearest-neighbour + 2-opt
+   (`src/core/route.ts`).
+3. **Follow along** – checking off an item moves you to that spot, and you
+   can tap the map or a "You're near" chip at any time. Each move re-plans
+   the rest of the list.
+4. **Move items** – drag an item's ⠿ handle onto the map or onto another
+   stop. The app remembers that location for that store.
 
-Your list, position and learned locations are saved on the device.
+## Store layout editor
+
+Open the **Store layout** tab to build your own stores:
+
+- **Aisles** run up-and-down or side-to-side, with shelves on both sides.
+  Set the label, length and walkway width.
+- **Open areas** are rectangles you can walk through, for departments like
+  Produce, Deli or Bakery.
+- For each aisle or area, choose **what's stocked there** (Dairy, Pasta &
+  Rice, …). In aisles they're spread out in the order you list them.
+- Drag shapes to move them and drag the round handle to resize, or use the
+  arrows and +/− buttons for exact changes.
+- Set where the **entrance** and **checkout** are.
+- The editor warns you if something can't be reached or a kind of product
+  isn't stocked anywhere.
+- Keep several stores, and pick the one you're shopping in from the list
+  header.
 
 ## Run it
 
@@ -38,13 +55,17 @@ signal inside the store.
 ## Project layout
 
 ```
-src/core/types.ts            Store, section and list item types
-src/core/demoStore.ts        Example store layout and product catalog
-src/core/locate.ts           Item name → store section matching
-src/core/distance.ts         Walking distance inside a store
-src/core/route.ts            Route planning (shortest walk)
-src/App.tsx                  Mobile UI
-src/components/StoreMap.tsx  Live store map
+src/core/types.ts                 Layout, aisle, area and list item types
+src/core/categories.ts            Kinds of products and the words that identify them
+src/core/demoLayout.ts            Example store
+src/core/geometry.ts              Aisle/area shapes and pick-up spots
+src/core/floor.ts                 Walkable grid and walking distances
+src/core/locate.ts                Item name → spot in the store
+src/core/route.ts                 Route planning (shortest walk)
+src/core/validate.ts              Layout warnings
+src/components/ShoppingView.tsx   Shopping list with drag-and-drop
+src/components/LayoutEditor.tsx   Store layout editor
+src/components/StoreMap.tsx       Store map used by both
 ```
 
 ## Ideas for next steps
@@ -53,8 +74,7 @@ src/components/StoreMap.tsx  Live store map
   Options: Bluetooth beacons per aisle (needs a native wrapper such as
   Capacitor), scanning a QR code on each aisle sign, or a store's own API.
   Anything that produces a `Point` can drive the existing re-planning.
-- **Real store layouts** – load layouts per store instead of the demo store,
-  and let users pick their store.
+- **Share layouts** – export/import a store layout so friends can use it.
 - **Shared lists** – sync a household list across phones.
 
 ## Live app
