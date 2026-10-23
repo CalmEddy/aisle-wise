@@ -13,6 +13,21 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // If the app never starts (e.g. the raw source is being served instead
+      // of the built app), show a hint rather than a blank white screen.
+      setTimeout(function () {
+        var root = document.getElementById('root');
+        if (root && !root.hasChildNodes()) {
+          root.innerHTML =
+            '<div style="font-family:system-ui;padding:24px;line-height:1.5">' +
+            '<h2>Aisle Wise didn’t load</h2>' +
+            '<p>If this is GitHub Pages: open the repo’s <b>Settings → Pages</b>, set ' +
+            '<b>Source</b> to <b>GitHub Actions</b>, then re-run the ' +
+            '<b>Deploy to GitHub Pages</b> workflow from the Actions tab.</p></div>';
+        }
+      }, 4000);
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
