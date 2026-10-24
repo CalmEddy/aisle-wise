@@ -59,6 +59,22 @@ Open the **Store layout** tab to build your own stores:
 - Keep several stores, and pick the one you're shopping in from the list
   header. Copying a store also copies where its items are.
 
+## Sharing
+
+- **Share a list** – tap **Share** at the top of the List tab.
+- **Share a store** – in **Store layout**, pick the store and tap **Share**.
+  The layout, its categories, where items are in that store and which items
+  it doesn't carry all come along.
+
+Send the link any way you like (the phone's share menu, text, email). When
+someone opens it, Aisle Wise shows what was shared and lets them add it. A
+store they already have can be updated in place. Shared lists skip items
+already on their list, and new items join their master list.
+
+The shared data is packed into the link itself, after `#`, so it is never
+uploaded anywhere. Links are copies: later changes aren't synced, so share
+again to send updates (`src/core/share.ts`).
+
 ## Run it
 
 ```bash
@@ -88,6 +104,8 @@ src/components/ShoppingView.tsx   Shopping list with suggestions and drag-and-dr
 src/components/ItemsView.tsx      Grocery items and categories editor
 src/components/LayoutEditor.tsx   Store layout editor
 src/components/StoreMap.tsx       Store map used by both
+src/components/ShareSheets.tsx    Share link and import screens
+src/core/share.ts                 Packing lists/stores into links, and importing them
 ```
 
 ## Ideas for next steps
@@ -96,8 +114,8 @@ src/components/StoreMap.tsx       Store map used by both
   Options: Bluetooth beacons per aisle (needs a native wrapper such as
   Capacitor), scanning a QR code on each aisle sign, or a store's own API.
   Anything that produces a `Point` can drive the existing re-planning.
-- **Share layouts** – export/import a store layout so friends can use it.
-- **Shared lists** – sync a household list across phones.
+- **Live shared lists** – sync a household list across phones as it
+  changes. Needs a small backend with accounts (e.g. Firebase or Supabase).
 
 ## Live app
 

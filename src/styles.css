@@ -265,3 +265,11 @@ button { cursor: pointer; }
 
 /* Leave room to scroll the last rows above the banner. */
 .app main { padding-bottom: 96px; }
+
+/* Sharing */
+.top-right { display: flex; align-items: center; gap: 10px; }
+.share-btn { padding: 6px 12px; }
+.share-url { width: 100%; font-size: 0.85rem !important; color: var(--muted) !important; }
+.preview { columns: 2; margin: 6px 0; padding-left: 18px; font-size: 0.9rem; }
+.sheet-actions.wrap { flex-wrap: wrap; }
+.toast.top { bottom: auto; top: calc(env(safe-area-inset-top) + 12px); }

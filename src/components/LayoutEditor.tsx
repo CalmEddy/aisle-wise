@@ -15,6 +15,7 @@ interface Props {
   categories: Category[];
   /** Called after a layout is copied, so item locations can be copied too. */
   onCopied: (fromId: string, toId: string) => void;
+  onShare: (layout: StoreLayout) => void;
 }
 
 type Tool = 'select' | 'aisle-v' | 'aisle-h' | 'area' | 'entrance' | 'checkout';
@@ -35,7 +36,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDone, categories, onCopied }: Props) {
+export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDone, categories, onCopied, onShare }: Props) {
   const layout = layouts.find((l) => l.id === activeId) ?? layouts[0];
   const [tool, setTool] = useState<Tool>('select');
   const [selectedId, setSelectedId] = useState<string>();
@@ -182,6 +183,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
           </select>
           <button className="btn" onClick={() => createLayout()}>New</button>
           <button className="btn" onClick={() => createLayout(layout)}>Copy</button>
+          <button className="btn" onClick={() => onShare(layout)}>Share</button>
           <button className="btn danger" onClick={deleteLayout} disabled={layouts.length <= 1}>Delete</button>
         </div>
         <label className="field">

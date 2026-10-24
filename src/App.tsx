@@ -1,12 +1,16 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
 import { LayoutEditor } from './components/LayoutEditor';
+import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { Catalog, normalize } from './core/catalog';
 import { defaultCategories, defaultProducts } from './core/categories';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { productFor, resolveSpot } from './core/locate';
+import {
+  applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
+} from './core/share';
 import type { Category, ListItem, Point, Product, StoreLayout } from './core/types';
 import { usePersistentState } from './usePersistentState';
 
@@ -39,6 +43,27 @@ export default function App() {
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
 
   useMoveOldLocationsIntoProducts(setProducts);
+
+  // Sharing: what we're sending, and anything that arrived in a link.
+  const [sending, setSending] = useState<{ title: string; summary: string; share: Share } | null>(null);
+  const [incoming, setIncoming] = useState<Share | 'error' | null>(null);
+  const [notice, setNotice] = useState('');
+  useEffect(() => {
+    const check = () => {
+      const text = shareFromHash(location.hash);
+      if (!text) return;
+      history.replaceState(null, '', location.pathname + location.search);
+      decodeShare(text).then(setIncoming, () => setIncoming('error'));
+    };
+    check();
+    window.addEventListener('hashchange', check);
+    return () => window.removeEventListener('hashchange', check);
+  }, []);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(''), 5000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const layout = layouts.find((l) => l.id === activeId) ?? layouts[0] ?? demoLayout;
   const floor = useMemo(() => new Floor(layout), [layout]);
@@ -172,6 +197,47 @@ export default function App() {
     setItems((prev) => [...prev, { id: newId(), name: product.name, done: false, productId: product.id }]);
   }
 
+  function shareList() {
+    const share = buildListShare(items, catalog);
+    setSending({ title: 'your list', summary: `${share.items.length} item${share.items.length === 1 ? '' : 's'} still to get.`, share });
+  }
+
+  function shareStore(l: StoreLayout) {
+    const share = buildStoreShare(l, catalog);
+    const located = share.items.filter((i) => i.at).length;
+    const unavailable = share.items.filter((i) => i.notAvailable).length;
+    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    const summary = `The store layout and ${plural(located, 'item location')}`
+      + (unavailable ? `, plus ${plural(unavailable, 'item')} not available there.` : '.');
+    setSending({ title: `“${l.name}”`, summary, share });
+  }
+
+  const data = () => ({ items, products, categories, layouts });
+
+  function importList() {
+    if (!incoming || incoming === 'error' || incoming.kind !== 'list') return;
+    const r = applyListShare(incoming, data());
+    setCategories(() => r.categories);
+    setProducts(() => r.products);
+    setItems(() => r.items);
+    setIncoming(null);
+    setView('list');
+    setNotice(`Added ${r.added} item${r.added === 1 ? '' : 's'} to your list${r.skipped ? ` (${r.skipped} already on it)` : ''}.`);
+  }
+
+  function importStore(replaceId?: string) {
+    if (!incoming || incoming === 'error' || incoming.kind !== 'store') return;
+    const r = applyStoreShare(incoming, data(), replaceId);
+    setCategories(() => r.categories);
+    setProducts(() => r.products);
+    setLayouts(() => r.layouts);
+    setActiveId(r.layoutId);
+    setIncoming(null);
+    setView('list');
+    const name = r.layouts.find((l) => l.id === r.layoutId)?.name;
+    setNotice(replaceId ? `Updated “${name}”.` : `Added “${name}”. You’re now shopping there.`);
+  }
+
   const tab = (id: View, label: string) => (
     <button role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
       {label}
@@ -192,8 +258,13 @@ export default function App() {
           )}
         </div>
         {view === 'list' && (
-          <div className="progress" aria-label="Progress">
-            <strong>{done}</strong>/{items.length}
+          <div className="top-right">
+            {items.length > done && (
+              <button className="btn share-btn" onClick={shareList} aria-label="Share list">Share</button>
+            )}
+            <div className="progress" aria-label="Progress">
+              <strong>{done}</strong>/{items.length}
+            </div>
           </div>
         )}
       </header>
@@ -241,9 +312,21 @@ export default function App() {
           setActiveId={setActiveId}
           categories={categories}
           onCopied={copyItemLocations}
+          onShare={shareStore}
           onDone={() => setView('list')}
         />
       )}
+      {sending && <ShareSheet {...sending} onClose={() => setSending(null)} />}
+      {incoming && (
+        <ImportSheet
+          share={incoming}
+          layouts={layouts}
+          onAddList={importList}
+          onAddStore={importStore}
+          onCancel={() => setIncoming(null)}
+        />
+      )}
+      {notice && <div className="toast top" role="status"><span className="toast-text">{notice}</span></div>}
     </div>
   );
 }
