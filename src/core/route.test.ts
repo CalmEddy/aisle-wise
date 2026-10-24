@@ -129,6 +129,29 @@ describe('planRoute', () => {
     expect(plan(atMeat, stops)[0].placeId).toBe('meat');
   });
 
+  it('visits the nearer stop first when two orders are equally long', () => {
+    // Open floor: entrance bottom-right, checkout bottom-left, one stop near
+    // the entrance and one far away. Both orders walk 63 squares.
+    const open: StoreLayout = { ...tiny([]), width: 30, height: 20, entrance: { x: 20, y: 19 }, checkout: { x: 5, y: 19 } };
+    const f = new Floor(open);
+    const near = { id: 'near', point: { x: 22, y: 15 } };
+    const far = { id: 'far', point: { x: 27, y: 2 } };
+    expect(routeLength(open.entrance, [near, far], open.checkout, f.distance))
+      .toBe(routeLength(open.entrance, [far, near], open.checkout, f.distance));
+    for (const stops of [[near, far], [far, near]]) {
+      expect(planRoute(open.entrance, stops, open.checkout, f.distance).map((s) => s.id)).toEqual(['near', 'far']);
+    }
+  });
+
+  it('still takes a longer first leg when the whole route is shorter', () => {
+    // Checkout right next to the near stop: grab the far one first.
+    const open: StoreLayout = { ...tiny([]), width: 30, height: 20, entrance: { x: 15, y: 19 }, checkout: { x: 22, y: 19 } };
+    const f = new Floor(open);
+    const near = { id: 'near', point: { x: 20, y: 17 } };
+    const far = { id: 'far', point: { x: 2, y: 19 } };
+    expect(planRoute(open.entrance, [near, far], open.checkout, f.distance).map((s) => s.id)).toEqual(['far', 'near']);
+  });
+
   it('is never longer than walking the list in order', () => {
     const names = ['soda', 'bread', 'steak', 'cereal', 'shampoo', 'eggs', 'ice cream', 'apples', 'rice', 'diapers'];
     const { stops } = groupIntoStops(names.map(item), locate);

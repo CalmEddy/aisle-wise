@@ -6,6 +6,16 @@ export type Distance = (a: Point, b: Point) => number;
 const EXACT_LIMIT = 12;
 
 /**
+ * Tie-breaker. Many routes through a store are exactly the same length
+ * (walking on a grid, and every route ends at the checkout). Among those,
+ * shoppers expect the nearest stop first, so earlier legs are weighted a
+ * hair more than later ones. The weight is far too small to ever pick a
+ * route that is actually longer.
+ */
+const EARLY = 1e-6;
+const legWeight = (leg: number, n: number) => 1 + EARLY * (n - leg);
+
+/**
  * Orders the stops so that walking from `start`, visiting every stop, and
  * ending at `end` (the checkout) is as short as possible.
  */
@@ -34,16 +44,17 @@ function exactOrder(start: Point, pts: Point[], end: Point, d: Distance): number
   const cost = Array.from({ length: 1 << n }, () => new Float64Array(n).fill(Infinity));
   const prev = Array.from({ length: 1 << n }, () => new Int8Array(n).fill(-1));
 
-  for (let i = 0; i < n; i++) cost[1 << i][i] = d(start, pts[i]);
+  for (let i = 0; i < n; i++) cost[1 << i][i] = d(start, pts[i]) * legWeight(0, n);
 
   for (let mask = 1; mask <= full; mask++) {
     for (let last = 0; last < n; last++) {
       const c = cost[mask][last];
       if (!(mask & (1 << last)) || c === Infinity) continue;
+      const w = legWeight(popcount(mask), n);
       for (let next = 0; next < n; next++) {
         if (mask & (1 << next)) continue;
         const nm = mask | (1 << next);
-        const nc = c + m[last][next];
+        const nc = c + m[last][next] * w;
         if (nc < cost[nm][next]) {
           cost[nm][next] = nc;
           prev[nm][next] = last;
@@ -72,6 +83,12 @@ function exactOrder(start: Point, pts: Point[], end: Point, d: Distance): number
     cur = p;
   }
   return order.reverse();
+}
+
+function popcount(x: number): number {
+  let c = 0;
+  for (; x; x &= x - 1) c++;
+  return c;
 }
 
 /** Nearest-neighbour tour improved with 2-opt. Good enough for big lists. */
