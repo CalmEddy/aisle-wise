@@ -273,3 +273,23 @@ button { cursor: pointer; }
 .preview { columns: 2; margin: 6px 0; padding-left: 18px; font-size: 0.9rem; }
 .sheet-actions.wrap { flex-wrap: wrap; }
 .toast.top { bottom: auto; top: calc(env(safe-area-inset-top) + 12px); }
+
+/* Household / live sharing */
+.household-pill {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 3px 10px 3px 8px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 0.78rem; color: var(--muted);
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
+.status-synced .dot { background: var(--accent); }
+.status-saving .dot, .status-connecting .dot { background: #e0b84a; }
+.status-offline .dot { background: var(--danger); }
+.status-off .dot { background: transparent; border: 1.5px solid var(--muted); }
+.status-text { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; }
+.card.inset { background: var(--bg); margin: 10px 0; }
+.card.inset h3 { margin-bottom: 6px; }
+.btn.wide { width: 100%; margin-top: 6px; padding: 11px; }
+.invite-code { font: 700 1.6rem ui-monospace, Menlo, monospace; letter-spacing: 0.15em; text-align: center; padding: 8px; }
+.members { margin: 0; padding-left: 18px; }
+.sheet input.code { font: 600 1.4rem ui-monospace, Menlo, monospace; letter-spacing: 0.2em; text-align: center; }
+.sheet .add-row input { font-size: 16px; }
+.household .error { margin: 8px 0 0; }

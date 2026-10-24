@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
 import { LayoutEditor } from './components/LayoutEditor';
+import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { Catalog, normalize } from './core/catalog';
@@ -12,6 +13,7 @@ import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
 import type { Category, ListItem, Point, Product, StoreLayout } from './core/types';
+import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
 type View = 'list' | 'items' | 'layout';
@@ -44,12 +46,30 @@ export default function App() {
 
   useMoveOldLocationsIntoProducts(setProducts);
 
+  // Live sharing with a household (Supabase). Off unless configured and joined.
+  const syncData = useMemo(() => ({ items, products, categories, layouts }), [items, products, categories, layouts]);
+  const household = useHousehold(syncData, (d) => {
+    setItems(() => d.items);
+    setProducts(() => d.products);
+    setCategories(() => d.categories);
+    setLayouts(() => (d.layouts.length ? d.layouts : [demoLayout]));
+  });
+  const [householdOpen, setHouseholdOpen] = useState(false);
+  const [joinCode, setJoinCode] = useState<string>();
+
   // Sharing: what we're sending, and anything that arrived in a link.
   const [sending, setSending] = useState<{ title: string; summary: string; share: Share } | null>(null);
   const [incoming, setIncoming] = useState<Share | 'error' | null>(null);
   const [notice, setNotice] = useState('');
   useEffect(() => {
     const check = () => {
+      const join = /^#join=([A-Za-z0-9]+)$/.exec(location.hash)?.[1];
+      if (join) {
+        history.replaceState(null, '', location.pathname + location.search);
+        setJoinCode(join.toUpperCase());
+        setHouseholdOpen(true);
+        return;
+      }
       const text = shareFromHash(location.hash);
       if (!text) return;
       history.replaceState(null, '', location.pathname + location.search);
@@ -256,6 +276,7 @@ export default function App() {
           ) : (
             <p className="muted">{layout.name}</p>
           )}
+          <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
         </div>
         {view === 'list' && (
           <div className="top-right">
@@ -314,6 +335,13 @@ export default function App() {
           onCopied={copyItemLocations}
           onShare={shareStore}
           onDone={() => setView('list')}
+        />
+      )}
+      {householdOpen && (
+        <HouseholdSheet
+          api={household}
+          joinCode={household.household ? undefined : joinCode}
+          onClose={() => { setHouseholdOpen(false); setJoinCode(undefined); }}
         />
       )}
       {sending && <ShareSheet {...sending} onClose={() => setSending(null)} />}

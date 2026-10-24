@@ -73,14 +73,62 @@ already on their list, and new items join their master list.
 
 The shared data is packed into the link itself, after `#`, so it is never
 uploaded anywhere. Links are copies: later changes aren't synced, so share
-again to send updates (`src/core/share.ts`).
+again to send updates (`src/core/share.ts`). For a list that stays in sync,
+use a household.
+
+## Households (live sharing)
+
+Tap the **Share with household** button under the store name. Sign in with
+your email (you get a 6-digit code), then create a household or join one
+with an invite code or link. Everyone in a household shares one shopping
+list, grocery items, categories and stores, and changes appear on everyone's
+phone as you shop. Where you're standing and which store you're in stay
+per phone. It keeps working offline and catches up when the signal returns.
+
+How it works: the shared data is split into small documents stored in
+Supabase (`docs` table), one per list item, grocery item and store, plus
+one for the category list. Each phone sends what changed and receives
+other phones' changes live; the last change to a document wins
+(`src/sync/engine.ts`). Database rules only let members of a household read
+or change its data (`supabase/migrations/`).
+
+### Live sharing setup (one time)
+
+1. **Create the tables.** In your Supabase project, open **SQL Editor**,
+   paste the contents of
+   `supabase/migrations/20261024000000_households.sql`, and run it.
+2. **Allow sign-in from the app.** In **Authentication → URL Configuration**,
+   set **Site URL** to `https://calmeddy.github.io/aisle-wise/` and add the
+   same address under **Redirect URLs**.
+3. **Put the code in the sign-in email.** In **Authentication → Emails →
+   Magic Link**, add `{{ .Token }}` to the message, e.g.
+   `<p>Your Aisle Wise code: <strong>{{ .Token }}</strong></p>`.
+   (Typing a code works inside the installed home-screen app; a link would
+   open in the browser instead.)
+4. **Give the app your project's address and public key.** In Supabase,
+   **Project Settings → API** shows the **Project URL** and the **anon
+   public** key. In GitHub, open the repo's **Settings → Secrets and
+   variables → Actions → Variables** and add:
+   - `SUPABASE_URL` = the Project URL
+   - `SUPABASE_ANON_KEY` = the anon public key
+
+   The anon key is meant to be public; the database rules protect the data.
+5. **Redeploy.** Actions → **Deploy to GitHub Pages** → **Run workflow**.
+
+For local development, put the same two values in `.env.local` as
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
+
+Supabase's built-in email sender only allows a few sign-in emails per hour,
+which is fine for a household. For more, add your own SMTP server under
+**Authentication → Emails**.
+
 
 ## Run it
 
 ```bash
 npm install
 npm run dev      # open the "Network" URL on your phone (same Wi-Fi)
-npm test         # routing and matching tests
+npm test         # routing, matching, sharing, sync and database-rule tests
 npm run build    # static files in dist/ – host anywhere (GitHub Pages, Netlify…)
 ```
 
@@ -106,6 +154,11 @@ src/components/LayoutEditor.tsx   Store layout editor
 src/components/StoreMap.tsx       Store map used by both
 src/components/ShareSheets.tsx    Share link and import screens
 src/core/share.ts                 Packing lists/stores into links, and importing them
+src/sync/engine.ts                Household sync: sending and receiving changes
+src/sync/supabase.ts              Supabase connection
+src/sync/useHousehold.ts          Sign-in, households, running the sync
+src/components/HouseholdSheet.tsx Household screen
+supabase/migrations/              Database tables and access rules
 ```
 
 ## Ideas for next steps
@@ -114,8 +167,6 @@ src/core/share.ts                 Packing lists/stores into links, and importing
   Options: Bluetooth beacons per aisle (needs a native wrapper such as
   Capacitor), scanning a QR code on each aisle sign, or a store's own API.
   Anything that produces a `Point` can drive the existing re-planning.
-- **Live shared lists** – sync a household list across phones as it
-  changes. Needs a small backend with accounts (e.g. Firebase or Supabase).
 
 ## Live app
 
