@@ -1,8 +1,12 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Doc, Kind, Remote } from './engine';
+import { normalizeSupabaseUrl } from './url';
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
+const key = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim().replace(/^['"]|['"]$/g, '');
+
+/** The project address this build talks to (shown when something's misconfigured). */
+export const supabaseUrl = url;
 
 /** Null when this build has no Supabase settings: the app then works on this phone only. */
 export const supabase: SupabaseClient | null = url && key

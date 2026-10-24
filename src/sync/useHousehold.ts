@@ -2,7 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePersistentState } from '../usePersistentState';
 import { SyncEngine, type SyncData, type SyncStatus } from './engine';
-import { supabase, supabaseRemote, type Household } from './supabase';
+import { supabase, supabaseRemote, supabaseUrl, type Household } from './supabase';
 
 export type HouseholdStatus = SyncStatus | 'off';
 
@@ -178,6 +178,14 @@ export type HouseholdApi = ReturnType<typeof useHousehold>;
 
 /** Plain-language versions of Supabase's sign-in errors. */
 function friendly(message: string): string {
+  const checkUrl = `Check that the SUPABASE_URL variable in GitHub is just your Project URL (like https://abcd.supabase.co), then run the deploy again. This app is using: ${supabaseUrl}`;
+  if (/invalid path specified/i.test(message)) return `Supabase didn’t recognise the app’s address. ${checkUrl}`;
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return navigator.onLine ? `Couldn’t reach Supabase. ${checkUrl}` : 'You’re offline. Try again when you have signal.';
+  }
+  if (/invalid api key|no api key/i.test(message)) {
+    return 'Supabase rejected the app’s key. Check that the SUPABASE_ANON_KEY variable in GitHub is the “anon public” key (it starts with eyJ), then run the deploy again.';
+  }
   if (/invalid login credentials/i.test(message)) return 'That email and password don’t match.';
   if (/email not confirmed/i.test(message)) return 'This account’s email hasn’t been confirmed yet.';
   if (/already registered|already exists/i.test(message)) return 'That email already has an account. Sign in instead.';
