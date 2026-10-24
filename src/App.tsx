@@ -6,11 +6,16 @@ import { Catalog, normalize } from './core/catalog';
 import { defaultCategories, defaultProducts } from './core/categories';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
-import { productFor } from './core/locate';
+import { locateProduct, productFor } from './core/locate';
 import type { Category, ListItem, Point, Product, StoreLayout } from './core/types';
 import { usePersistentState } from './usePersistentState';
 
 type View = 'list' | 'items' | 'layout';
+
+export interface QuickAddResult {
+  snapshot: { items: ListItem[]; products: Product[] };
+  added: { productId: string; name: string; isNew: boolean; savedAt?: string; alreadyOnList: boolean }[];
+}
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -48,6 +53,74 @@ export default function App() {
     const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), locations: { [layout.id]: spotKey } };
     setProducts((prev) => [...prev, created]);
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
+  }
+
+  /**
+   * Adds items while shopping. `mode: 'cart'` means the shopper is holding
+   * it, so it's checked off and its location here is saved. New items join
+   * the master list at `hereKey` (where the shopper is standing).
+   */
+  function quickAdd(names: string[], mode: 'list' | 'cart', hereKey?: string): QuickAddResult {
+    const snapshot = { items, products };
+    let nextProducts = products;
+    let nextItems = items;
+    const results: QuickAddResult['added'] = [];
+
+    for (const raw of names) {
+      const name = raw.trim();
+      if (!name) continue;
+      let product = new Catalog(nextProducts, categories).exact(name);
+      let saved: string | undefined;
+
+      if (!product) {
+        product = { id: `p-${newId()}`, name: capitalize(name), ...(hereKey && { locations: { [layout.id]: hereKey } }) };
+        nextProducts = [...nextProducts, product];
+        saved = hereKey;
+      } else if (mode === 'cart' && hereKey) {
+        // You're holding it, so it's sold here – and it's here unless we already knew it was in this place.
+        const loc = locateProduct(product, layout, catalog);
+        const samePlace = loc.kind === 'spot' && loc.spot.placeId === hereKey.split(':')[0];
+        if (!samePlace || loc.kind !== 'spot' || !loc.exact) {
+          const updated: Product = {
+            ...product,
+            locations: { ...product.locations, [layout.id]: samePlace && loc.kind === 'spot' ? loc.spot.key : hereKey },
+            notAt: product.notAt?.filter((id) => id !== layout.id),
+          };
+          nextProducts = nextProducts.map((p) => (p.id === updated.id ? updated : p));
+          saved = samePlace ? undefined : hereKey;
+          product = updated;
+        }
+      }
+
+      const pid = product.id;
+      const waiting = nextItems.find((i) => !i.done && (i.productId === pid || productFor(i, catalog)?.id === pid));
+      if (waiting && mode === 'cart') {
+        nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, done: true, productId: pid } : i));
+      } else if (!waiting) {
+        nextItems = [...nextItems, { id: newId(), name: product.name, done: mode === 'cart', productId: pid }];
+      }
+      results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list' });
+    }
+
+    setProducts(() => nextProducts);
+    setItems(() => nextItems);
+    return { snapshot, added: results };
+  }
+
+  function undo(snapshot: QuickAddResult['snapshot']) {
+    setProducts(() => snapshot.products);
+    setItems(() => snapshot.items);
+  }
+
+  /** Sets (or clears, with `null`) where a master-list item is in the current store. */
+  function setProductLocation(productId: string, spotKey: string | null) {
+    setProducts((prev) => prev.map((p) => {
+      if (p.id !== productId) return p;
+      const locations = { ...p.locations };
+      if (spotKey) locations[layout.id] = spotKey;
+      else delete locations[layout.id];
+      return { ...p, locations, notAt: p.notAt?.filter((id) => id !== layout.id) };
+    }));
   }
 
   function setSoldHere(product: Product, sold: boolean) {
@@ -111,6 +184,9 @@ export default function App() {
           items={items}
           setItems={setItems}
           setLocation={setLocation}
+          quickAdd={quickAdd}
+          undo={undo}
+          setProductLocation={setProductLocation}
           setSoldHere={setSoldHere}
           position={position}
           setPosition={(point) => setPos({ layoutId: layout.id, point })}

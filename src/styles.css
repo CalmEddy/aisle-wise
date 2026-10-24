@@ -185,12 +185,36 @@ button { cursor: pointer; }
   list-style: none; margin: 4px 0 0; padding: 4px; background: var(--surface);
   border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 18px #0002;
 }
-.suggestions button {
-  width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
-  background: none; border: 0; padding: 10px; border-radius: 8px; text-align: left;
+.suggestion { display: flex; align-items: center; gap: 6px; padding: 6px 4px 6px 10px; border-radius: 8px; }
+.suggestion + .suggestion { border-top: 1px solid var(--line); }
+.s-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.s-text .small { margin: 0; }
+.s-btn {
+  flex: none; border: 1px solid var(--accent); background: var(--surface); color: var(--accent);
+  border-radius: 10px; padding: 9px 10px; font-weight: 600; font-size: 0.85rem; min-height: 40px;
 }
-.suggestions button:hover, .suggestions button:focus-visible { background: var(--accent-soft); }
-.suggestions .small { margin: 0; text-align: right; }
+.s-btn.cart { background: var(--accent); color: #fff; }
+
+/* Confirmation banner */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 14px); z-index: 35;
+  width: calc(100% - 24px); max-width: 536px; display: flex; align-items: center; gap: 4px;
+  background: var(--text); color: var(--bg); border-radius: 14px; padding: 8px 6px 8px 14px; box-shadow: 0 8px 24px #0004;
+  animation: rise 0.2s ease-out;
+}
+@keyframes rise { from { transform: translate(-50%, 12px); opacity: 0; } }
+.toast-text { flex: 1; font-size: 0.9rem; }
+.toast-btn { background: none; border: 0; color: var(--accent); font-weight: 700; padding: 8px; white-space: nowrap; }
+.toast .icon { color: inherit; opacity: 0.6; }
+
+/* Place picker */
+.pick {
+  display: block; width: 100%; text-align: left; padding: 11px 12px; margin: 4px 0;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-weight: 600;
+}
+.pick.active { border-color: var(--accent); background: var(--accent-soft); }
+.pick .sub { font-weight: 400; padding-left: 14px; }
+.pick-group { margin-top: 6px; }
 
 /* Items tab */
 .items-view .add-row, .categories-view .add-row { margin-bottom: 8px; }
