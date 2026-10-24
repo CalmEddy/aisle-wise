@@ -290,6 +290,8 @@ button { cursor: pointer; }
 .btn.wide { width: 100%; margin-top: 6px; padding: 11px; }
 .invite-code { font: 700 1.6rem ui-monospace, Menlo, monospace; letter-spacing: 0.15em; text-align: center; padding: 8px; }
 .members { margin: 0; padding-left: 18px; }
-.sheet input.code { font: 600 1.4rem ui-monospace, Menlo, monospace; letter-spacing: 0.2em; text-align: center; }
 .sheet .add-row input { font-size: 16px; }
 .household .error { margin: 8px 0 0; }
+.password-row { display: flex; gap: 6px; }
+.password-row input { flex: 1; min-width: 0; }
+.household .segmented { margin: 10px 0 4px; }

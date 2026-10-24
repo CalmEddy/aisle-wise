@@ -78,9 +78,9 @@ use a household.
 
 ## Households (live sharing)
 
-Tap the **Share with household** button under the store name. Sign in with
-your email (you get a 6-digit code), then create a household or join one
-with an invite code or link. Everyone in a household shares one shopping
+Tap the **Share with household** button under the store name. Create an
+account (email + password) or sign in, right in the app, then create a
+household or join one with an invite code or link. Everyone in a household shares one shopping
 list, grocery items, categories and stores, and changes appear on everyone's
 phone as you shop. Where you're standing and which store you're in stay
 per phone. It keeps working offline and catches up when the signal returns.
@@ -97,15 +97,11 @@ or change its data (`supabase/migrations/`).
 1. **Create the tables.** In your Supabase project, open **SQL Editor**,
    paste the contents of
    `supabase/migrations/20261024000000_households.sql`, and run it.
-2. **Allow sign-in from the app.** In **Authentication → URL Configuration**,
-   set **Site URL** to `https://calmeddy.github.io/aisle-wise/` and add the
-   same address under **Redirect URLs**.
-3. **Put the code in the sign-in email.** In **Authentication → Emails →
-   Magic Link**, add `{{ .Token }}` to the message, e.g.
-   `<p>Your Aisle Wise code: <strong>{{ .Token }}</strong></p>`.
-   (Typing a code works inside the installed home-screen app; a link would
-   open in the browser instead.)
-4. **Give the app your project's address and public key.** In Supabase,
+2. **Turn on in-app sign-in without emails.** In **Authentication → Sign In
+   / Providers → Email**, make sure **Email** is enabled and turn **Confirm
+   email** off, then save. Accounts are then ready the moment they're
+   created, and Supabase never needs to send an email.
+3. **Give the app your project's address and public key.** In Supabase,
    **Project Settings → API** shows the **Project URL** and the **anon
    public** key. In GitHub, open the repo's **Settings → Secrets and
    variables → Actions → Variables** and add:
@@ -113,14 +109,15 @@ or change its data (`supabase/migrations/`).
    - `SUPABASE_ANON_KEY` = the anon public key
 
    The anon key is meant to be public; the database rules protect the data.
-5. **Redeploy.** Actions → **Deploy to GitHub Pages** → **Run workflow**.
+4. **Redeploy.** Actions → **Deploy to GitHub Pages** → **Run workflow**.
 
 For local development, put the same two values in `.env.local` as
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
-Supabase's built-in email sender only allows a few sign-in emails per hour,
-which is fine for a household. For more, add your own SMTP server under
-**Authentication → Emails**.
+Forgotten passwords: resetting one needs email, so instead create a new
+account and rejoin with the household's invite code (the shared data lives in
+the household). You can also delete old accounts under **Authentication →
+Users**.
 
 
 ## Run it

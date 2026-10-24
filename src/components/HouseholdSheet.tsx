@@ -73,38 +73,71 @@ function NotConfigured() {
 }
 
 function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [sent, setSent] = useState(false);
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const [notice, setNotice] = useState('');
   const { busy, error, run } = useAction();
+  const creating = mode === 'signup';
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setNotice('');
+    void run(async () => {
+      if (!creating) return api.signIn(email.trim(), password);
+      const mustConfirm = await api.signUp(email.trim(), password);
+      if (mustConfirm) {
+        setNotice('Account created. Confirm it from the email Supabase sent, then sign in here.');
+        setMode('signin');
+      }
+    });
+  }
 
   return (
     <>
       <h2>{joining ? 'Join a household' : 'Share with your household'}</h2>
       <p className="muted small">
         Everyone in a household shares one shopping list, grocery items and stores. Changes show up on
-        everyone’s phone as you shop. {joining ? 'Sign in first, then you’ll join.' : 'Sign in with your email to start.'}
+        everyone’s phone as you shop. {joining ? 'Sign in first, then you’ll join.' : ''}
       </p>
-      {!sent ? (
-        <form onSubmit={(e) => { e.preventDefault(); void run(async () => { await api.sendCode(email.trim()); setSent(true); }); }}>
-          <label className="field">
-            <span>Email</span>
-            <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
-          </label>
-          <button className="btn primary wide" disabled={busy || !email.includes('@')}>{busy ? 'Sending…' : 'Email me a sign-in code'}</button>
-        </form>
-      ) : (
-        <form onSubmit={(e) => { e.preventDefault(); void run(() => api.verifyCode(email.trim(), code)); }}>
-          <p className="small">We sent a code to <b>{email}</b>. It can take a minute to arrive.</p>
-          <label className="field">
-            <span>Code from the email</span>
-            <input className="code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} placeholder="123456" maxLength={10} autoFocus />
-          </label>
-          <button className="btn primary wide" disabled={busy || code.length < 6}>{busy ? 'Checking…' : 'Sign in'}</button>
-          <button type="button" className="link" onClick={() => { setSent(false); setCode(''); }}>Use a different email</button>
-        </form>
-      )}
+      <div className="segmented" role="tablist">
+        <button type="button" className={!creating ? 'active' : ''} onClick={() => setMode('signin')}>Sign in</button>
+        <button type="button" className={creating ? 'active' : ''} onClick={() => setMode('signup')}>Create account</button>
+      </div>
+      <form onSubmit={submit}>
+        <label className="field">
+          <span>Email</span>
+          <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+        </label>
+        <label className="field">
+          <span>Password{creating && ' (at least 6 characters)'}</span>
+          <div className="password-row">
+            <input
+              type={show ? 'text' : 'password'}
+              autoComplete={creating ? 'new-password' : 'current-password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={6}
+              required
+            />
+            <button type="button" className="btn" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>
+              {show ? 'Hide' : 'Show'}
+            </button>
+          </div>
+        </label>
+        <button className="btn primary wide" disabled={busy || !email.includes('@') || password.length < 6}>
+          {busy ? 'One moment…' : creating ? 'Create account' : 'Sign in'}
+        </button>
+      </form>
+      {notice && <p className="small">{notice}</p>}
       {error && <p className="error">{error}</p>}
+      {!creating && (
+        <p className="muted small">
+          Forgot your password? Create a new account and rejoin with your household’s invite code – the shared list
+          lives in the household, so nothing is lost.
+        </p>
+      )}
     </>
   );
 }

@@ -102,17 +102,22 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     return supabase;
   };
 
-  const sendCode = useCallback(async (email: string) => {
-    const { error } = await requireClient().auth.signInWithOtp({
-      email,
-      options: { shouldCreateUser: true, emailRedirectTo: `${location.origin}${location.pathname}` },
-    });
-    if (error) throw error;
+  /** Signs in with email and password. */
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await requireClient().auth.signInWithPassword({ email, password });
+    if (error) throw new Error(friendly(error.message));
   }, []);
 
-  const verifyCode = useCallback(async (email: string, code: string) => {
-    const { error } = await requireClient().auth.verifyOtp({ email, token: code.trim(), type: 'email' });
-    if (error) throw error;
+  /**
+   * Creates an account. Returns true when the user still has to confirm their
+   * email (only if "Confirm email" is left on in Supabase).
+   */
+  const signUp = useCallback(async (email: string, password: string): Promise<boolean> => {
+    const { data: d, error } = await requireClient().auth.signUp({ email, password });
+    if (error) throw new Error(friendly(error.message));
+    // Supabase hides whether an address is taken: it returns a user with no identities.
+    if (d.user && d.user.identities?.length === 0) throw new Error('That email already has an account. Sign in instead.');
+    return !d.session;
   }, []);
 
   const signOut = useCallback(async () => {
@@ -159,8 +164,8 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     signedIn: !!session,
     household,
     status,
-    sendCode,
-    verifyCode,
+    signIn,
+    signUp,
     signOut,
     create,
     join,
@@ -170,3 +175,13 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
 }
 
 export type HouseholdApi = ReturnType<typeof useHousehold>;
+
+/** Plain-language versions of Supabase's sign-in errors. */
+function friendly(message: string): string {
+  if (/invalid login credentials/i.test(message)) return 'That email and password don’t match.';
+  if (/email not confirmed/i.test(message)) return 'This account’s email hasn’t been confirmed yet.';
+  if (/already registered|already exists/i.test(message)) return 'That email already has an account. Sign in instead.';
+  if (/password should be at least/i.test(message)) return 'Use a password with at least 6 characters.';
+  if (/rate limit/i.test(message)) return 'Too many tries. Wait a minute and try again.';
+  return message;
+}
