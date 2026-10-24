@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react';
+import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
-import { contains, footprint, placeAt, spotPoint } from '../core/geometry';
-import { groupIntoStops, locateItem, resolveSpot } from '../core/locate';
+import { placeAt, spotPoint } from '../core/geometry';
+import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { planRoute } from '../core/route';
-import type { Learned, ListItem, Point, StoreLayout } from '../core/types';
+import type { ListItem, Point, Product, StoreLayout } from '../core/types';
 import { StoreMap } from './StoreMap';
 
 interface Props {
   layout: StoreLayout;
   floor: Floor;
+  catalog: Catalog;
   items: ListItem[];
   setItems: (fn: (prev: ListItem[]) => ListItem[]) => void;
-  learned: Learned;
-  teach: (itemName: string, spotKey: string) => void;
+  /** Saves where an item is in this store (creating a master-list item if needed). */
+  setLocation: (item: ListItem, spotKey: string) => void;
+  setSoldHere: (product: Product, sold: boolean) => void;
   position: Point;
   setPosition: (p: Point) => void;
   onEditLayout: () => void;
@@ -28,18 +31,27 @@ interface Drag {
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export function ShoppingView({ layout, floor, items, setItems, learned, teach, position, setPosition, onEditLayout }: Props) {
+export function ShoppingView(props: Props) {
+  const { layout, floor, catalog, items, setItems, setLocation, setSoldHere, position, setPosition, onEditLayout } = props;
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState<Drag | null>(null);
 
-  const locate = (item: ListItem) => locateItem(item.name, layout, learned);
+  const locate = (item: ListItem) => locateItem(item, layout, catalog);
 
-  // Re-plans every time the list, the layout or the shopper's position changes.
-  const { route, unplaced } = useMemo(() => {
-    const { stops, unplaced } = groupIntoStops(items, locate);
-    return { route: planRoute(position, stops, layout.checkout, floor.distance), unplaced };
+  // Re-plans every time the list, the layout, the master list or the shopper's position changes.
+  const { route, unplaced, notSold } = useMemo(() => {
+    const { stops, unplaced, notSold } = groupIntoStops(items, locate);
+    return { route: planRoute(position, stops, layout.checkout, floor.distance), unplaced, notSold };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items, layout, floor, learned, position]);
+  }, [items, layout, floor, catalog, position]);
+
+  // Suggestions for whatever is after the last comma.
+  const segment = draft.split(',').pop() ?? '';
+  const onList = useMemo(
+    () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
+    [items, catalog],
+  );
+  const suggestions = useMemo(() => catalog.suggest(segment, 6, onList), [catalog, segment, onList]);
 
   const done = items.filter((i) => i.done);
   const here = placeAt(layout, position);
@@ -48,15 +60,28 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
   function addItems(text: string) {
     const names = text.split(/[,\n]/).map((s) => s.trim()).filter(Boolean);
     if (!names.length) return;
-    setItems((prev) => [...prev, ...names.map((name) => ({ id: newId(), name, done: false }))]);
+    setItems((prev) => [
+      ...prev,
+      ...names.map((name) => ({ id: newId(), name, done: false, productId: catalog.exact(name)?.id })),
+    ]);
+    setDraft('');
+  }
+
+  function addProduct(product: Product) {
+    const rest = draft.split(',').slice(0, -1).map((s) => s.trim()).filter(Boolean);
+    setItems((prev) => [
+      ...prev,
+      ...rest.map((name) => ({ id: newId(), name, done: false, productId: catalog.exact(name)?.id })),
+      { id: newId(), name: product.name, done: false, productId: product.id },
+    ]);
     setDraft('');
   }
 
   function toggle(item: ListItem) {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
     // Picking something up tells us where the shopper is standing.
-    const spot = locate(item);
-    if (!item.done && spot) setPosition(spot.point);
+    const loc = locate(item);
+    if (!item.done && loc.kind === 'spot') setPosition(loc.spot.point);
   }
 
   function remove(item: ListItem) {
@@ -85,7 +110,8 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
     onPointerUp(e: React.PointerEvent) {
       if (!drag) return;
       const key = dropKeyAt(e.clientX, e.clientY);
-      if (key && key !== locate(drag.item)?.key) teach(drag.item.name, key);
+      const loc = locate(drag.item);
+      if (key && !(loc.kind === 'spot' && loc.spot.key === key)) setLocation(drag.item, key);
       setDrag(null);
     },
     onPointerCancel() {
@@ -94,7 +120,7 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
   });
 
   const overPlaceId = drag?.over?.split(':')[0];
-  const overLabel = drag?.over ? resolveSpot(drag.over, layout)?.label : undefined;
+  const overLabel = drag?.over ? resolveSpot(drag.over, layout, catalog)?.label : undefined;
   const [next, ...later] = route;
 
   return (
@@ -106,14 +132,30 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
           addItems(draft);
         }}
       >
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add items, e.g. milk, apples, pasta"
-          aria-label="Add items"
-          enterKeyHint="done"
-        />
-        <button type="submit" disabled={!draft.trim()}>Add</button>
+        <div className="add-row">
+          <input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="Add items, e.g. milk, apples, pasta"
+            aria-label="Add items"
+            aria-autocomplete="list"
+            autoComplete="off"
+            enterKeyHint="done"
+          />
+          <button type="submit" disabled={!draft.trim()}>Add</button>
+        </div>
+        {suggestions.length > 0 && (
+          <ul className="suggestions" role="listbox" aria-label="Suggestions">
+            {suggestions.map((p) => (
+              <li key={p.id} role="option" aria-selected={false}>
+                <button type="button" onClick={() => addProduct(p)}>
+                  <span>{p.name}</span>
+                  <span className="muted small">{whereText(p, layout, catalog)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </form>
 
       {items.length > 0 && (
@@ -133,7 +175,7 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
                 <Chip
                   key={p.id}
                   label={p.label || 'Unnamed'}
-                  active={!atEntrance && !!here && here.id === p.id && contains(footprint(p), position)}
+                  active={!atEntrance && here?.id === p.id}
                   onClick={() => setPosition(spotPoint(p))}
                 />
               ))}
@@ -153,8 +195,8 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
           </div>
         )}
 
-        {items.length > 0 && route.length > 0 && (
-          <p className="hint muted small">Drag ⠿ onto the map or another stop to move an item. The app remembers.</p>
+        {route.length > 0 && (
+          <p className="hint muted small">Drag ⠿ onto the map or another stop to move an item. The app remembers it for this store.</p>
         )}
 
         {next && (
@@ -180,12 +222,12 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
         {unplaced.length > 0 && (
           <section className="card unplaced">
             <h3>Where is this?</h3>
-            <p className="muted small">Drag it onto the map, or pick a place. The app remembers for next time.</p>
+            <p className="muted small">Drag it onto the map, or pick a place. The app remembers for this store.</p>
             {unplaced.map((item) => (
               <div className="row" key={item.id}>
                 <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
                 <span className="name">{item.name}</span>
-                <select value="" onChange={(e) => teach(item.name, e.target.value)} aria-label={`Location of ${item.name}`}>
+                <select value="" onChange={(e) => setLocation(item, e.target.value)} aria-label={`Location of ${item.name}`}>
                   <option value="" disabled>Choose…</option>
                   {layout.places.map((p) => (
                     <option key={p.id} value={p.id}>{p.label || 'Unnamed'}</option>
@@ -194,6 +236,23 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
                 <button className="icon" onClick={() => remove(item)} aria-label={`Remove ${item.name}`}>×</button>
               </div>
             ))}
+          </section>
+        )}
+
+        {notSold.length > 0 && (
+          <section className="card not-sold">
+            <h3>Not sold at {layout.name}</h3>
+            <p className="muted small">Get these somewhere else, or mark them as sold here.</p>
+            {notSold.map((item) => {
+              const product = productFor(item, catalog)!;
+              return (
+                <div className="row" key={item.id}>
+                  <span className="name">{item.name}</span>
+                  <button className="btn" onClick={() => setSoldHere(product, true)}>Sold here</button>
+                  <button className="icon" onClick={() => remove(item)} aria-label={`Remove ${item.name}`}>×</button>
+                </div>
+              );
+            })}
           </section>
         )}
 
@@ -225,6 +284,14 @@ export function ShoppingView({ layout, floor, items, setItems, learned, teach, p
       )}
     </>
   );
+}
+
+/** Short "where is it" text for a master-list item in this store. */
+export function whereText(product: Product, layout: StoreLayout, catalog: Catalog): string {
+  const loc = locateProduct(product, layout, catalog);
+  if (loc.kind === 'spot') return loc.spot.label;
+  if (loc.kind === 'not-sold') return 'Not sold here';
+  return catalog.categoryById.get(product.categoryId ?? '')?.name ?? 'No location yet';
 }
 
 function overKey(drag: Drag | null, key: string) {
@@ -266,4 +333,3 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
     </button>
   );
 }
-

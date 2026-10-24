@@ -1,43 +1,42 @@
-export interface Category {
-  id: string;
-  name: string;
-  keywords: string[];
-}
+import type { Category, Product } from './types';
 
-const c = (id: string, name: string, words: string): Category => ({
-  id,
-  name,
-  keywords: words.split(',').map((w) => w.trim()),
-});
-
-/** What a typical grocery store stocks, with words used to recognise items. */
-export const categories: Category[] = [
-  c('fruit', 'Fruit', 'apple, banana, orange, lemon, lime, grape, strawberry, blueberry, raspberry, berry, melon, watermelon, pear, peach, plum, mango, pineapple, avocado, kiwi, cherry'),
-  c('veg', 'Vegetables', 'lettuce, spinach, kale, carrot, celery, onion, garlic, potato, sweet potato, tomato, cucumber, pepper, bell pepper, broccoli, cauliflower, zucchini, mushroom, corn, cilantro, parsley, basil, ginger, salad, herb, green bean'),
-  c('bakery', 'Bakery', 'bread, bagel, baguette, croissant, muffin, roll, bun, tortilla, cake, donut, pita'),
-  c('deli', 'Deli & Cheese', 'ham, turkey, salami, cheese, cheddar, mozzarella, parmesan, brie, hummus, rotisserie chicken, olive'),
-  c('dairy', 'Dairy', 'milk, almond milk, oat milk, yogurt, cream, sour cream, cream cheese, cottage cheese, half and half, creamer'),
-  c('eggs', 'Eggs & Butter', 'egg, butter, margarine'),
-  c('meat', 'Meat', 'chicken, beef, ground beef, steak, pork, bacon, sausage, lamb, hot dog, ground turkey'),
-  c('seafood', 'Seafood', 'fish, salmon, tuna steak, shrimp, cod, tilapia, crab, scallop'),
-  c('floral', 'Floral & Cards', 'flower, card, balloon'),
-  c('pharmacy', 'Pharmacy', 'prescription, vitamin, allergy, ibuprofen, tylenol, cold medicine'),
-  c('breakfast', 'Cereal & Breakfast', 'cereal, oatmeal, granola, pancake mix, syrup, maple syrup, pop tart'),
-  c('coffee', 'Coffee & Tea', 'coffee, tea, k cup, hot chocolate'),
-  c('pasta', 'Pasta & Rice', 'pasta, spaghetti, penne, macaroni, rice, quinoa, noodle, couscous, ramen'),
-  c('canned', 'Canned Goods & Soup', 'canned, soup, broth, stock, bean, black bean, chickpea, tuna, canned tomato, tomato sauce, pasta sauce'),
-  c('baking', 'Baking & Spices', 'flour, sugar, brown sugar, baking soda, baking powder, yeast, vanilla, chocolate chip, salt, spice, cinnamon, cumin, paprika, oregano, black pepper'),
-  c('condiments', 'Oils & Condiments', 'oil, olive oil, vegetable oil, vinegar, ketchup, mustard, mayo, mayonnaise, soy sauce, hot sauce, dressing, salad dressing, peanut butter, jelly, jam, honey'),
-  c('snacks', 'Snacks & Chips', 'chip, tortilla chip, pretzel, popcorn, nut, almond, peanut, trail mix, salsa, granola bar'),
-  c('cookies', 'Cookies & Crackers', 'cookie, cracker, oreo, graham cracker'),
-  c('soda', 'Soda & Sports Drinks', 'soda, coke, pepsi, sprite, gatorade, energy drink, sparkling water, seltzer'),
-  c('water', 'Water & Juice', 'water, juice, orange juice, apple juice, lemonade'),
-  c('paper', 'Paper & Cleaning', 'paper towel, toilet paper, tissue, napkin, foil, plastic wrap, trash bag, zip bag, dish soap, sponge, cleaner, bleach'),
-  c('laundry', 'Laundry & Pets', 'laundry, detergent, dryer sheet, fabric softener, dog food, cat food, cat litter, pet'),
-  c('health', 'Health & Beauty', 'shampoo, conditioner, soap, body wash, toothpaste, toothbrush, floss, deodorant, razor, lotion, sunscreen'),
-  c('baby', 'Baby', 'diaper, wipe, baby food, formula'),
-  c('frozen', 'Frozen Meals & Pizza', 'frozen pizza, pizza, frozen meal, frozen dinner, frozen burrito, frozen waffle, fish stick'),
-  c('icecream', 'Ice Cream & Frozen Veg', 'ice cream, frozen vegetable, frozen fruit, frozen pea, popsicle, ice'),
+const groups: [id: string, name: string, items: string][] = [
+  ['fruit', 'Fruit', 'Apples, Bananas, Oranges, Lemons, Limes, Grapes, Strawberries, Blueberries, Raspberries, Melon, Watermelon, Pears, Peaches, Plums, Mangoes, Pineapple, Avocados, Kiwi, Cherries'],
+  ['veg', 'Vegetables', 'Lettuce, Spinach, Kale, Carrots, Celery, Onions, Garlic, Potatoes, Sweet potatoes, Tomatoes, Cucumbers, Bell peppers, Broccoli, Cauliflower, Zucchini, Mushrooms, Corn, Cilantro, Parsley, Basil, Ginger, Salad mix, Green beans'],
+  ['bakery', 'Bakery', 'Bread, Bagels, Baguette, Croissants, Muffins, Dinner rolls, Hamburger buns, Tortillas, Cake, Donuts, Pita'],
+  ['deli', 'Deli & Cheese', 'Ham, Sliced turkey, Salami, Cheese, Cheddar, Mozzarella, Parmesan, Brie, Hummus, Rotisserie chicken, Olives'],
+  ['dairy', 'Dairy', 'Milk, Almond milk, Oat milk, Yogurt, Heavy cream, Sour cream, Cream cheese, Cottage cheese, Half and half, Coffee creamer'],
+  ['eggs', 'Eggs & Butter', 'Eggs, Butter, Margarine'],
+  ['meat', 'Meat', 'Chicken, Chicken breasts, Ground beef, Steak, Pork chops, Bacon, Sausage, Lamb, Hot dogs, Ground turkey'],
+  ['seafood', 'Seafood', 'Fish, Salmon, Tuna steak, Shrimp, Cod, Tilapia, Crab, Scallops'],
+  ['floral', 'Floral & Cards', 'Flowers, Greeting card, Balloons'],
+  ['pharmacy', 'Pharmacy', 'Prescription, Vitamins, Allergy medicine, Ibuprofen, Tylenol, Cold medicine'],
+  ['breakfast', 'Cereal & Breakfast', 'Cereal, Oatmeal, Granola, Pancake mix, Maple syrup, Pop-Tarts'],
+  ['coffee', 'Coffee & Tea', 'Coffee, Tea, K-Cups, Hot chocolate'],
+  ['pasta', 'Pasta & Rice', 'Pasta, Spaghetti, Penne, Macaroni, Rice, Quinoa, Noodles, Couscous, Ramen'],
+  ['canned', 'Canned Goods & Soup', 'Soup, Broth, Chicken stock, Beans, Black beans, Chickpeas, Tuna, Canned tomatoes, Tomato sauce, Pasta sauce'],
+  ['baking', 'Baking & Spices', 'Flour, Sugar, Brown sugar, Baking soda, Baking powder, Yeast, Vanilla, Chocolate chips, Salt, Cinnamon, Cumin, Paprika, Oregano, Black pepper'],
+  ['condiments', 'Oils & Condiments', 'Olive oil, Vegetable oil, Vinegar, Ketchup, Mustard, Mayonnaise, Soy sauce, Hot sauce, Salad dressing, Peanut butter, Jelly, Jam, Honey'],
+  ['snacks', 'Snacks & Chips', 'Chips, Tortilla chips, Pretzels, Popcorn, Nuts, Almonds, Peanuts, Trail mix, Salsa, Granola bars'],
+  ['cookies', 'Cookies & Crackers', 'Cookies, Crackers, Oreos, Graham crackers'],
+  ['soda', 'Soda & Sports Drinks', 'Soda, Coke, Pepsi, Sprite, Gatorade, Energy drinks, Sparkling water, Seltzer'],
+  ['water', 'Water & Juice', 'Water, Juice, Orange juice, Apple juice, Lemonade'],
+  ['paper', 'Paper & Cleaning', 'Paper towels, Toilet paper, Tissues, Napkins, Aluminum foil, Plastic wrap, Trash bags, Zip bags, Dish soap, Sponges, All-purpose cleaner, Bleach'],
+  ['laundry', 'Laundry & Pets', 'Laundry detergent, Dryer sheets, Fabric softener, Dog food, Cat food, Cat litter'],
+  ['health', 'Health & Beauty', 'Shampoo, Conditioner, Hand soap, Body wash, Toothpaste, Toothbrush, Floss, Deodorant, Razors, Lotion, Sunscreen'],
+  ['baby', 'Baby', 'Diapers, Baby wipes, Baby food, Formula'],
+  ['frozen', 'Frozen Meals & Pizza', 'Frozen pizza, Frozen meals, Frozen burritos, Frozen waffles, Fish sticks'],
+  ['icecream', 'Ice Cream & Frozen Veg', 'Ice cream, Frozen vegetables, Frozen fruit, Frozen peas, Popsicles, Ice'],
 ];
 
-export const categoryById = new Map(categories.map((cat) => [cat.id, cat]));
+export const defaultCategories: Category[] = groups.map(([id, name]) => ({ id, name }));
+
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+/** The starter master list of grocery items. */
+export const defaultProducts: Product[] = groups.flatMap(([categoryId, , items]) =>
+  items.split(',').map((raw) => {
+    const name = raw.trim();
+    return { id: `p-${slug(name)}`, name, categoryId };
+  }),
+);

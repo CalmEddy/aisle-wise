@@ -56,6 +56,25 @@ export interface ListItem {
   id: string;
   name: string;
   done: boolean;
+  /** The master-list item this was added from, if any. */
+  productId?: string;
+}
+
+/** A kind of product, e.g. Dairy. Places in a layout list the categories they stock. */
+export interface Category {
+  id: string;
+  name: string;
+}
+
+/** An item in the master grocery list. */
+export interface Product {
+  id: string;
+  name: string;
+  categoryId?: string;
+  /** Layout id → spot key, where the user said this item is in that store. */
+  locations?: Record<string, string>;
+  /** Layout ids of stores that don't sell this item. */
+  notAt?: string[];
 }
 
 /** A spot where items are picked up: a place, optionally narrowed to one category. */
@@ -70,6 +89,3 @@ export interface Spot {
 export interface Stop extends Spot {
   items: ListItem[];
 }
-
-/** Item name (normalized) → spot key, taught by the user for one layout. */
-export type Learned = Record<string, string>;

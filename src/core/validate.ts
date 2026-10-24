@@ -1,10 +1,9 @@
-import { categories } from './categories';
 import type { Floor } from './floor';
 import { spotPoint } from './geometry';
-import type { StoreLayout } from './types';
+import type { Category, StoreLayout } from './types';
 
 /** Plain-language problems with a layout, for the editor to show. */
-export function checkLayout(layout: StoreLayout, floor: Floor): string[] {
+export function checkLayout(layout: StoreLayout, floor: Floor, categories: Category[]): string[] {
   const problems: string[] = [];
   if (!floor.walkable(layout.entrance)) problems.push('The entrance is on a shelf.');
   if (!floor.walkable(layout.checkout)) problems.push('The checkout is on a shelf.');

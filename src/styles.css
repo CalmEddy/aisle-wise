@@ -60,12 +60,6 @@ button { cursor: pointer; }
 
 /* Add form */
 .add { display: flex; gap: 8px; margin-bottom: 12px; position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 4px 0; }
-.add input {
-  flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px;
-  border: 1px solid var(--line); background: var(--surface); font-size: 16px;
-}
-.add button { border-radius: 12px; padding: 0 18px; font-weight: 600; background: var(--accent); color: #fff; border: 0; }
-.add button:disabled { opacity: 0.4; }
 
 /* Map */
 .map { width: 100%; display: block; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); }
@@ -177,3 +171,58 @@ button { cursor: pointer; }
 .problems ul { margin: 4px 0 0; padding-left: 18px; font-size: 0.85rem; }
 .problems li { margin: 3px 0; }
 .editor-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+
+/* Suggestions */
+.add { flex-direction: column; align-items: stretch; }
+.add-row { display: flex; gap: 8px; }
+.add-row input {
+  flex: 1; min-width: 0; padding: 12px 14px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 16px;
+}
+.add-row button { border-radius: 12px; padding: 0 16px; font-weight: 600; background: var(--accent); color: #fff; border: 0; }
+.add-row button:disabled { opacity: 0.4; }
+.suggestions {
+  list-style: none; margin: 4px 0 0; padding: 4px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 18px #0002;
+}
+.suggestions button {
+  width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  background: none; border: 0; padding: 10px; border-radius: 8px; text-align: left;
+}
+.suggestions button:hover, .suggestions button:focus-visible { background: var(--accent-soft); }
+.suggestions .small { margin: 0; text-align: right; }
+
+/* Items tab */
+.items-view .add-row, .categories-view .add-row { margin-bottom: 8px; }
+.group h3 { display: flex; gap: 8px; align-items: baseline; }
+.product-row {
+  flex: 1; display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  background: none; border: 0; padding: 10px 0; text-align: left; min-width: 0;
+}
+.product-row .where { margin: 0; text-align: right; }
+.product-row .where.set { color: var(--accent); }
+.add-icon { color: var(--accent); font-weight: 700; }
+.add-icon:disabled { color: var(--muted); }
+.cat-list { list-style: none; padding: 6px 10px; }
+.cat-list input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid transparent; background: none; font-size: 16px; }
+.cat-list input:focus { border-color: var(--line); background: var(--bg); outline: none; }
+.cat-list .count { margin: 0; min-width: 24px; text-align: right; }
+.icon:disabled { opacity: 0.25; }
+.stock-list { list-style: none; padding: 0; margin: 4px 0 8px; }
+.stock-list .row { min-height: 40px; }
+.error { color: var(--danger); font-size: 0.8rem; }
+.not-sold { border-style: dashed; }
+.not-sold .row .btn { padding: 6px 10px; }
+
+/* Bottom sheet */
+.sheet-backdrop { position: fixed; inset: 0; background: #0006; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.sheet {
+  background: var(--surface); width: 100%; max-width: 560px; max-height: 88vh; overflow-y: auto;
+  border-radius: 18px 18px 0 0; padding: 18px 16px calc(env(safe-area-inset-bottom) + 16px);
+}
+.sheet h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.sheet input, .sheet select { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; color: var(--text); }
+.store-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; color: var(--text); }
+.check { display: flex; gap: 10px; align-items: center; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.sheet-actions { display: flex; gap: 8px; margin-top: 12px; }

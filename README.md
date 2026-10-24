@@ -6,9 +6,10 @@ re-orders it as you move.
 
 ## How it works
 
-1. **Add items** – type `milk, apples, pasta`. Each item is matched to a
-   kind of product (e.g. "almond milk" → Dairy, "almonds" → Snacks) and then
-   to the aisle or area in your store that stocks it.
+1. **Add items** – start typing and pick from suggestions (each shows where
+   it is in the current store), or type `milk, apples, pasta` and press Add.
+   Names are matched to your master list of grocery items, so "organic whole
+   milk" is found as Milk.
 2. **Plan the route** – items picked up at the same spot are grouped into one
    stop, and stops are ordered for the shortest walk from where you are to
    the checkout. The store floor is a grid; shelves block walking, so
@@ -19,7 +20,19 @@ re-orders it as you move.
    can tap the map or a "You're near" chip at any time. Each move re-plans
    the rest of the list.
 4. **Move items** – drag an item's ⠿ handle onto the map or onto another
-   stop. The app remembers that location for that store.
+   stop. The location is saved on that grocery item for this store only.
+   Items a store doesn't sell are listed separately.
+
+## Grocery items and categories
+
+The **Items** tab holds the master list of grocery items (about 290 to start).
+
+- Search, add, rename and delete items, and set each item's category.
+- For each store, choose whether it's **sold there** and **where it is**:
+  "Automatic" uses wherever that store stocks the item's category, or pick
+  a specific aisle or area.
+- Under **Categories**, add, rename, reorder and delete categories (Dairy,
+  Snacks, Pharmacy, …).
 
 ## Store layout editor
 
@@ -30,14 +43,14 @@ Open the **Store layout** tab to build your own stores:
 - **Open areas** are rectangles you can walk through, for departments like
   Produce, Deli or Bakery.
 - For each aisle or area, choose **what's stocked there** (Dairy, Pasta &
-  Rice, …). In aisles they're spread out in the order you list them.
+  Rice, …) and use the arrows to set their order along the aisle or area.
 - Drag shapes to move them and drag the round handle to resize, or use the
   arrows and +/− buttons for exact changes.
 - Set where the **entrance** and **checkout** are.
 - The editor warns you if something can't be reached or a kind of product
   isn't stocked anywhere.
 - Keep several stores, and pick the one you're shopping in from the list
-  header.
+  header. Copying a store also copies where its items are.
 
 ## Run it
 
@@ -56,14 +69,16 @@ signal inside the store.
 
 ```
 src/core/types.ts                 Layout, aisle, area and list item types
-src/core/categories.ts            Kinds of products and the words that identify them
+src/core/categories.ts            Starter categories and grocery items
+src/core/catalog.ts               Master list lookups: name matching and suggestions
 src/core/demoLayout.ts            Example store
 src/core/geometry.ts              Aisle/area shapes and pick-up spots
 src/core/floor.ts                 Walkable grid and walking distances
-src/core/locate.ts                Item name → spot in the store
+src/core/locate.ts                Grocery item → spot in a store
 src/core/route.ts                 Route planning (shortest walk)
 src/core/validate.ts              Layout warnings
-src/components/ShoppingView.tsx   Shopping list with drag-and-drop
+src/components/ShoppingView.tsx   Shopping list with suggestions and drag-and-drop
+src/components/ItemsView.tsx      Grocery items and categories editor
 src/components/LayoutEditor.tsx   Store layout editor
 src/components/StoreMap.tsx       Store map used by both
 ```

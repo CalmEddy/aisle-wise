@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { demoLayout } from './demoLayout';
 import { Floor, UNREACHABLE } from './floor';
 import { footprint, shelves, spotPoint } from './geometry';
-import { groupIntoStops, locateItem, matchCategory, normalize } from './locate';
+import { Catalog } from './catalog';
+import { defaultCategories, defaultProducts } from './categories';
+import { groupIntoStops, locateItem, normalize, type Location } from './locate';
 import { planRoute, routeLength } from './route';
 import type { Aisle, ListItem, StoreLayout } from './types';
 import { checkLayout } from './validate';
 
 const item = (name: string): ListItem => ({ id: name, name, done: false });
+const catalog = new Catalog(defaultProducts, defaultCategories);
+const spotOf = (loc: Location) => (loc.kind === 'spot' ? loc.spot : undefined);
 
 const tiny = (places: StoreLayout['places']): StoreLayout => ({
   id: 't', name: 'Tiny', width: 20, height: 12, places,
@@ -54,12 +58,12 @@ describe('Floor', () => {
     ]);
     const floor = new Floor(boxed);
     expect(floor.distance(boxed.entrance, { x: 7, y: 4 })).toBe(UNREACHABLE);
-    expect(checkLayout(boxed, floor).join(' ')).toContain('Locked room can’t be reached');
+    expect(checkLayout(boxed, floor, defaultCategories).join(' ')).toContain('Locked room can’t be reached');
   });
 
   it('finds every demo place reachable', () => {
     const floor = new Floor(demoLayout);
-    expect(checkLayout(demoLayout, floor).filter((p) => p.includes('reach'))).toEqual([]);
+    expect(checkLayout(demoLayout, floor, defaultCategories).filter((p) => p.includes('reach'))).toEqual([]);
   });
 });
 
@@ -69,33 +73,46 @@ describe('locating items', () => {
     expect(normalize('Strawberries')).toBe('strawberry');
   });
 
-  it('prefers the longest keyword', () => {
-    expect(matchCategory('almond milk')?.id).toBe('dairy');
-    expect(matchCategory('almonds')?.id).toBe('snacks');
-    expect(matchCategory('ice cream')?.id).toBe('icecream');
+  it('matches typed names to the master list', () => {
+    expect(catalog.match('almond milk')?.categoryId).toBe('dairy');
+    expect(catalog.match('almonds')?.categoryId).toBe('snacks');
+    expect(catalog.match('organic whole milk')?.name).toBe('Milk');
+    expect(catalog.match('flux capacitor')).toBeUndefined();
+  });
+
+  it('suggests items as you type, best match first', () => {
+    expect(catalog.suggest('ban').map((p) => p.name)).toEqual(['Bananas']);
+    expect(catalog.suggest('milk').map((p) => p.name)).toEqual(['Milk', 'Oat milk', 'Almond milk']);
+    expect(catalog.suggest('straw')[0].name).toBe('Strawberries');
   });
 
   it('finds the place that stocks the category', () => {
-    expect(locateItem('pasta', demoLayout)?.label).toBe('Aisle 2 · Pasta & Rice');
-    expect(locateItem('ice cream', demoLayout)?.placeId).toBe('f2');
-    expect(locateItem('bread', demoLayout)?.label).toBe('Bakery');
+    expect(spotOf(locateItem(item('pasta'), demoLayout, catalog))?.label).toBe('Aisle 2 · Pasta & Rice');
+    expect(spotOf(locateItem(item('ice cream'), demoLayout, catalog))?.placeId).toBe('f2');
+    expect(spotOf(locateItem(item('bread'), demoLayout, catalog))?.label).toBe('Bakery');
   });
 
-  it('uses what the user taught it first', () => {
-    expect(locateItem('Grandma sauce', demoLayout)).toBeUndefined();
-    expect(locateItem('milk', demoLayout, { milk: 'a3' })?.placeId).toBe('a3');
-    expect(locateItem('Grandma’s sauce', demoLayout, { 'grandma s sauce': 'a2:canned' })?.label)
-      .toBe('Aisle 2 · Canned Goods & Soup');
+  it('uses a per-store location saved on the item', () => {
+    const milk = { ...catalog.exact('milk')!, locations: { demo: 'a3', other: 'x' } };
+    const c = new Catalog(catalog.products.map((p) => (p.id === milk.id ? milk : p)), defaultCategories);
+    expect(spotOf(locateItem(item('milk'), demoLayout, c))?.placeId).toBe('a3');
+    // A different store keeps using the category.
+    expect(spotOf(locateItem(item('milk'), { ...demoLayout, id: 'third' }, c))?.placeId).toBe('dairy');
+    // A saved place that was deleted falls back to the category.
+    const gone = new Catalog([{ ...milk, locations: { demo: 'gone' } }], defaultCategories);
+    expect(spotOf(locateItem(item('milk'), demoLayout, gone))?.placeId).toBe('dairy');
   });
 
-  it('falls back to the category when a taught place was deleted', () => {
-    expect(locateItem('milk', demoLayout, { milk: 'gone' })?.placeId).toBe('dairy');
+  it('knows when a store doesn’t sell an item', () => {
+    const c = new Catalog([{ id: 'k', name: 'Kombucha', categoryId: 'soda', notAt: ['demo'] }], defaultCategories);
+    expect(locateItem(item('kombucha'), demoLayout, c).kind).toBe('not-sold');
+    expect(locateItem(item('kombucha'), { ...demoLayout, id: 'other' }, c).kind).toBe('spot');
   });
 });
 
 describe('planRoute', () => {
   const floor = new Floor(demoLayout);
-  const locate = (i: ListItem) => locateItem(i.name, demoLayout);
+  const locate = (i: ListItem) => locateItem(i, demoLayout, catalog);
   const plan = <T extends { point: { x: number; y: number } }>(start: { x: number; y: number }, stops: T[]) =>
     planRoute(start, stops, demoLayout.checkout, floor.distance);
 
@@ -108,7 +125,7 @@ describe('planRoute', () => {
   it('re-plans from wherever the shopper is', () => {
     const { stops } = groupIntoStops([item('apples'), item('steak'), item('pasta'), item('milk')], locate);
     expect(plan(demoLayout.entrance, stops)[0].placeId).toBe('produce');
-    const atMeat = stops.find((s) => s.placeId === 'meat')!.point;
+    const atMeat = stops.find((st) => st.placeId === 'meat')!.point;
     expect(plan(atMeat, stops)[0].placeId).toBe('meat');
   });
 

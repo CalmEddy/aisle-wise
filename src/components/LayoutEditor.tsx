@@ -1,9 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
-import { categories, categoryById } from '../core/categories';
 import { demoLayout } from '../core/demoLayout';
 import { Floor } from '../core/floor';
 import { clampPlace, footprint } from '../core/geometry';
-import type { Aisle, Area, Place, Point, StoreLayout } from '../core/types';
+import type { Aisle, Area, Category, Place, Point, StoreLayout } from '../core/types';
 import { checkLayout } from '../core/validate';
 import { StoreMap } from './StoreMap';
 
@@ -13,6 +12,9 @@ interface Props {
   activeId: string;
   setActiveId: (id: string) => void;
   onDone: () => void;
+  categories: Category[];
+  /** Called after a layout is copied, so item locations can be copied too. */
+  onCopied: (fromId: string, toId: string) => void;
 }
 
 type Tool = 'select' | 'aisle-v' | 'aisle-h' | 'area' | 'entrance' | 'checkout';
@@ -33,7 +35,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDone }: Props) {
+export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDone, categories, onCopied }: Props) {
   const layout = layouts.find((l) => l.id === activeId) ?? layouts[0];
   const [tool, setTool] = useState<Tool>('select');
   const [selectedId, setSelectedId] = useState<string>();
@@ -41,7 +43,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
   const dragRef = useRef<DragState | null>(null);
 
   const floor = useMemo(() => new Floor(layout), [layout]);
-  const problems = useMemo(() => checkLayout(layout, floor), [layout, floor]);
+  const problems = useMemo(() => checkLayout(layout, floor, categories), [layout, floor, categories]);
   const selected = layout.places.find((p) => p.id === selectedId);
 
   // --- Layout updates ---
@@ -142,6 +144,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
       ? { ...structuredClone(from), id, name: `${from.name} copy` }
       : { id, name: 'My store', width: 40, height: 30, places: [], entrance: { x: 2, y: 28 }, checkout: { x: 20, y: 28 } };
     setLayouts((prev) => [...prev, fresh]);
+    if (from) onCopied(from.id, id);
     setActiveId(id);
     setSelectedId(undefined);
   }
@@ -244,6 +247,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
             update((l) => ({ ...l, places: l.places.filter((p) => p.id !== selected.id) }));
             setSelectedId(undefined);
           }}
+          categories={categories}
           usedElsewhere={(catId) => layout.places.find((p) => p.id !== selected.id && p.categories.includes(catId))?.label}
         />
       ) : (
@@ -276,12 +280,20 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
   );
 }
 
-function PlacePanel({ place, onChange, onDelete, usedElsewhere }: {
+function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories }: {
   place: Place;
   onChange: (patch: Partial<Aisle> | Partial<Area>) => void;
   onDelete: () => void;
   usedElsewhere: (categoryId: string) => string | undefined;
+  categories: Category[];
 }) {
+  const nameOf = (id: string) => categories.find((c) => c.id === id)?.name ?? 'Deleted category';
+  const reorder = (index: number, delta: number) => {
+    const next = [...place.categories];
+    const [id] = next.splice(index, 1);
+    next.splice(index + delta, 0, id);
+    onChange({ categories: next });
+  };
   const f = footprint(place);
   const available = categories.filter((c) => !place.categories.includes(c.id));
   const move = (dx: number, dy: number) => onChange({ x: place.x + dx, y: place.y + dy });
@@ -323,14 +335,19 @@ function PlacePanel({ place, onChange, onDelete, usedElsewhere }: {
       </div>
 
       <div className="field">
-        <span>What’s here {place.kind === 'aisle' && <span className="muted">(in order, {place.orientation === 'vertical' ? 'top to bottom' : 'left to right'})</span>}</span>
-        <div className="chips wrap">
-          {place.categories.map((id) => (
-            <button key={id} className="chip active" onClick={() => onChange({ categories: place.categories.filter((c) => c !== id) })}>
-              {categoryById.get(id)?.name ?? id} ×
-            </button>
+        <span>What’s here <span className="muted">(in order, {alongX(place) ? 'left to right' : 'top to bottom'} on the map)</span></span>
+        <ol className="stock-list">
+          {place.categories.map((id, i) => (
+            <li key={id} className="row">
+              <span className="num">{i + 1}</span>
+              <span className="name">{nameOf(id)}</span>
+              <button className="icon" onClick={() => reorder(i, -1)} disabled={i === 0} aria-label={`Move ${nameOf(id)} earlier`}>↑</button>
+              <button className="icon" onClick={() => reorder(i, 1)} disabled={i === place.categories.length - 1} aria-label={`Move ${nameOf(id)} later`}>↓</button>
+              <button className="icon" onClick={() => onChange({ categories: place.categories.filter((c) => c !== id) })} aria-label={`Remove ${nameOf(id)}`}>×</button>
+            </li>
           ))}
-        </div>
+          {place.categories.length === 0 && <li className="muted small">Nothing yet.</li>}
+        </ol>
         <select
           value=""
           onChange={(e) => onChange({ categories: [...place.categories, e.target.value] })}
@@ -383,6 +400,11 @@ function handlePoint(p: Place): Point {
   const f = footprint(p);
   if (p.kind === 'area') return { x: f.x + f.w, y: f.y + f.h };
   return p.orientation === 'vertical' ? { x: f.x + f.w / 2, y: f.y + f.h } : { x: f.x + f.w, y: f.y + f.h / 2 };
+}
+
+/** Whether a place's categories are laid out left-to-right (else top-to-bottom). Matches spotPoint. */
+function alongX(p: Place) {
+  return p.kind === 'aisle' ? p.orientation === 'horizontal' : p.w >= p.h;
 }
 
 function clamp(v: number, min: number, max: number) {
