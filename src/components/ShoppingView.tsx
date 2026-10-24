@@ -16,7 +16,7 @@ interface Props {
   setItems: (fn: (prev: ListItem[]) => ListItem[]) => void;
   /** Saves where an item is in this store (creating a master-list item if needed). */
   setLocation: (item: ListItem, spotKey: string) => void;
-  setSoldHere: (product: Product, sold: boolean) => void;
+  setAvailable: (item: ListItem, available: boolean) => QuickAddResult['snapshot'];
   quickAdd: (names: string[], mode: 'list' | 'cart', hereKey?: string) => QuickAddResult;
   undo: (snapshot: QuickAddResult['snapshot']) => void;
   setProductLocation: (productId: string, spotKey: string | null) => void;
@@ -35,11 +35,20 @@ interface Drag {
 
 
 export function ShoppingView(props: Props) {
-  const { layout, floor, catalog, items, setItems, setLocation, setSoldHere, position, setPosition, onEditLayout } = props;
+  const { layout, floor, catalog, items, setItems, setLocation, setAvailable, position, setPosition, onEditLayout } = props;
   const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState<Drag | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [picking, setPicking] = useState<{ productId: string; name: string } | null>(null);
+  const [picking, setPicking] = useState<{ productId?: string; item?: ListItem; name: string } | null>(null);
+  const [menuFor, setMenuFor] = useState<ListItem | null>(null);
+
+  function markAvailable(item: ListItem, available: boolean) {
+    const snapshot = setAvailable(item, available);
+    setToast({
+      snapshot, added: [], mode: 'list',
+      note: available ? `${item.name} is back on your route` : `${item.name} marked not available at ${layout.name}`,
+    });
+  }
 
   // The banner fades after a while, unless the place picker is open or it's asking a question.
   const asking = toast?.added.some((a) => a.conflict);
@@ -220,7 +229,7 @@ export function ShoppingView(props: Props) {
               <span className="badge">Next</span>
               <h2>{next.label}</h2>
             </div>
-            <ItemRows items={next.items} onToggle={toggle} onRemove={remove} drag={dragHandlers} dragging={drag?.item.id} big />
+            <ItemRows items={next.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} big />
           </section>
         )}
 
@@ -230,44 +239,45 @@ export function ShoppingView(props: Props) {
               <span className="num">{i + 2}</span>
               <h3>{stop.label}</h3>
             </div>
-            <ItemRows items={stop.items} onToggle={toggle} onRemove={remove} drag={dragHandlers} dragging={drag?.item.id} />
+            <ItemRows items={stop.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} />
           </section>
         ))}
 
-        {unplaced.length > 0 && (
-          <section className="card unplaced">
-            <h3>Where is this?</h3>
-            <p className="muted small">Drag it onto the map, or pick a place. The app remembers for this store.</p>
-            {unplaced.map((item) => (
-              <div className="row" key={item.id}>
-                <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
-                <span className="name">{item.name}</span>
-                <select value="" onChange={(e) => setLocation(item, e.target.value)} aria-label={`Location of ${item.name}`}>
-                  <option value="" disabled>Choose…</option>
-                  {layout.places.map((p) => (
-                    <option key={p.id} value={p.id}>{p.label || 'Unnamed'}</option>
-                  ))}
-                </select>
-                <button className="icon" onClick={() => remove(item)} aria-label={`Remove ${item.name}`}>×</button>
-              </div>
-            ))}
-          </section>
-        )}
-
-        {notSold.length > 0 && (
-          <section className="card not-sold">
-            <h3>Not sold at {layout.name}</h3>
-            <p className="muted small">Get these somewhere else, or mark them as sold here.</p>
-            {notSold.map((item) => {
-              const product = productFor(item, catalog)!;
-              return (
-                <div className="row" key={item.id}>
-                  <span className="name">{item.name}</span>
-                  <button className="btn" onClick={() => setSoldHere(product, true)}>Sold here</button>
-                  <button className="icon" onClick={() => remove(item)} aria-label={`Remove ${item.name}`}>×</button>
-                </div>
-              );
-            })}
+        {(unplaced.length > 0 || notSold.length > 0) && (
+          <section className="card off-route">
+            <h3>Not on the route</h3>
+            {unplaced.length > 0 && (
+              <>
+                <h4>No location yet</h4>
+                <p className="muted small">Drag it onto the map, or pick a place. The app remembers for this store.</p>
+                {unplaced.map((item) => (
+                  <div className="row" key={item.id}>
+                    <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
+                    <span className="name">{item.name}</span>
+                    <select value="" onChange={(e) => setLocation(item, e.target.value)} aria-label={`Location of ${item.name}`}>
+                      <option value="" disabled>Choose…</option>
+                      {layout.places.map((p) => (
+                        <option key={p.id} value={p.id}>{p.label || 'Unnamed'}</option>
+                      ))}
+                    </select>
+                    <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+                  </div>
+                ))}
+              </>
+            )}
+            {notSold.length > 0 && (
+              <>
+                <h4>Not available at {layout.name}</h4>
+                <p className="muted small">Get these somewhere else.</p>
+                {notSold.map((item) => (
+                  <div className="row unavailable" key={item.id}>
+                    <span className="name">{item.name}</span>
+                    <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
+                    <button className="icon" onClick={() => remove(item)} aria-label={`Remove ${item.name}`}>×</button>
+                  </div>
+                ))}
+              </>
+            )}
           </section>
         )}
 
@@ -301,17 +311,51 @@ export function ShoppingView(props: Props) {
         />
       )}
 
+      {menuFor && (
+        <ItemMenu
+          item={menuFor}
+          where={(() => {
+            const loc = locate(menuFor);
+            return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
+          })()}
+          storeName={layout.name}
+          onChangePlace={() => {
+            setPicking({ productId: productFor(menuFor, catalog)?.id, item: menuFor, name: menuFor.name });
+            setMenuFor(null);
+          }}
+          onNotAvailable={() => {
+            markAvailable(menuFor, false);
+            setMenuFor(null);
+          }}
+          onRemove={() => {
+            remove(menuFor);
+            setMenuFor(null);
+          }}
+          onCancel={() => setMenuFor(null)}
+        />
+      )}
+
       {picking && (
         <PlacePicker
           name={picking.name}
           layout={layout}
           catalog={catalog}
           hereKey={hereKey}
-          current={catalog.productById.get(picking.productId)?.locations?.[layout.id]}
+          current={picking.productId ? catalog.productById.get(picking.productId)?.locations?.[layout.id] : undefined}
           onPick={(key) => {
-            props.setProductLocation(picking.productId, key);
+            if (picking.productId) props.setProductLocation(picking.productId, key);
+            else if (key && picking.item) setLocation(picking.item, key);
             setPicking(null);
             setToast(null);
+          }}
+          onNotAvailable={() => {
+            const item = picking.item ?? items.find((i) => !i.done && productFor(i, catalog)?.id === picking.productId);
+            if (item) markAvailable(item, false);
+            else if (picking.productId) {
+              const product = catalog.productById.get(picking.productId)!;
+              markAvailable({ id: '', name: product.name, done: false, productId: product.id }, false);
+            }
+            setPicking(null);
           }}
           onCancel={() => setPicking(null)}
         />
@@ -336,7 +380,7 @@ export function ShoppingView(props: Props) {
 export function whereText(product: Product, layout: StoreLayout, catalog: Catalog): string {
   const loc = locateProduct(product, layout, catalog);
   if (loc.kind === 'spot') return loc.spot.label;
-  if (loc.kind === 'not-sold') return 'Not sold here';
+  if (loc.kind === 'not-sold') return 'Not available here';
   return catalog.categoryById.get(product.categoryId ?? '')?.name ?? 'No location yet';
 }
 
@@ -346,10 +390,11 @@ function overKey(drag: Drag | null, key: string) {
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-function ItemRows({ items, onToggle, onRemove, drag, dragging, big }: {
+function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, big }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
+  onMenu?: (i: ListItem) => void;
   drag?: DragHandlers;
   dragging?: string;
   big?: boolean;
@@ -365,6 +410,9 @@ function ItemRows({ items, onToggle, onRemove, drag, dragging, big }: {
             <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
             <span className="name">{item.name}</span>
           </label>
+          {onMenu && (
+            <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+          )}
           <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>
         </li>
       ))}
@@ -380,7 +428,7 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
   );
 }
 
-type Toast = QuickAddResult & { mode: 'list' | 'cart' };
+type Toast = QuickAddResult & { mode: 'list' | 'cart'; /** Plain message instead of an add summary. */ note?: string };
 
 /** The most specific spot key for where the shopper is standing. */
 function spotKeyAt(place: Place, at: Point): string {
@@ -422,6 +470,15 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
   onClose: () => void;
 }) {
   const { added, mode } = toast;
+  if (toast.note) {
+    return (
+      <div className="toast" role="status">
+        <span className="toast-text">{toast.note}</span>
+        <button className="toast-btn" onClick={onUndo}>Undo</button>
+        <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+      </div>
+    );
+  }
   if (!added.length) return null;
 
   // Put in the cart away from where it's saved: ask before moving it.
@@ -467,13 +524,14 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
   );
 }
 
-function PlacePicker({ name, layout, catalog, hereKey, current, onPick, onCancel }: {
+function PlacePicker({ name, layout, catalog, hereKey, current, onPick, onNotAvailable, onCancel }: {
   name: string;
   layout: StoreLayout;
   catalog: Catalog;
   hereKey?: string;
   current?: string;
   onPick: (key: string | null) => void;
+  onNotAvailable: () => void;
   onCancel: () => void;
 }) {
   const label = (key: string) => resolveSpot(key, layout, catalog)?.label ?? key;
@@ -498,6 +556,33 @@ function PlacePicker({ name, layout, catalog, hereKey, current, onPick, onCancel
         </div>
         <div className="sheet-actions">
           <button className="btn" onClick={() => onPick(null)}>Not sure</button>
+          <button className="btn" onClick={onNotAvailable}>Not available here</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={onCancel}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ItemMenu({ item, where, storeName, onChangePlace, onNotAvailable, onRemove, onCancel }: {
+  item: ListItem;
+  where: string;
+  storeName: string;
+  onChangePlace: () => void;
+  onNotAvailable: () => void;
+  onRemove: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="sheet-backdrop" onClick={onCancel}>
+      <div className="sheet" role="dialog" aria-label={`Options for ${item.name}`} onClick={(e) => e.stopPropagation()}>
+        <h2>{item.name}</h2>
+        <p className="muted small">{where}</p>
+        <button className="pick" onClick={onChangePlace}>📍 Change place</button>
+        <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
+        <button className="pick danger" onClick={onRemove}>Remove from list</button>
+        <div className="sheet-actions">
           <span style={{ flex: 1 }} />
           <button className="btn" onClick={onCancel}>Cancel</button>
         </div>

@@ -235,8 +235,6 @@ button { cursor: pointer; }
 .stock-list { list-style: none; padding: 0; margin: 4px 0 8px; }
 .stock-list .row { min-height: 40px; }
 .error { color: var(--danger); font-size: 0.8rem; }
-.not-sold { border-style: dashed; }
-.not-sold .row .btn { padding: 6px 10px; }
 
 /* Bottom sheet */
 .sheet-backdrop { position: fixed; inset: 0; background: #0006; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
@@ -256,3 +254,14 @@ button { cursor: pointer; }
 .toast-actions .btn { padding: 9px 12px; }
 .toast-actions .btn:not(.primary) { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }
 .toast-btn.subtle { color: inherit; opacity: 0.7; padding-left: 0; }
+
+/* Off-route items */
+.off-route { border-style: dashed; }
+.off-route h4 { margin: 12px 0 2px; font-size: 0.9rem; }
+.off-route h3 + h4 { margin-top: 6px; }
+.row.unavailable .name { color: var(--muted); }
+.row.unavailable .btn { padding: 6px 10px; }
+.pick.danger { color: var(--danger); }
+
+/* Leave room to scroll the last rows above the banner. */
+.app main { padding-bottom: 96px; }

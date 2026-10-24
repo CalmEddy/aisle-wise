@@ -26,14 +26,16 @@ re-orders it as you move.
    the rest of the list.
 4. **Move items** – drag an item's ⠿ handle onto the map or onto another
    stop. The location is saved on that grocery item for this store only.
-   Items a store doesn't sell are listed separately.
+   Tap **⋯** on an item to change its place or mark it **not available at
+   this store**. Items not available here, and items with no location yet,
+   are listed at the bottom under "Not on the route".
 
 ## Grocery items and categories
 
 The **Items** tab holds the master list of grocery items (about 290 to start).
 
 - Search, add, rename and delete items, and set each item's category.
-- For each store, choose whether it's **sold there** and **where it is**:
+- For each store, choose whether it's **available there** and **where it is**:
   "Automatic" uses wherever that store stocks the item's category, or pick
   a specific aisle or area.
 - Under **Categories**, add, rename, reorder and delete categories (Dairy,

@@ -179,7 +179,7 @@ function ProductSheet({ product, isNew, catalog, layouts, onSave, onCancel, onDe
               <div className="store-row" key={l.id}>
                 <label className="check">
                   <input type="checkbox" checked={sold} onChange={(e) => setSold(l.id, e.target.checked)} />
-                  <span>Sold at <b>{l.name}</b></span>
+                  <span>Available at <b>{l.name}</b></span>
                 </label>
                 {sold && (
                   <select

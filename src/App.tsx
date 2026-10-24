@@ -138,12 +138,25 @@ export default function App() {
     }));
   }
 
-  function setSoldHere(product: Product, sold: boolean) {
-    setProducts((prev) => prev.map((p) => {
-      if (p.id !== product.id) return p;
-      const notAt = (p.notAt ?? []).filter((id) => id !== layout.id);
-      return { ...p, notAt: sold ? notAt : [...notAt, layout.id] };
-    }));
+  /**
+   * Marks a list item as (not) available at the current store, adding it to the
+   * master list if it's new. Returns what to restore for Undo.
+   */
+  function setAvailable(item: ListItem, available: boolean): QuickAddResult['snapshot'] {
+    const snapshot = { items, products };
+    const product = productFor(item, catalog);
+    if (product) {
+      setProducts((prev) => prev.map((p) => {
+        if (p.id !== product.id) return p;
+        const notAt = (p.notAt ?? []).filter((id) => id !== layout.id);
+        return { ...p, notAt: available ? notAt : [...notAt, layout.id] };
+      }));
+    } else if (!available) {
+      const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), notAt: [layout.id] };
+      setProducts((prev) => [...prev, created]);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
+    }
+    return snapshot;
   }
 
   /** A copied store starts with the same item locations and "not sold here" settings. */
@@ -202,7 +215,7 @@ export default function App() {
           quickAdd={quickAdd}
           undo={undo}
           setProductLocation={setProductLocation}
-          setSoldHere={setSoldHere}
+          setAvailable={setAvailable}
           position={position}
           setPosition={(point) => setPos({ layoutId: layout.id, point })}
           onEditLayout={() => setView('layout')}
