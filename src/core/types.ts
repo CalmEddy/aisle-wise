@@ -77,13 +77,24 @@ export interface Product {
   notAt?: string[];
 }
 
-/** A spot where items are picked up: a place, optionally narrowed to one category. */
+/** A spot where items are picked up. */
 export interface Spot {
-  /** `placeId` or `placeId:categoryId`. */
+  /**
+   * `placeId` (anywhere in the place), `placeId:categoryId` (where that
+   * category is stocked), or `placeId@u,v` (an exact spot, see geometry.ts).
+   */
   key: string;
   placeId: string;
+  /** The place's label, e.g. "Aisle 4". */
+  placeLabel: string;
+  /** Where in the place, e.g. "left side, middle" or "Pasta & Rice". */
+  detail?: string;
+  /** `placeLabel · detail`. */
   label: string;
+  /** Walking target (a floor square). */
   point: Point;
+  /** Where to draw the item on the map (grid units, may be on a shelf). */
+  mark: { x: number; y: number };
 }
 
 export interface Stop extends Spot {

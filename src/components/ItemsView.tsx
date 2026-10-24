@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { normalize, type Catalog } from '../core/catalog';
-import { locateProduct } from '../core/locate';
+import { parseExactKey } from '../core/geometry';
+import { locateProduct, resolveSpot } from '../core/locate';
 import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './ShoppingView';
+import { SpotPicker } from './SpotPicker';
 
 interface Props {
   catalog: Catalog;
@@ -134,6 +136,7 @@ function ProductSheet({ product, isNew, catalog, layouts, onSave, onCancel, onDe
   onDelete: () => void;
 }) {
   const [draft, setDraft] = useState<Product>(product);
+  const [mapFor, setMapFor] = useState<StoreLayout | null>(null);
   const duplicate = catalog.products.find((p) => p.id !== draft.id && normalize(p.name) === normalize(draft.name));
   const valid = draft.name.trim() && !duplicate;
 
@@ -182,12 +185,18 @@ function ProductSheet({ product, isNew, catalog, layouts, onSave, onCancel, onDe
                   <span>Available at <b>{l.name}</b></span>
                 </label>
                 {sold && (
+                  <div className="location-row">
                   <select
                     value={draft.locations?.[l.id] ?? ''}
                     onChange={(e) => setLocation(l.id, e.target.value)}
                     aria-label={`Location at ${l.name}`}
                   >
                     <option value="">Automatic: {autoText}</option>
+                    {(() => {
+                      const key = draft.locations?.[l.id];
+                      const spot = key && parseExactKey(key) ? resolveSpot(key, l, catalog) : undefined;
+                      return spot && <option value={key}>📍 {spot.label}</option>;
+                    })()}
                     {l.places.map((p) => (
                       <optgroup key={p.id} label={p.label || 'Unnamed'}>
                         <option value={p.id}>{p.label || 'Unnamed'}</option>
@@ -199,11 +208,30 @@ function ProductSheet({ product, isNew, catalog, layouts, onSave, onCancel, onDe
                       </optgroup>
                     ))}
                   </select>
+                  <button type="button" className="btn" onClick={() => setMapFor(l)}>Pick on map</button>
+                  </div>
                 )}
               </div>
             );
           })}
         </div>
+
+        {mapFor && (
+          <SpotPicker
+            title={`Where is ${draft.name || 'this item'} at ${mapFor.name}?`}
+            layout={mapFor}
+            catalog={catalog}
+            current={(() => {
+              const loc = locateProduct(draft, mapFor, catalog);
+              return loc.kind === 'spot' ? loc.spot.key : undefined;
+            })()}
+            onPick={(key) => {
+              setLocation(mapFor.id, key);
+              setMapFor(null);
+            }}
+            onCancel={() => setMapFor(null)}
+          />
+        )}
 
         <div className="sheet-actions">
           {!isNew && (

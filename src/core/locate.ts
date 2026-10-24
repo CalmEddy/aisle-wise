@@ -1,23 +1,48 @@
 import type { Catalog } from './catalog';
-import { spotPoint } from './geometry';
+import { describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { ListItem, Product, Spot, Stop, StoreLayout } from './types';
 
 export { normalize } from './catalog';
 
-/** Turns a spot key (`placeId` or `placeId:categoryId`) into a spot in this layout. */
+/** Turns a spot key (`placeId`, `placeId:categoryId` or `placeId@u,v`) into a spot in this layout. */
 export function resolveSpot(key: string, layout: StoreLayout, catalog: Catalog): Spot | undefined {
+  const exact = parseExactKey(key);
+  if (exact) {
+    const place = layout.places.find((p) => p.id === exact.placeId);
+    if (!place) return undefined;
+    const detail = describeExact(place, exact.spot);
+    return {
+      key,
+      placeId: place.id,
+      placeLabel: place.label,
+      detail,
+      label: `${place.label} · ${detail}`,
+      point: exactPoint(place, exact.spot),
+      mark: exactMark(place, exact.spot),
+    };
+  }
+
   const [placeId, categoryId] = key.split(':');
   const place = layout.places.find((p) => p.id === placeId);
   if (!place) return undefined;
+  const center = (pt: { x: number; y: number }) => ({ x: pt.x + 0.5, y: pt.y + 0.5 });
   const index = categoryId ? place.categories.indexOf(categoryId) : -1;
-  if (index < 0) return { key: place.id, placeId: place.id, label: place.label, point: spotPoint(place) };
+  if (index < 0) {
+    const point = spotPoint(place);
+    return { key: place.id, placeId: place.id, placeLabel: place.label, label: place.label, point, mark: center(point) };
+  }
   const cat = catalog.categoryById.get(categoryId);
+  // Name the category only when it adds something ("Aisle 2 · Pasta & Rice", not "Bakery · Bakery").
+  const detail = cat && place.categories.length > 1 && cat.name !== place.label ? cat.name : undefined;
+  const point = spotPoint(place, index, place.categories.length);
   return {
     key,
     placeId: place.id,
-    // Name the category only when it adds something ("Aisle 2 · Pasta & Rice", not "Bakery · Bakery").
-    label: cat && place.categories.length > 1 && cat.name !== place.label ? `${place.label} · ${cat.name}` : place.label,
-    point: spotPoint(place, index, place.categories.length),
+    placeLabel: place.label,
+    detail,
+    label: detail ? `${place.label} · ${detail}` : place.label,
+    point,
+    mark: center(point),
   };
 }
 

@@ -128,3 +128,25 @@ function heuristicOrder(start: Point, pts: Point[], end: Point, d: Distance): nu
   }
   return order;
 }
+
+/** One numbered stop on the shopping route: a place, with the pick-up spots in it in walking order. */
+export interface Visit<T extends { placeId: string }> {
+  number: number;
+  placeId: string;
+  stops: T[];
+}
+
+/**
+ * Groups a planned route into visits: back-to-back stops in the same aisle
+ * or area share one number, so a busy aisle shows as "3" with several items
+ * rather than "3, 4, 5, 6".
+ */
+export function groupVisits<T extends { placeId: string }>(route: T[]): Visit<T>[] {
+  const visits: Visit<T>[] = [];
+  for (const stop of route) {
+    const last = visits[visits.length - 1];
+    if (last && last.placeId === stop.placeId) last.stops.push(stop);
+    else visits.push({ number: visits.length + 1, placeId: stop.placeId, stops: [stop] });
+  }
+  return visits;
+}

@@ -295,3 +295,27 @@ button { cursor: pointer; }
 .password-row { display: flex; gap: 6px; }
 .password-row input { flex: 1; min-width: 0; }
 .household .segmented { margin: 10px 0 4px; }
+
+/* Exact spots */
+.map.tappable { cursor: crosshair; }
+.map.zoomed { height: 46vh; max-height: 420px; }
+.map-stop .map-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 0.12; }
+.map-preview circle { fill: none; stroke: var(--you); stroke-width: 0.3; }
+.map-preview .core { fill: var(--you); stroke: none; }
+.map.zoomed .place-label { opacity: 0.35; }
+
+/* Visit cards */
+.count-pill { margin: 0 0 0 auto; }
+.spot { border-radius: 10px; }
+.spot + .spot { border-top: 1px dashed var(--line); margin-top: 2px; padding-top: 2px; }
+.spot.drop-over { outline: 2px solid var(--accent); outline-offset: 2px; }
+.spot-detail { font-size: 0.78rem; color: var(--muted); margin: 6px 0 -4px 36px; }
+.next-card .spot-detail { color: var(--text); opacity: 0.7; }
+.spot-picker .map { margin: 6px 0; }
+.spot-choice { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 32px; font-size: 0.9rem; }
+.spot-choice .link { padding: 0; }
+.pick-more { margin-top: 8px; }
+.pick-more summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
+.location-row { display: flex; gap: 6px; }
+.location-row select { flex: 1; min-width: 0; }
+.sheet .sheet-backdrop { z-index: 50; }

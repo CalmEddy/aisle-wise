@@ -22,10 +22,18 @@ re-orders it as you move.
    stops are solved exactly; longer lists use nearest-neighbour + 2-opt
    (`src/core/route.ts`).
 3. **Follow along** – checking off an item moves you to that spot, and you
-   can tap the map or a "You're near" chip at any time. Each move re-plans
+   can tap anywhere on the map (or a place chip) to say where you are. Each move re-plans
    the rest of the list.
-4. **Move items** – drag an item's ⠿ handle onto the map or onto another
-   stop. The location is saved on that grocery item for this store only.
+4. **Move items** – drag an item's ⠿ handle onto the exact spot on the map,
+   or onto another item. The location is saved on that grocery item for this
+   store only. **Change place** (in the ⋯ menu) opens the map: tap an aisle or
+   area to zoom in, then tap the exact spot – tapping nearer a shelf picks
+   that side of the aisle. Spots are saved relative to the aisle or area, so
+   they stay right if you move or resize it.
+5. **Numbered stops** – back-to-back items in the same aisle or area share one
+   number. The card lists them in walking order with where each one is
+   ("right side, middle"), and the map shows one number per place with a dot
+   for each item.
    Tap **⋯** on an item to change its place or mark it **not available at
    this store**. Items not available here, and items with no location yet,
    are listed at the bottom under "Not on the route".

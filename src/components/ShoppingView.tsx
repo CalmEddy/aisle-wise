@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
-import { placeAt, spotPoint } from '../core/geometry';
+import { exactKey, exactSpotAt, placeAt, spotPoint } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
-import { planRoute } from '../core/route';
-import type { ListItem, Place, Point, Product, StoreLayout } from '../core/types';
-import { StoreMap } from './StoreMap';
+import { groupVisits, planRoute } from '../core/route';
+import type { ListItem, Point, Product, Stop, StoreLayout } from '../core/types';
+import { SpotPicker } from './SpotPicker';
+import { StoreMap, placeUnder, toGrid, type MapVisit } from './StoreMap';
 
 interface Props {
   layout: StoreLayout;
@@ -61,11 +62,20 @@ export function ShoppingView(props: Props) {
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
 
   // Re-plans every time the list, the layout, the master list or the shopper's position changes.
-  const { route, unplaced, notSold } = useMemo(() => {
+  const { route, visits, unplaced, notSold } = useMemo(() => {
     const { stops, unplaced, notSold } = groupIntoStops(items, locate);
-    return { route: planRoute(position, stops, layout.checkout, floor.distance), unplaced, notSold };
+    const route = planRoute(position, stops, layout.checkout, floor.distance);
+    return { route, visits: groupVisits(route), unplaced, notSold };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, layout, floor, catalog, position]);
+
+  // One number per visit on the map, with a dot for each item spot.
+  const mapVisits: MapVisit[] = visits.map((v, i) => ({
+    number: v.number,
+    next: i === 0,
+    at: v.stops[0].mark,
+    dots: v.stops.map((st) => st.mark),
+  }));
 
   // Suggestions for whatever is after the last comma.
   const segment = draft.split(',').pop() ?? '';
@@ -80,7 +90,8 @@ export function ShoppingView(props: Props) {
   const done = items.filter((i) => i.done);
   const here = placeAt(layout, position);
   const atEntrance = position.x === layout.entrance.x && position.y === layout.entrance.y;
-  const hereKey = here ? spotKeyAt(here, position) : undefined;
+  // Where the shopper is standing, as an exact spot (side = the lane they're in).
+  const hereKey = here ? exactKey(here.id, exactSpotAt(here, position.x + 0.5, position.y + 0.5)) : undefined;
   const hereLabel = hereKey ? resolveSpot(hereKey, layout, catalog)?.label : undefined;
 
   /** Adds from the box: everything before the last comma plus `last`. */
@@ -109,8 +120,17 @@ export function ShoppingView(props: Props) {
   }
 
   // --- Drag an item onto a new location (map or stop card) ---
-  const dropKeyAt = (x: number, y: number) =>
-    (document.elementFromPoint(x, y)?.closest('[data-drop]') as HTMLElement | SVGElement | null)?.dataset.drop;
+  /** What's under the finger: an exact spot on the map, or a stop in the list. */
+  const dropKeyAt = (x: number, y: number) => {
+    const el = document.elementFromPoint(x, y);
+    const svg = el?.closest('svg.map') as SVGSVGElement | null;
+    if (svg) {
+      const g = toGrid(svg, x, y);
+      const place = placeUnder(layout, g.x, g.y);
+      return place ? exactKey(place.id, exactSpotAt(place, g.x, g.y)) : undefined;
+    }
+    return (el?.closest('[data-drop]') as HTMLElement | null)?.dataset.drop;
+  };
 
   const dragHandlers = (item: ListItem) => ({
     onPointerDown(e: React.PointerEvent) {
@@ -134,9 +154,8 @@ export function ShoppingView(props: Props) {
     },
   });
 
-  const overPlaceId = drag?.over?.split(':')[0];
-  const overLabel = drag?.over ? resolveSpot(drag.over, layout, catalog)?.label : undefined;
-  const [next, ...later] = route;
+  const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
+  const [nextVisit, ...laterVisits] = visits;
 
   return (
     <>
@@ -187,12 +206,12 @@ export function ShoppingView(props: Props) {
           <StoreMap
             layout={layout}
             you={position}
-            stops={route}
+            visits={mapVisits}
             highlightId={here?.id}
-            onPlaceTap={(p) => setPosition(spotPoint(p))}
+            onMapTap={(x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
           />
           <section className="here">
-            <span className="muted">You're near — tap the map or a place</span>
+            <span className="muted">{hereLabel ? <>You’re at <b>{hereLabel}</b> — tap the map to move</> : 'Tap the map where you are, or pick a place'}</span>
             <div className="chips" role="list">
               <Chip label="Entrance" active={atEntrance} onClick={() => setPosition(layout.entrance)} />
               {layout.places.map((p) => (
@@ -223,24 +242,16 @@ export function ShoppingView(props: Props) {
           <p className="hint muted small">Drag ⠿ onto the map or another stop to move an item. The app remembers it for this store.</p>
         )}
 
-        {next && (
-          <section className={`card next-card${overKey(drag, next.key)}`} data-drop={next.key}>
-            <div className="stop-head">
-              <span className="badge">Next</span>
-              <h2>{next.label}</h2>
-            </div>
-            <ItemRows items={next.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} big />
-          </section>
+        {nextVisit && (
+          <VisitCard visit={nextVisit} next drag={drag} rows={(st) => (
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} big />
+          )} />
         )}
 
-        {later.map((stop, i) => (
-          <section className={`card${overKey(drag, stop.key)}`} key={stop.key} data-drop={stop.key}>
-            <div className="stop-head">
-              <span className="num">{i + 2}</span>
-              <h3>{stop.label}</h3>
-            </div>
-            <ItemRows items={stop.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} />
-          </section>
+        {laterVisits.map((v) => (
+          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} rows={(st) => (
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} />
+          )} />
         ))}
 
         {(unplaced.length > 0 || notSold.length > 0) && (
@@ -336,19 +347,29 @@ export function ShoppingView(props: Props) {
       )}
 
       {picking && (
-        <PlacePicker
-          name={picking.name}
+        <SpotPicker
+          title={`Where is ${picking.name}?`}
           layout={layout}
           catalog={catalog}
           hereKey={hereKey}
-          current={picking.productId ? catalog.productById.get(picking.productId)?.locations?.[layout.id] : undefined}
+          current={(() => {
+            const product = picking.productId ? catalog.productById.get(picking.productId) : undefined;
+            const loc = product ? locateProduct(product, layout, catalog) : undefined;
+            return loc?.kind === 'spot' ? loc.spot.key : undefined;
+          })()}
           onPick={(key) => {
             if (picking.productId) props.setProductLocation(picking.productId, key);
-            else if (key && picking.item) setLocation(picking.item, key);
+            else if (picking.item) setLocation(picking.item, key);
             setPicking(null);
             setToast(null);
           }}
-          onNotAvailable={() => {
+          extraActions={<>
+            <button className="btn" onClick={() => {
+              if (picking.productId) props.setProductLocation(picking.productId, null);
+              setPicking(null);
+              setToast(null);
+            }}>Not sure</button>
+            <button className="btn" onClick={() => {
             const item = picking.item ?? items.find((i) => !i.done && productFor(i, catalog)?.id === picking.productId);
             if (item) markAvailable(item, false);
             else if (picking.productId) {
@@ -356,7 +377,8 @@ export function ShoppingView(props: Props) {
               markAvailable({ id: '', name: product.name, done: false, productId: product.id }, false);
             }
             setPicking(null);
-          }}
+            }}>Not available here</button>
+          </>}
           onCancel={() => setPicking(null)}
         />
       )}
@@ -365,9 +387,9 @@ export function ShoppingView(props: Props) {
         <>
           <div className="drop-overlay">
             <p>
-              {overLabel ? <>Move <b>{drag.item.name}</b> to <b>{overLabel}</b></> : <>Drop <b>{drag.item.name}</b> on a place</>}
+              {overSpot ? <>Move <b>{drag.item.name}</b> to <b>{overSpot.label}</b></> : <>Drop <b>{drag.item.name}</b> on the exact spot</>}
             </p>
-            <StoreMap layout={layout} highlightId={overPlaceId} />
+            <StoreMap layout={layout} highlightId={overSpot?.placeId} preview={overSpot?.mark} />
           </div>
           <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>{drag.item.name}</div>
         </>
@@ -384,8 +406,42 @@ export function whereText(product: Product, layout: StoreLayout, catalog: Catalo
   return catalog.categoryById.get(product.categoryId ?? '')?.name ?? 'No location yet';
 }
 
+const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 function overKey(drag: Drag | null, key: string) {
   return drag?.over === key ? ' drop-over' : '';
+}
+
+/**
+ * One numbered stop: a place, with its items grouped by spot in walking
+ * order. Each spot is a drop target, so dropping on an item puts the
+ * dragged item right next to it.
+ */
+function VisitCard({ visit, next, drag, rows }: {
+  visit: { number: number; stops: Stop[] };
+  next?: boolean;
+  drag: Drag | null;
+  rows: (stop: Stop) => React.ReactNode;
+}) {
+  const first = visit.stops[0];
+  const count = visit.stops.reduce((n, st) => n + st.items.length, 0);
+  const showDetails = visit.stops.length > 1 || !!first.detail;
+  const over = visit.stops.some((st) => drag?.over === st.key);
+  return (
+    <section className={`card${next ? ' next-card' : ''}${over ? ' drop-over' : ''}`} data-drop={first.key}>
+      <div className="stop-head">
+        {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
+        {next ? <h2>{first.placeLabel || 'Unnamed'}</h2> : <h3>{first.placeLabel || 'Unnamed'}</h3>}
+        {count > 1 && <span className="muted small count-pill">{count} items</span>}
+      </div>
+      {visit.stops.map((st) => (
+        <div key={st.key} className={`spot${overKey(drag, st.key)}`} data-drop={st.key}>
+          {showDetails && <div className="spot-detail">{capitalize(st.detail ?? 'anywhere here')}</div>}
+          {rows(st)}
+        </div>
+      ))}
+    </section>
+  );
 }
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
@@ -429,16 +485,6 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
 }
 
 type Toast = QuickAddResult & { mode: 'list' | 'cart'; /** Plain message instead of an add summary. */ note?: string };
-
-/** The most specific spot key for where the shopper is standing. */
-function spotKeyAt(place: Place, at: Point): string {
-  const n = place.categories.length;
-  const i = place.categories.findIndex((_, k) => {
-    const p = spotPoint(place, k, n);
-    return p.x === at.x && p.y === at.y;
-  });
-  return i >= 0 ? `${place.id}:${place.categories[i]}` : place.id;
-}
 
 function SuggestionRow({ name, detail, onList, onAdd }: {
   name: React.ReactNode;
@@ -520,47 +566,6 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
       {one && <button className="toast-btn" onClick={() => onChange(one)}>Change place</button>}
       <button className="toast-btn" onClick={onUndo}>Undo</button>
       <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
-    </div>
-  );
-}
-
-function PlacePicker({ name, layout, catalog, hereKey, current, onPick, onNotAvailable, onCancel }: {
-  name: string;
-  layout: StoreLayout;
-  catalog: Catalog;
-  hereKey?: string;
-  current?: string;
-  onPick: (key: string | null) => void;
-  onNotAvailable: () => void;
-  onCancel: () => void;
-}) {
-  const label = (key: string) => resolveSpot(key, layout, catalog)?.label ?? key;
-  const option = (key: string, text: React.ReactNode) => (
-    <button key={key} className={key === current ? 'pick active' : 'pick'} onClick={() => onPick(key)}>{text}</button>
-  );
-  return (
-    <div className="sheet-backdrop" onClick={onCancel}>
-      <div className="sheet" role="dialog" aria-label={`Where is ${name}?`} onClick={(e) => e.stopPropagation()}>
-        <h2>Where is {name}?</h2>
-        <p className="muted small">At {layout.name}. Tap a place.</p>
-        {hereKey && option(hereKey, <>📍 Here · {label(hereKey)}</>)}
-        <div className="pick-list">
-          {layout.places.map((p) => (
-            <div key={p.id} className="pick-group">
-              {option(p.id, p.label || 'Unnamed')}
-              {p.categories.length > 1 && p.categories.map((cid) => option(`${p.id}:${cid}`, (
-                <span className="sub">{catalog.categoryById.get(cid)?.name ?? cid}</span>
-              )))}
-            </div>
-          ))}
-        </div>
-        <div className="sheet-actions">
-          <button className="btn" onClick={() => onPick(null)}>Not sure</button>
-          <button className="btn" onClick={onNotAvailable}>Not available here</button>
-          <span style={{ flex: 1 }} />
-          <button className="btn" onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
     </div>
   );
 }
