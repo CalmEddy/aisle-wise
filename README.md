@@ -10,8 +10,9 @@ re-orders it as you move.
    current store and has two buttons:
    - **+ List** adds it to your list.
    - **🛒 Cart** means you're holding it: it's checked off (or added as
-     already in the cart) and its location in this store is saved as where
-     you're standing.
+     already in the cart). If it has no saved location in this store, where
+     you're standing is saved. If it's saved somewhere else, the app asks
+     whether to move it here or keep the saved place.
    Anything new you type joins the master list at your current spot. A
    banner confirms each add, with **Change place** and **Undo**.
 2. **Plan the route** – items picked up at the same spot are grouped into one

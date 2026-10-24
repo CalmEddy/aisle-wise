@@ -41,12 +41,13 @@ export function ShoppingView(props: Props) {
   const [toast, setToast] = useState<Toast | null>(null);
   const [picking, setPicking] = useState<{ productId: string; name: string } | null>(null);
 
-  // The banner fades after a while unless the place picker is open.
+  // The banner fades after a while, unless the place picker is open or it's asking a question.
+  const asking = toast?.added.some((a) => a.conflict);
   useEffect(() => {
-    if (!toast || picking) return;
+    if (!toast || picking || asking) return;
     const t = setTimeout(() => setToast(null), 7000);
     return () => clearTimeout(t);
-  }, [toast, picking]);
+  }, [toast, picking, asking]);
 
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
 
@@ -292,6 +293,10 @@ export function ShoppingView(props: Props) {
           catalog={catalog}
           onUndo={() => { props.undo(toast.snapshot); setToast(null); }}
           onChange={(a) => setPicking({ productId: a.productId, name: a.name })}
+          onMoveHere={(a) => {
+            props.setProductLocation(a.productId, a.conflict!.hereKey);
+            setToast(null);
+          }}
           onClose={() => setToast(null)}
         />
       )}
@@ -407,16 +412,39 @@ function SuggestionRow({ name, detail, onList, onAdd }: {
   );
 }
 
-function ToastBar({ toast, layout, catalog, onUndo, onChange, onClose }: {
+function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClose }: {
   toast: Toast;
   layout: StoreLayout;
   catalog: Catalog;
   onUndo: () => void;
   onChange: (a: QuickAddResult['added'][number]) => void;
+  onMoveHere: (a: QuickAddResult['added'][number]) => void;
   onClose: () => void;
 }) {
   const { added, mode } = toast;
   if (!added.length) return null;
+
+  // Put in the cart away from where it's saved: ask before moving it.
+  const clash = added.find((a) => a.conflict);
+  if (clash?.conflict) {
+    const label = (key: string) => resolveSpot(key, layout, catalog)?.label ?? 'another place';
+    const saved = label(clash.conflict.savedKey);
+    const here = label(clash.conflict.hereKey);
+    return (
+      <div className="toast question" role="alertdialog" aria-label={`Move ${clash.name}?`}>
+        <span className="toast-text">
+          <b>{clash.name}</b> is in your cart. It’s saved at <b>{saved}</b> — is it here at <b>{here}</b>?
+        </span>
+        <div className="toast-actions">
+          <button className="toast-btn subtle" onClick={onUndo}>Undo</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Keep {saved}</button>
+          <button className="btn primary" onClick={() => onMoveHere(clash)}>Move here</button>
+        </div>
+      </div>
+    );
+  }
+
   const one = added.length === 1 ? added[0] : undefined;
   const where = (a: QuickAddResult['added'][number]) => {
     const p = catalog.productById.get(a.productId);

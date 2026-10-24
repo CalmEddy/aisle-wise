@@ -6,7 +6,7 @@ import { Catalog, normalize } from './core/catalog';
 import { defaultCategories, defaultProducts } from './core/categories';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
-import { locateProduct, productFor } from './core/locate';
+import { productFor, resolveSpot } from './core/locate';
 import type { Category, ListItem, Point, Product, StoreLayout } from './core/types';
 import { usePersistentState } from './usePersistentState';
 
@@ -14,7 +14,16 @@ type View = 'list' | 'items' | 'layout';
 
 export interface QuickAddResult {
   snapshot: { items: ListItem[]; products: Product[] };
-  added: { productId: string; name: string; isNew: boolean; savedAt?: string; alreadyOnList: boolean }[];
+  added: {
+    productId: string;
+    name: string;
+    isNew: boolean;
+    /** Spot key saved as the item's location in this store by this add. */
+    savedAt?: string;
+    alreadyOnList: boolean;
+    /** The item was put in the cart away from its saved location: ask before moving it. */
+    conflict?: { savedKey: string; hereKey: string };
+  }[];
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -71,24 +80,30 @@ export default function App() {
       if (!name) continue;
       let product = new Catalog(nextProducts, categories).exact(name);
       let saved: string | undefined;
+      let conflict: QuickAddResult['added'][number]['conflict'];
 
       if (!product) {
         product = { id: `p-${newId()}`, name: capitalize(name), ...(hereKey && { locations: { [layout.id]: hereKey } }) };
         nextProducts = [...nextProducts, product];
         saved = hereKey;
       } else if (mode === 'cart' && hereKey) {
-        // You're holding it, so it's sold here – and it's here unless we already knew it was in this place.
-        const loc = locateProduct(product, layout, catalog);
-        const samePlace = loc.kind === 'spot' && loc.spot.placeId === hereKey.split(':')[0];
-        if (!samePlace || loc.kind !== 'spot' || !loc.exact) {
+        // You're holding it, so it's sold here. Save where you are only if it had no saved
+        // location in this store; if it's saved somewhere else, ask before moving it.
+        const savedKey = product.locations?.[layout.id];
+        const savedSpot = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
+        const soldHere = !product.notAt?.includes(layout.id);
+        if (!savedSpot || !soldHere) {
           const updated: Product = {
             ...product,
-            locations: { ...product.locations, [layout.id]: samePlace && loc.kind === 'spot' ? loc.spot.key : hereKey },
+            locations: savedSpot ? product.locations : { ...product.locations, [layout.id]: hereKey },
             notAt: product.notAt?.filter((id) => id !== layout.id),
           };
           nextProducts = nextProducts.map((p) => (p.id === updated.id ? updated : p));
-          saved = samePlace ? undefined : hereKey;
+          if (!savedSpot) saved = hereKey;
           product = updated;
+        }
+        if (savedSpot && savedKey && savedSpot.placeId !== hereKey.split(':')[0]) {
+          conflict = { savedKey, hereKey };
         }
       }
 
@@ -99,7 +114,7 @@ export default function App() {
       } else if (!waiting) {
         nextItems = [...nextItems, { id: newId(), name: product.name, done: mode === 'cart', productId: pid }];
       }
-      results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list' });
+      results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list', conflict });
     }
 
     setProducts(() => nextProducts);
