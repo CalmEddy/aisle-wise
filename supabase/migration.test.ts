@@ -25,6 +25,9 @@ const ANA = '00000000-0000-0000-0000-00000000000a';
 const BEN = '00000000-0000-0000-0000-00000000000b';
 const EVE = '00000000-0000-0000-0000-00000000000e';
 
+const MIGRATION = readFileSync(new URL('./migrations/20261024000000_households.sql', import.meta.url), 'utf8');
+const CHECK = readFileSync(new URL('./check.sql', import.meta.url), 'utf8');
+
 let db: PGlite;
 
 async function as<T = Record<string, unknown>>(uid: string | null, sql: string, params: unknown[] = []) {
@@ -41,7 +44,7 @@ async function as<T = Record<string, unknown>>(uid: string | null, sql: string, 
 beforeAll(async () => {
   db = new PGlite();
   await db.exec(SUPABASE_STUBS);
-  await db.exec(readFileSync(new URL('./migrations/20261024000000_households.sql', import.meta.url), 'utf8'));
+  await db.exec(MIGRATION);
   await db.exec(`insert into auth.users values ('${ANA}'), ('${BEN}'), ('${EVE}');`);
 });
 
@@ -105,5 +108,36 @@ describe('household access rules', () => {
     // Ben can't remove Ana.
     await as(BEN, `delete from household_members where user_id = $1`, [ANA]);
     expect((await as(ANA, 'select * from household_members')).length).toBe(1);
+  });
+});
+
+describe('running the setup again', () => {
+  it('reports everything as set up', async () => {
+    const rows = (await db.query<{ part: string; status: string }>(CHECK)).rows;
+    expect(rows.map((r) => r.status)).toEqual(Array(7).fill('OK'));
+  });
+
+  it('can be run a second time without errors or losing data', async () => {
+    const before = (await db.query('select count(*)::int as n from docs')).rows;
+    await db.exec(MIGRATION);
+    expect((await db.query('select count(*)::int as n from docs')).rows).toEqual(before);
+    const rows = (await db.query<{ status: string }>(CHECK)).rows;
+    expect(rows.map((r) => r.status)).toEqual(Array(7).fill('OK'));
+  });
+
+  it('reports a fresh database as not set up', async () => {
+    const empty = new PGlite();
+    await empty.exec(SUPABASE_STUBS);
+    const rows = (await empty.query<{ status: string }>(CHECK)).rows;
+    expect(rows.every((r) => r.status.startsWith('MISSING'))).toBe(true);
+  });
+
+  it('refuses to touch an unrelated "households" table', async () => {
+    const other = new PGlite();
+    await other.exec(SUPABASE_STUBS);
+    await other.exec(`create table public.households (id serial primary key, address text); insert into public.households (address) values ('1 Main St');`);
+    await expect(other.exec(MIGRATION)).rejects.toThrow(/different table called "households"/);
+    expect((await other.query('select address from public.households')).rows).toEqual([{ address: '1 Main St' }]);
+    expect((await other.query(`select to_regclass('public.docs') as t`)).rows).toEqual([{ t: null }]);
   });
 });

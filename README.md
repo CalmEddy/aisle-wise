@@ -96,7 +96,9 @@ or change its data (`supabase/migrations/`).
 
 1. **Create the tables.** In your Supabase project, open **SQL Editor**,
    paste the contents of
-   `supabase/migrations/20261024000000_households.sql`, and run it.
+   `supabase/migrations/20261024000000_households.sql`, and run it. It's
+   safe to run again. To confirm it worked, run `supabase/check.sql`: every
+   row should say OK.
 2. **Turn on in-app sign-in without emails.** In **Authentication → Sign In
    / Providers → Email**, make sure **Email** is enabled and turn **Confirm
    email** off, then save. Accounts are then ready the moment they're
