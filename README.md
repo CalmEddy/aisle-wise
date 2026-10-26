@@ -52,6 +52,11 @@ tap 🛒 Cart. The map builds itself around you (`src/core/build.ts`):
 - **In an open area** – saved at that spot in the area.
 - **Up to 3 squares past the end of a shelf** (lined up with it) – the shelf
   is extended to you. Items already on it stay where they physically are.
+- **Lined up with a shelf further away** (a vertical shelf above or below
+  you, or a horizontal one to your left or right, with clear floor between)
+  – the banner asks where the item goes: **Extend Shelf N** for the nearest
+  such shelf in each direction, **New shelf** or **New area**. The item is
+  in your cart either way; **Decide later** leaves its spot unset.
 - **Anywhere else** – a new 3-square shelf is made through your square
   (trimmed to fit), numbered "Shelf 1", "Shelf 2"…. The banner asks
   ↕ / ↔ for its direction, and offers **Rename** and **Undo**.

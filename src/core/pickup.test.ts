@@ -90,4 +90,20 @@ describe('build mode pick-ups land where they were picked up', () => {
     expect(s.items.every((i) => i.done && i.productId)).toBe(true);
     allWhereTheyShouldBe();
   });
+
+  it('asks which shelf to extend when one is lined up further away, then places it there', () => {
+    s.items = [...s.items, { id: 'far', name: 'Fusilli', done: false }];
+    // Lined up below the long shelf (x=10, ends at y=16), 5 squares past its end.
+    const o = pick('Fusilli', { x: 10, y: 21 }, 'shelf', { x: 10, y: 21 });
+    expect(o.kind).toBe('choose');
+    if (o.kind !== 'choose') return;
+    expect(o.options.map((c) => c.direction)).toContain('down');
+    // Nothing built yet, item already in the cart.
+    expect(s.items.find((i) => i.name === 'Fusilli')!.done).toBe(true);
+    const shelfId = o.options.find((c) => c.direction === 'down')!.shelfId;
+    const r = moveHere({ ...s, catalog: new Catalog(s.products, defaultCategories) }, o.productId, o.at, { extend: shelfId })!;
+    s = { ...s, layout: r.layout, products: r.products };
+    allWhereTheyShouldBe();
+  });
 });
+

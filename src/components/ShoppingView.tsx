@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
-import { planBuild, type BuildTarget, type Direction } from '../core/build';
+import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type Direction } from '../core/build';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, placeAt } from '../core/geometry';
@@ -40,6 +40,7 @@ interface Props {
 export interface BuildApi {
   pickUpHere: (name: string, itemId?: string) => BuildOutcome;
   moveHereAndBuild: (productId: string) => BuildOutcome;
+  placeChosen: (productId: string, at: Point, choice: BuildChoice, snapshot: Snapshot) => BuildOutcome;
   turnShelfHere: (shelfId: string) => boolean;
   renamePlace: (placeId: string, label: string) => void;
   addAreaHere: () => { placeId: string; snapshot: Snapshot } | undefined;
@@ -786,6 +787,7 @@ function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, o
   onNote: (n: BuildNote) => void;
 }) {
   const preview = planBuild(layout, position, undefined, 'vertical', target);
+  const options = preview.action === 'create' || preview.action === 'createArea' ? extendCandidates(layout, position) : [];
   const besideShelf = preview.action === 'onShelf' ? preview.placeId : undefined;
   const turnId = besideShelf ?? lastShelfId;
   const arrow = (dir: Direction, label: string, glyph: string) => (
@@ -802,7 +804,10 @@ function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, o
         ))}
       </div>
       <p className="build-preview">
-        <b>Picking up here</b> {ACTION_TEXT[preview.action](preview.label)}.
+        <b>Picking up here</b>{' '}
+        {options.length
+          ? <>lets you extend {options.map((o) => `“${o.label || 'a shelf'}”`).join(' or ')}, or make a new shelf or area.</>
+          : <>{ACTION_TEXT[preview.action](preview.label)}.</>}
       </p>
       <p className="muted small">Tap the map or use the arrows to say where you are, then check items off or tap 🛒 Cart.</p>
       <div className="build-row">
@@ -853,6 +858,30 @@ function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: 
       <div className="toast top" role="status">
         <span className="toast-text">{note.text}</span>
         <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+      </div>
+    );
+  }
+
+  if (note.kind === 'choose') {
+    const arrow = { up: '↑', down: '↓', left: '←', right: '→' } as const;
+    const choose = (c: BuildChoice) => onNote(build.placeChosen(note.productId, note.at, c, note.snapshot));
+    return (
+      <div className="toast question" role="alertdialog" aria-label={`Where is ${note.itemName}?`}>
+        <span className="toast-text"><b>{note.itemName}</b> is in your cart. Where is it?</span>
+        <div className="toast-choices">
+          {note.options.map((o) => (
+            <button key={o.shelfId} className="btn primary" onClick={() => choose({ extend: o.shelfId })}>
+              {arrow[o.direction]} Extend {o.label || 'shelf'} <span className="muted-on-dark">({o.gap} away)</span>
+            </button>
+          ))}
+          <button className="btn" onClick={() => choose('shelf')}>+ New shelf</button>
+          <button className="btn" onClick={() => choose('area')}>+ New area</button>
+        </div>
+        <div className="toast-actions">
+          <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Decide later</button>
+        </div>
       </div>
     );
   }

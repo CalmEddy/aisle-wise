@@ -10,7 +10,7 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, moveHere, pickUp, step, turnShelf, type BuildAction, type Direction } from './core/build';
+import { areaHere, blankStore, moveHere, pickUp, step, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate } from './core/build';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -50,6 +50,7 @@ export interface Snapshot {
 export type BuildOutcome =
   | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string; snapshot: Snapshot }
+  | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[]; snapshot: Snapshot }
   | { kind: 'blocked'; itemName: string; snapshot: Snapshot };
 
 export default function App() {
@@ -224,6 +225,7 @@ export default function App() {
     const o = r.outcome;
     if (o.kind === 'conflict') return { kind: 'conflict', productId: o.productId, itemName: o.itemName, savedKey: o.savedKey, snapshot };
     if (o.kind === 'blocked') return { kind: 'blocked', itemName: o.itemName, snapshot };
+    if (o.kind === 'choose') return { ...o, snapshot };
     return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot };
   }
 
@@ -231,6 +233,16 @@ export default function App() {
   function moveHereAndBuild(productId: string): BuildOutcome {
     const snapshot: Snapshot = { items, products, layouts };
     const r = moveHere({ products, layout, catalog }, productId, position, display.buildArea ? 'area' : 'shelf');
+    const name = catalog.productById.get(productId)?.name ?? '';
+    if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
+    replaceLayout(r.layout);
+    setProducts(() => r.products);
+    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot };
+  }
+
+  /** The shopper chose where an item picked up on open floor goes: extend a shelf, or a new shelf/area. */
+  function placeChosen(productId: string, at: Point, choice: BuildChoice, snapshot: Snapshot): BuildOutcome {
+    const r = moveHere({ products, layout, catalog }, productId, at, choice);
     const name = catalog.productById.get(productId)?.name ?? '';
     if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
     replaceLayout(r.layout);
@@ -435,7 +447,7 @@ export default function App() {
           setItems={setItems}
           setLocation={setLocation}
           quickAdd={quickAdd}
-          build={{ pickUpHere, moveHereAndBuild, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore, updatePlace, deletePlace }}
+          build={{ pickUpHere, moveHereAndBuild, placeChosen, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore, updatePlace, deletePlace }}
           setItemCategory={setItemCategory}
           undo={undo}
           setProductLocation={setProductLocation}

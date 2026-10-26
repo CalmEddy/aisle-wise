@@ -423,3 +423,9 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .build-target button { flex: 1; border: 1px solid var(--line); }
 .build-target button:first-of-type { border-radius: 10px 0 0 10px; }
 .build-target button:last-of-type { border-radius: 0 10px 10px 0; }
+
+/* Build mode: choose where a picked-up item goes */
+.toast-choices { display: flex; flex-direction: column; gap: 6px; }
+.toast-choices .btn { text-align: left; }
+.toast-choices .btn:not(.primary) { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }
+.muted-on-dark { opacity: 0.75; font-weight: 400; }

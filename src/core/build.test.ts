@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { defaultCategories } from './categories';
-import { areaHere, blankStore, growStore, planBuild, step, turnShelf } from './build';
+import { areaHere, blankStore, extendCandidates, growStore, planBuild, planChoice, step, turnShelf } from './build';
 import { exactPoint, footprint, parseExactKey } from './geometry';
 import type { Place, Shelf, StoreLayout } from './types';
 
@@ -160,6 +160,37 @@ describe('build mode', () => {
     const withArea = store([{ kind: 'area', id: 'a', label: 'Area 1', x: 0, y: 15, w: 2, h: 2, categories: [] }]);
     expect(planBuild(withArea, { x: 15, y: 5 }, cat('fruit'), 'vertical', 'area').layout.places[1].label).toBe('Area 2');
     expect(areaHere(withArea, { x: 10, y: 5 })!.area.label).toBe('Area 2');
+  });
+
+  it('offers lined-up shelves at any distance, nearest in each direction', () => {
+    const l = store([
+      shelf({ id: 'above', label: 'Shelf 1', x: 10, y: 0, length: 3 }), // ends at y=2
+      shelf({ id: 'above2', label: 'Shelf 9', x: 11, y: 0, length: 1 }), // also above, but further
+      shelf({ id: 'below', label: 'Shelf 2', x: 9, y: 17, length: 3 }),
+      shelf({ id: 'left', label: 'Shelf 3', x: 0, y: 10, length: 3, orientation: 'horizontal' }), // ends at x=2
+      shelf({ id: 'off', label: 'Shelf 4', x: 14, y: 0, length: 5 }), // not lined up
+    ]);
+    const c = extendCandidates(l, { x: 10, y: 10 });
+    expect(c[0]).toMatchObject({ shelfId: 'below', direction: 'up', gap: 7 }); // nearest first
+    expect(c.map((x) => [x.shelfId, x.direction, x.gap]).sort()).toEqual([['above', 'down', 8], ['below', 'up', 7], ['left', 'right', 8]]);
+  });
+
+  it('skips shelves with something in the way', () => {
+    const wall: Place = { kind: 'area', id: 'w', label: 'Deli', x: 9, y: 5, w: 3, h: 1, categories: [] };
+    expect(extendCandidates(store([shelf({ x: 10, y: 0, length: 3 }), wall]), { x: 10, y: 10 })).toEqual([]);
+  });
+
+  it('extends the chosen shelf all the way to you, keeping its items in place', () => {
+    const l = store([shelf({ id: 'above', label: 'Shelf 1', x: 10, y: 0, length: 3 })]);
+    const plan = planChoice(l, { x: 11, y: 10 }, cat('canned'), { extend: 'above' });
+    expect(plan.action).toBe('extend');
+    expect(footprint(plan.layout.places[0])).toEqual({ x: 10, y: 0, w: 1, h: 11 });
+    expect(plan.layout.places[0].categories).toEqual(['pasta', 'canned']);
+    expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
+    expect(where(plan.layout, plan.rekey!('above@0.5,0.5'))).toEqual({ x: 10, y: 1 });
+    // Or a new shelf / area instead.
+    expect(planChoice(l, { x: 15, y: 10 }, undefined, 'shelf').action).toBe('create');
+    expect(planChoice(l, { x: 15, y: 10 }, undefined, 'area').action).toBe('createArea');
   });
 });
 

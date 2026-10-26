@@ -158,41 +158,8 @@ export function planBuild(
   if (target === 'area') return planArea(l, p, category);
 
   // 3. Just past the end of a shelf, lined up with it.
-  let ext: { shelf: Shelf; start: number; end: number; gap: number; atStart: boolean } | undefined;
-  for (const pl of l.places) {
-    if (pl.kind !== 'shelf') continue;
-    const v = pl.orientation === 'vertical';
-    const side = v ? Math.abs(p.x - pl.x) : Math.abs(p.y - pl.y);
-    if (side > 1) continue;
-    const s0 = v ? pl.y : pl.x;
-    const s1 = s0 + pl.length - 1;
-    const a = v ? p.y : p.x;
-    const atStart = a < s0;
-    const gap = atStart ? s0 - a : a - s1;
-    if (gap < 1 || gap > REACH) continue;
-    const start = atStart ? a : s0;
-    const end = atStart ? s1 : a;
-    // The new squares must be free.
-    let ok = true;
-    for (let i = atStart ? a : s1 + 1; i <= (atStart ? s0 - 1 : a) && ok; i++) {
-      ok = free(l, v ? { x: pl.x, y: i } : { x: i, y: pl.y }, pl.id);
-    }
-    if (ok && (!ext || gap < ext.gap)) ext = { shelf: pl, start, end, gap, atStart };
-  }
-  if (ext) {
-    const v = ext.shelf.orientation === 'vertical';
-    let grown: Shelf = { ...ext.shelf, length: ext.end - ext.start + 1, ...(v ? { y: ext.start } : { x: ext.start }) };
-    grown = withCategory(grown, cat, ext.atStart ? 'start' : 'end');
-    const u = alongShelf(grown, p);
-    return {
-      action: 'extend',
-      layout: replacePlace(l, grown),
-      spotKey: exactKey(grown.id, { u, v: 0.5 }),
-      placeId: grown.id,
-      label: grown.label,
-      rekey: rekeyResized(ext.shelf, grown),
-    };
-  }
+  const near = extendCandidates(l, p).filter((c) => c.gap <= REACH).sort((a, b) => a.gap - b.gap)[0];
+  if (near) return extendTo(l, near, p, cat);
 
   // 4. A new shelf through where you're standing.
   const fit = fitShelf(l, p, orientation, NEW_SHELF_LENGTH);
@@ -214,6 +181,80 @@ export function planBuild(
     placeId: shelf.id,
     label: shelf.label,
   };
+}
+
+/** A shelf that can be extended in a straight line to reach `p`. */
+export interface ExtendCandidate {
+  shelfId: string;
+  label: string;
+  /** Squares between the shelf's end and you. */
+  gap: number;
+  /** Which way the shelf would grow to reach you. */
+  direction: 'up' | 'down' | 'left' | 'right';
+  /** The shelf's new start and end along its line. */
+  start: number;
+  end: number;
+  atStart: boolean;
+}
+
+/**
+ * Shelves lined up with `p` – vertical shelves above or below, horizontal
+ * ones to the left or right, within one square sideways – whose line can
+ * grow to reach `p` over free floor. Only the nearest in each direction.
+ */
+export function extendCandidates(l: StoreLayout, p: Point): ExtendCandidate[] {
+  const best = new Map<string, ExtendCandidate>();
+  for (const pl of l.places) {
+    if (pl.kind !== 'shelf') continue;
+    const v = pl.orientation === 'vertical';
+    if ((v ? Math.abs(p.x - pl.x) : Math.abs(p.y - pl.y)) > 1) continue;
+    const s0 = v ? pl.y : pl.x;
+    const s1 = s0 + pl.length - 1;
+    const a = v ? p.y : p.x;
+    const atStart = a < s0;
+    const gap = atStart ? s0 - a : a - s1;
+    if (gap < 1) continue;
+    let ok = true;
+    for (let i = atStart ? a : s1 + 1; i <= (atStart ? s0 - 1 : a) && ok; i++) {
+      ok = free(l, v ? { x: pl.x, y: i } : { x: i, y: pl.y }, pl.id);
+    }
+    if (!ok) continue;
+    const direction = v ? (atStart ? 'up' : 'down') : (atStart ? 'left' : 'right');
+    const c: ExtendCandidate = {
+      shelfId: pl.id, label: pl.label, gap, direction, atStart, start: atStart ? a : s0, end: atStart ? s1 : a,
+    };
+    const prev = best.get(direction);
+    if (!prev || gap < prev.gap) best.set(direction, c);
+  }
+  return [...best.values()].sort((a, b) => a.gap - b.gap);
+}
+
+/** Extends a candidate shelf to reach `p`, saving the item at `p`. */
+function extendTo(l: StoreLayout, c: ExtendCandidate, p: Point, cat?: string): BuildPlan {
+  const shelf = l.places.find((pl): pl is Shelf => pl.id === c.shelfId && pl.kind === 'shelf')!;
+  const v = shelf.orientation === 'vertical';
+  let grown: Shelf = { ...shelf, length: c.end - c.start + 1, ...(v ? { y: c.start } : { x: c.start }) };
+  grown = withCategory(grown, cat, c.atStart ? 'start' : 'end');
+  return {
+    action: 'extend',
+    layout: replacePlace(l, grown),
+    spotKey: exactKey(grown.id, { u: alongShelf(grown, p), v: 0.5 }),
+    placeId: grown.id,
+    label: grown.label,
+    rekey: rekeyResized(shelf, grown),
+  };
+}
+
+/** What the shopper chose when picking up on open floor. */
+export type BuildChoice = { extend: string } | 'shelf' | 'area';
+
+/** The plan for a chosen way of placing an item picked up at `p`. */
+export function planChoice(l: StoreLayout, p: Point, category: Category | undefined, choice: BuildChoice): BuildPlan {
+  if (typeof choice === 'object') {
+    const c = extendCandidates(l, p).find((x) => x.shelfId === choice.extend);
+    return c ? extendTo(l, c, p, category?.id) : { action: 'blocked', layout: l, label: '' };
+  }
+  return planBuild(l, p, category, 'vertical', choice);
 }
 
 /**
@@ -403,6 +444,8 @@ function planArea(l: StoreLayout, p: Point, category?: Category): BuildPlan {
 export type PickUpOutcome =
   | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; productId: string }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string }
+  /** Picked up on open floor with shelves that could be extended: ask which (or new shelf/area). */
+  | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[] }
   | { kind: 'blocked'; itemName: string; productId: string };
 
 export interface PickUpResult {
@@ -456,9 +499,11 @@ export function pickUp(
   const savedKey = product.locations?.[layout.id];
   const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
   const conflict = !!saved && saved.placeId !== plan.placeId;
+  // On open floor with shelves lined up further away: let the shopper choose.
+  const options = !conflict && (plan.action === 'create' || plan.action === 'createArea') ? extendCandidates(layout, at) : [];
 
   let next = layout;
-  if (!conflict && plan.action !== 'blocked') {
+  if (!conflict && !options.length && plan.action !== 'blocked') {
     next = plan.layout;
     products = rekeyAll(products, layout.id, plan.rekey).map((p) => (p.id === pid
       ? { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
@@ -472,20 +517,23 @@ export function pickUp(
 
   const outcome: PickUpOutcome = conflict
     ? { kind: 'conflict', productId: pid, itemName, savedKey: savedKey! }
+    : options.length
+      ? { kind: 'choose', productId: pid, itemName, at, options }
     : plan.action === 'blocked'
       ? { kind: 'blocked', itemName, productId: pid }
       : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid };
   return { layout: next, products, items: nextItems, outcome };
 }
 
-/** "Move here" after a conflict: build at `at` and move the item's saved spot there. */
+/** Places an item picked up at `at` (after a conflict or a choice): build there and save its spot. */
 export function moveHere(
-  state: { products: Product[]; layout: StoreLayout; catalog: Catalog }, productId: string, at: Point, target: BuildTarget = 'shelf',
+  state: { products: Product[]; layout: StoreLayout; catalog: Catalog }, productId: string, at: Point,
+  choice: BuildTarget | BuildChoice = 'shelf',
 ): { layout: StoreLayout; products: Product[]; plan: BuildPlan } | undefined {
   const product = state.catalog.productById.get(productId);
   if (!product) return undefined;
   const category = product.categoryId ? state.catalog.categoryById.get(product.categoryId) : undefined;
-  const plan = planBuild(state.layout, at, category, 'vertical', target);
+  const plan = planChoice(state.layout, at, category, choice);
   if (plan.action === 'blocked') return { layout: state.layout, products: state.products, plan };
   const lid = state.layout.id;
   const products = rekeyAll(state.products, lid, plan.rekey).map((p) => (p.id === productId
