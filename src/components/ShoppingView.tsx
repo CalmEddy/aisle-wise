@@ -66,9 +66,23 @@ export function ShoppingView(props: Props) {
   }, [toast, picking, asking]);
 
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
-  /** Category colour for a list row, when list colours are on. */
-  const colorOf = (item: ListItem) =>
-    props.display.listColors ? props.looks.get(productFor(item, catalog)?.categoryId ?? '')?.color : undefined;
+  /**
+   * A section's category colour, when list colours are on: the category in
+   * its spot key ("aisle:pasta"), otherwise the category most of its items share.
+   */
+  const sectionColor = (stop: Stop) => {
+    if (!props.display.listColors) return undefined;
+    let cat = stop.key.includes(':') ? stop.key.split(':')[1] : undefined;
+    if (!cat) {
+      const tally = new Map<string, number>();
+      for (const i of stop.items) {
+        const c = productFor(i, catalog)?.categoryId;
+        if (c) tally.set(c, (tally.get(c) ?? 0) + 1);
+      }
+      cat = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0];
+    }
+    return cat ? props.looks.get(cat)?.color : undefined;
+  };
 
   // Re-plans every time the list, the layout, the master list or the shopper's position changes.
   const { route, visits, unplaced, notSold } = useMemo(() => {
@@ -254,14 +268,14 @@ export function ShoppingView(props: Props) {
         )}
 
         {nextVisit && (
-          <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} colorOf={colorOf} big />
+          <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} big />
           )} />
         )}
 
         {laterVisits.map((v) => (
-          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} colorOf={colorOf} />
+          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} />
           )} />
         ))}
 
@@ -429,20 +443,33 @@ function overKey(drag: Drag | null, key: string) {
  * order. Each spot is a drop target, so dropping on an item puts the
  * dragged item right next to it.
  */
-function VisitCard({ visit, next, drag, rows, onGoTo }: {
+function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
   visit: { number: number; stops: Stop[] };
   next?: boolean;
   drag: Drag | null;
   rows: (stop: Stop) => React.ReactNode;
   /** Tapping the place or a section moves the "you are here" marker there. */
   onGoTo: (stop: Stop) => void;
+  /** Section tint (category colour), or undefined for none. */
+  colorOf?: (stop: Stop) => string | undefined;
+  /** Name for a section with no detail of its own (its category). */
+  sectionName?: (stop: Stop) => string | undefined;
 }) {
   const first = visit.stops[0];
   const count = visit.stops.reduce((n, st) => n + st.items.length, 0);
   const showDetails = visit.stops.length > 1 || !!first.detail;
   const over = visit.stops.some((st) => drag?.over === st.key);
+  // The current stop stays green. Elsewhere, tint by category: the whole card
+  // when it's all one colour, otherwise each section on its own.
+  const colors = next ? [] : visit.stops.map((st) => colorOf?.(st));
+  const oneColor = colors.length > 0 && colors.every((c) => c && c === colors[0]) ? colors[0] : undefined;
+  const tint = (c: string | undefined) => (c ? ({ '--cat': c } as React.CSSProperties) : undefined);
   return (
-    <section className={`card${next ? ' next-card' : ''}${over ? ' drop-over' : ''}`} data-drop={first.key}>
+    <section
+      className={`card${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
+      style={tint(oneColor)}
+      data-drop={first.key}
+    >
       <div className="stop-head">
         {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
         <button className="goto" onClick={() => onGoTo(first)} aria-label={`I'm at ${first.placeLabel || 'this place'}`}>
@@ -450,11 +477,16 @@ function VisitCard({ visit, next, drag, rows, onGoTo }: {
         </button>
         {count > 1 && <span className="muted small count-pill">{count} items</span>}
       </div>
-      {visit.stops.map((st) => (
-        <div key={st.key} className={`spot${overKey(drag, st.key)}`} data-drop={st.key}>
+      {visit.stops.map((st, i) => (
+        <div
+          key={st.key}
+          className={`spot${overKey(drag, st.key)}${!oneColor && colors[i] ? ' tinted' : ''}`}
+          style={oneColor ? undefined : tint(colors[i])}
+          data-drop={st.key}
+        >
           {showDetails && (
             <button className="spot-detail goto" onClick={() => onGoTo(st)} aria-label={`I'm at ${st.label}`}>
-              {capitalize(st.detail ?? 'anywhere here')}
+              {capitalize(st.detail ?? sectionName?.(st) ?? 'anywhere here')}
             </button>
           )}
           {rows(st)}
@@ -466,14 +498,13 @@ function VisitCard({ visit, next, drag, rows, onGoTo }: {
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, colorOf, big }: {
+function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, big }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
   onMenu?: (i: ListItem) => void;
   drag?: DragHandlers;
   dragging?: string;
-  colorOf?: (i: ListItem) => string | undefined;
   big?: boolean;
 }) {
   return (
@@ -481,8 +512,7 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, colorOf, 
       {items.map((item) => (
         <li
           key={item.id}
-          className={['row', item.done && 'checked', dragging === item.id && 'dragging', colorOf?.(item) && 'colored'].filter(Boolean).join(' ')}
-          style={colorOf?.(item) ? ({ '--cat': colorOf(item) } as React.CSSProperties) : undefined}
+          className={['row', item.done && 'checked', dragging === item.id && 'dragging'].filter(Boolean).join(' ')}
         >
           {drag && (
             <span className="handle" aria-label={`Drag ${item.name} to a new location`} {...drag(item)}>⠿</span>

@@ -335,7 +335,6 @@ button { cursor: pointer; }
 .toggle .knob::after { content: ''; position: absolute; top: 1px; left: 1px; width: 10px; height: 10px; border-radius: 50%; background: var(--surface); transition: left 0.15s; }
 .toggle[aria-pressed='true'] .knob { background: var(--accent); }
 .toggle[aria-pressed='true'] .knob::after { left: 11px; }
-.row.colored { box-shadow: inset 4px 0 0 var(--cat); padding-left: 6px; border-radius: 4px; }
 .cat-icon { font-size: 1rem; width: 1.3em; text-align: center; flex: none; }
 
 /* Editor: categories per side */
@@ -376,3 +375,14 @@ button.goto { background: none; border: 0; padding: 0; text-align: left; color: 
 button.goto:hover h2, button.goto:hover h3, button.spot-detail.goto:hover { text-decoration: underline; text-underline-offset: 3px; }
 button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; color: var(--muted); }
 .next-card button.spot-detail.goto { color: var(--text); }
+
+/* Colours in list: a soft wash of the category colour over the whole section. */
+.card.tinted {
+  background: color-mix(in srgb, var(--cat) 13%, var(--surface));
+  border-color: color-mix(in srgb, var(--cat) 30%, var(--line));
+}
+.spot.tinted {
+  background: color-mix(in srgb, var(--cat) 13%, var(--surface));
+  border-radius: 10px; padding: 2px 8px 2px 4px; margin: 6px -6px 0;
+}
+.spot.tinted + .spot.tinted { border-top: 0; }
