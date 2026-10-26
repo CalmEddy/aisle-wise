@@ -393,3 +393,21 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .place.shelf.drop-over .place-bg { fill: var(--accent); }
 .place.shelf.selected .place-bg { stroke: var(--you); stroke-width: 0.25; stroke-dasharray: 0.6 0.4; }
 .section-shelf { opacity: 1; }
+
+/* Build mode */
+.build-panel { margin-top: 8px; }
+.build-preview { margin: 0 0 2px; font-size: 0.9rem; }
+.build-row { display: flex; gap: 12px; align-items: flex-start; }
+.arrows { display: grid; grid-template-columns: repeat(3, 40px); grid-template-rows: repeat(2, 40px); gap: 4px; flex: none; }
+.arrows .btn { padding: 0; font-size: 1.1rem; }
+.arrows .up { grid-column: 2; grid-row: 1; }
+.arrows .left { grid-column: 1; grid-row: 2; }
+.arrows .down { grid-column: 2; grid-row: 2; }
+.arrows .right { grid-column: 3; grid-row: 2; }
+.build-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.build-tools .btn { padding: 7px 10px; font-size: 0.8rem; }
+.toggle[aria-pressed='true']:first-child { font-weight: 600; }
+.segmented.mini { margin: 0; }
+.segmented.mini button { padding: 6px 12px; font-size: 1rem; }
+.toast .rename { display: flex; gap: 6px; }
+.toast .rename input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 0; font-size: 16px; }

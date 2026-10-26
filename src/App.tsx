@@ -10,6 +10,7 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
+import { areaHere, blankStore, planBuild, step, turnShelf, type BuildAction, type Direction } from './core/build';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -21,7 +22,7 @@ import { usePersistentState } from './usePersistentState';
 type View = 'list' | 'items' | 'layout';
 
 export interface QuickAddResult {
-  snapshot: { items: ListItem[]; products: Product[] };
+  snapshot: Snapshot;
   added: {
     productId: string;
     name: string;
@@ -36,6 +37,19 @@ export interface QuickAddResult {
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** What to put back for Undo. */
+export interface Snapshot {
+  items: ListItem[];
+  products: Product[];
+  layouts?: StoreLayout[];
+}
+
+/** What happened when something was picked up in build mode. */
+export type BuildOutcome =
+  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot }
+  | { kind: 'conflict'; productId: string; itemName: string; savedKey: string; snapshot: Snapshot }
+  | { kind: 'blocked'; itemName: string; snapshot: Snapshot };
 
 export default function App() {
   const [layouts, setLayouts] = usePersistentState<StoreLayout[]>('aw.layouts', [demoLayout]);
@@ -184,9 +198,132 @@ export default function App() {
     return { snapshot, added: results };
   }
 
-  function undo(snapshot: QuickAddResult['snapshot']) {
+  function undo(snapshot: Snapshot) {
     setProducts(() => snapshot.products);
     setItems(() => snapshot.items);
+    if (snapshot.layouts) setLayouts(() => snapshot.layouts!);
+  }
+
+  // ---- Build mode: grow the map from where things are picked up ----
+
+  const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? next : l)));
+
+  /**
+   * Picks up an item where the shopper is standing (checking it off, or into
+   * the cart) and builds the map around it: puts it on the shelf beside them,
+   * extends a shelf, or creates one. If the item is already saved somewhere
+   * else in this store, nothing moves and the caller asks first.
+   */
+  function pickUpHere(name: string, itemId?: string): BuildOutcome {
+    const snapshot: Snapshot = { items, products, layouts };
+    const listItem = itemId ? items.find((i) => i.id === itemId) : undefined;
+    let product = (listItem && productFor(listItem, catalog)) || catalog.exact(name);
+    const category = product?.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
+    const plan = planBuild(layout, position, category);
+    const itemName = product?.name ?? capitalize(name.trim());
+
+    // Saved somewhere else here? Don't move it without asking.
+    const savedKey = product?.locations?.[layout.id];
+    const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
+    const conflict = saved && saved.placeId !== plan.placeId;
+
+    let nextProducts = products;
+    if (!conflict && !saved && plan.action !== 'blocked') {
+      if (plan.rekey) {
+        nextProducts = nextProducts.map((p) => {
+          const k = p.locations?.[layout.id];
+          const nk = k ? plan.rekey!(k) : k;
+          return nk && nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk } } : p;
+        });
+      }
+      if (product) {
+        const pid = product.id;
+        nextProducts = nextProducts.map((p) => (p.id === pid
+          ? { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
+          : p));
+      } else {
+        product = { id: `p-${newId()}`, name: itemName, locations: { [layout.id]: plan.spotKey! } };
+        nextProducts = [...nextProducts, product];
+      }
+      replaceLayout(plan.layout);
+    } else if (!product) {
+      product = { id: `p-${newId()}`, name: itemName };
+      nextProducts = [...nextProducts, product];
+    }
+
+    // Into the cart: tick the list entry, or add one already ticked.
+    const pid = product!.id;
+    const waiting = listItem ?? items.find((i) => !i.done && (i.productId === pid || productFor(i, catalog)?.id === pid));
+    const nextItems = waiting
+      ? items.map((i) => (i.id === waiting.id ? { ...i, done: true, productId: pid } : i))
+      : [...items, { id: newId(), name: itemName, done: true, productId: pid }];
+    setProducts(() => nextProducts);
+    setItems(() => nextItems);
+
+    if (conflict) return { kind: 'conflict', productId: pid, itemName, savedKey: savedKey!, snapshot };
+    if (plan.action === 'blocked') return { kind: 'blocked', itemName, snapshot };
+    if (saved) return { kind: 'built', action: 'onShelf', placeId: saved.placeId, label: saved.placeLabel, itemName, snapshot };
+    return { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, snapshot };
+  }
+
+  /** "Move here" after a conflict: build at the current spot and move the item there. */
+  function moveHereAndBuild(productId: string): BuildOutcome {
+    const product = catalog.productById.get(productId);
+    if (!product) return { kind: 'blocked', itemName: '', snapshot: { items, products, layouts } };
+    const snapshot: Snapshot = { items, products, layouts };
+    const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
+    const plan = planBuild(layout, position, category);
+    if (plan.action === 'blocked') return { kind: 'blocked', itemName: product.name, snapshot };
+    replaceLayout(plan.layout);
+    setProducts((prev) => prev.map((p) => {
+      const k = p.locations?.[layout.id];
+      const rekeyed = k && plan.rekey ? plan.rekey(k) : k;
+      if (p.id === productId) return { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! } };
+      return rekeyed !== k ? { ...p, locations: { ...p.locations, [layout.id]: rekeyed! } } : p;
+    }));
+    return { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName: product.name, snapshot };
+  }
+
+  /** Turns a shelf the other way round where the shopper stands. */
+  function turnShelfHere(shelfId: string): boolean {
+    const r = turnShelf(layout, shelfId, position);
+    if (!r) return false;
+    replaceLayout(r.layout);
+    setProducts((prev) => prev.map((p) => {
+      const k = p.locations?.[layout.id];
+      const nk = k ? r.rekey(k) : k;
+      return nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk! } } : p;
+    }));
+    return true;
+  }
+
+  function renamePlace(placeId: string, label: string) {
+    replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? { ...p, label } : p)) });
+  }
+
+  function addAreaHere(): { placeId: string; snapshot: Snapshot } | undefined {
+    const r = areaHere(layout, position);
+    if (!r) return undefined;
+    const snapshot = { items, products, layouts };
+    replaceLayout(r.layout);
+    return { placeId: r.area.id, snapshot };
+  }
+
+  function stepTo(dir: Direction) {
+    const r = step(layout, position, dir);
+    if (r.layout !== layout) replaceLayout(r.layout);
+    setPos({ layoutId: layout.id, point: r.position });
+  }
+
+  function markHere(which: 'entrance' | 'checkout') {
+    replaceLayout({ ...layout, [which]: floor.snap(position) });
+  }
+
+  function startBlankStore() {
+    const fresh = blankStore(`New store ${layouts.length + 1}`);
+    setLayouts((prev) => [...prev, fresh]);
+    setActiveId(fresh.id);
+    setPos({ layoutId: fresh.id, point: fresh.entrance });
   }
 
   /** Sets (or clears, with `null`) where a master-list item is in the current store. */
@@ -322,6 +459,7 @@ export default function App() {
           setItems={setItems}
           setLocation={setLocation}
           quickAdd={quickAdd}
+          build={{ pickUpHere, moveHereAndBuild, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

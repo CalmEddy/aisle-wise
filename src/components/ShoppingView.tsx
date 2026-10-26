@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { QuickAddResult } from '../App';
+import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
+import { planBuild, type Direction } from '../core/build';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, placeAt, spotPoint } from '../core/geometry';
@@ -23,6 +24,7 @@ interface Props {
   quickAdd: (names: string[], mode: 'list' | 'cart', hereKey?: string) => QuickAddResult;
   undo: (snapshot: QuickAddResult['snapshot']) => void;
   setProductLocation: (productId: string, spotKey: string | null) => void;
+  build: BuildApi;
   position: Point;
   setPosition: (p: Point) => void;
   onEditLayout: () => void;
@@ -31,6 +33,24 @@ interface Props {
   mapLook: SectionLook;
   looks: Map<string, { color: string; icon: string }>;
 }
+
+/** Build-mode actions provided by the app. */
+export interface BuildApi {
+  pickUpHere: (name: string, itemId?: string) => BuildOutcome;
+  moveHereAndBuild: (productId: string) => BuildOutcome;
+  turnShelfHere: (shelfId: string) => boolean;
+  renamePlace: (placeId: string, label: string) => void;
+  addAreaHere: () => { placeId: string; snapshot: Snapshot } | undefined;
+  stepTo: (dir: Direction) => void;
+  markHere: (which: 'entrance' | 'checkout') => void;
+  startBlankStore: () => void;
+}
+
+/** The build-mode banner: what just changed, with follow-up buttons. */
+type BuildNote =
+  | (BuildOutcome & { turned?: boolean })
+  | { kind: 'area'; placeId: string; snapshot: Snapshot }
+  | { kind: 'message'; text: string };
 
 interface Drag {
   item: ListItem;
@@ -48,6 +68,8 @@ export function ShoppingView(props: Props) {
   const [toast, setToast] = useState<Toast | null>(null);
   const [picking, setPicking] = useState<{ productId?: string; item?: ListItem; name: string } | null>(null);
   const [menuFor, setMenuFor] = useState<ListItem | null>(null);
+  const [note, setNote] = useState<BuildNote | null>(null);
+  const building = props.display.buildMode;
 
   function markAvailable(item: ListItem, available: boolean) {
     const snapshot = setAvailable(item, available);
@@ -129,6 +151,12 @@ export function ShoppingView(props: Props) {
 
   /** Adds from the box: everything before the last comma plus `last`. */
   function quick(last: string, mode: 'list' | 'cart') {
+    if (building && mode === 'cart' && last.trim()) {
+      // Build mode: into the cart where you're standing. Anything before a comma stays in the box.
+      setNote(props.build.pickUpHere(last.trim()));
+      setDraft(draft.split(',').slice(0, -1).join(',').trim());
+      return;
+    }
     const names = [...draft.split(',').slice(0, -1), last].map((n) => n.trim()).filter(Boolean);
     if (!names.length) return;
     const result = props.quickAdd(names, mode, hereKey);
@@ -137,6 +165,11 @@ export function ShoppingView(props: Props) {
   }
 
   function toggle(item: ListItem) {
+    if (building && !item.done) {
+      // Build mode: picked up where you're standing; the map grows around it.
+      setNote(props.build.pickUpHere(item.name, item.id));
+      return;
+    }
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
     // Picking something up tells us where the shopper is standing.
     const loc = locate(item);
@@ -234,17 +267,30 @@ export function ShoppingView(props: Props) {
         )}
       </form>
 
-      {items.length > 0 && (
+      {!(items.length > 0 || building) && (
+        <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode']} />
+      )}
+      {(items.length > 0 || building) && (
         <>
           <StoreMap
             layout={layout}
             you={position}
             visits={mapVisits}
             look={props.mapLook}
+            showGrid={building}
             highlightId={here?.id}
             onMapTap={(x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
           />
-          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors']} />
+          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'mapColors', 'mapIcons', 'listColors']} />
+          {building && (
+            <BuildPanel
+              layout={layout}
+              position={position}
+              build={props.build}
+              lastShelfId={note && 'placeId' in note && layout.places.some((p) => p.id === note.placeId && p.kind === 'shelf') ? note.placeId : undefined}
+              onNote={setNote}
+            />
+          )}
           <section className="here">
             <span className="muted">{hereLabel ? <>You’re at <b>{hereLabel}</b> — tap the map to move</> : 'Tap the map where you are, or pick a place'}</span>
             <div className="chips" role="list">
@@ -295,11 +341,18 @@ export function ShoppingView(props: Props) {
             {unplaced.length > 0 && (
               <>
                 <h4>No location yet</h4>
-                <p className="muted small">Drag it onto the map, or pick a place. The app remembers for this store.</p>
+                <p className="muted small">
+                  {building
+                    ? 'Check it off where you find it and the map builds around you – or drag it onto the map, or pick a place.'
+                    : 'Drag it onto the map, or pick a place. The app remembers for this store.'}
+                </p>
                 {unplaced.map((item) => (
                   <div className="row" key={item.id}>
                     <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
-                    <span className="name">{item.name}</span>
+                    <label>
+                      <input type="checkbox" checked={false} onChange={() => toggle(item)} aria-label={building ? `Got ${item.name} here` : `Got ${item.name}`} />
+                      <span className="name">{item.name}</span>
+                    </label>
                     <select value="" onChange={(e) => setLocation(item, e.target.value)} aria-label={`Location of ${item.name}`}>
                       <option value="" disabled>Choose…</option>
                       {layout.places.map((p) => (
@@ -342,7 +395,19 @@ export function ShoppingView(props: Props) {
         )}
       </main>
 
-      {toast && !drag && (
+      {note && !drag && (
+        <BuildBanner
+          note={note}
+          layout={layout}
+          catalog={catalog}
+          build={props.build}
+          onUndo={(snap) => { props.undo(snap); setNote(null); }}
+          onNote={setNote}
+          onClose={() => setNote(null)}
+        />
+      )}
+
+      {toast && !drag && !note && (
         <ToastBar
           toast={toast}
           layout={layout}
@@ -656,6 +721,157 @@ function ItemMenu({ item, where, storeName, onChangePlace, onNotAvailable, onRem
           <span style={{ flex: 1 }} />
           <button className="btn" onClick={onCancel}>Cancel</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const ACTION_TEXT: Record<string, (label: string) => string> = {
+  onShelf: (l) => `on “${l || 'this shelf'}”`,
+  inArea: (l) => `in “${l || 'this area'}”`,
+  extend: (l) => `extends “${l || 'this shelf'}” to here`,
+  create: () => 'creates a new shelf here',
+  blocked: () => 'can’t fit a shelf here',
+};
+
+/** Build mode controls: what checking off here will do, walk arrows and tools. */
+function BuildPanel({ layout, position, build, lastShelfId, onNote }: {
+  layout: StoreLayout;
+  position: Point;
+  build: BuildApi;
+  lastShelfId?: string;
+  onNote: (n: BuildNote) => void;
+}) {
+  const preview = planBuild(layout, position);
+  const besideShelf = preview.action === 'onShelf' ? preview.placeId : undefined;
+  const turnId = besideShelf ?? lastShelfId;
+  const arrow = (dir: Direction, label: string, glyph: string) => (
+    <button className={`btn arrow ${dir}`} onClick={() => build.stepTo(dir)} aria-label={label}>{glyph}</button>
+  );
+  return (
+    <section className="card build-panel">
+      <p className="build-preview">
+        <b>Picking up here</b> {ACTION_TEXT[preview.action](preview.label)}.
+      </p>
+      <p className="muted small">Tap the map or use the arrows to say where you are, then check items off or tap 🛒 Cart.</p>
+      <div className="build-row">
+        <div className="arrows" role="group" aria-label="Move one square">
+          {arrow('up', 'Move up', '↑')}
+          {arrow('left', 'Move left', '←')}
+          {arrow('right', 'Move right', '→')}
+          {arrow('down', 'Move down', '↓')}
+        </div>
+        <div className="build-tools">
+          <button className="btn" onClick={() => {
+            const r = build.addAreaHere();
+            onNote(r ? { kind: 'area', ...r } : { kind: 'message', text: 'There’s no free floor here for an area.' });
+          }}>+ Area here</button>
+          <button className="btn" disabled={!turnId} onClick={() => {
+            if (!turnId || !build.turnShelfHere(turnId)) onNote({ kind: 'message', text: 'That shelf can’t turn here – something’s in the way.' });
+          }}>⟳ Turn shelf</button>
+          <button className="btn" onClick={() => { build.markHere('entrance'); onNote({ kind: 'message', text: 'Entrance set here.' }); }}>I’m at the entrance</button>
+          <button className="btn" onClick={() => { build.markHere('checkout'); onNote({ kind: 'message', text: 'Checkout set here.' }); }}>I’m at checkout</button>
+          <button className="btn" onClick={() => {
+            build.startBlankStore();
+            onNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
+          }}>New store</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Banner after a build-mode change: rename, turn, undo, or (for a conflict) keep / move here. */
+function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: {
+  note: BuildNote;
+  layout: StoreLayout;
+  catalog: Catalog;
+  build: BuildApi;
+  onUndo: (s: Snapshot) => void;
+  onNote: (n: BuildNote) => void;
+  onClose: () => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const placeId = 'placeId' in note ? note.placeId : undefined;
+  const place = placeId ? layout.places.find((p) => p.id === placeId) : undefined;
+  const [name, setName] = useState(place?.label ?? '');
+  useEffect(() => setName(place?.label ?? ''), [place?.label]);
+
+  if (note.kind === 'message') {
+    return (
+      <div className="toast top" role="status">
+        <span className="toast-text">{note.text}</span>
+        <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+      </div>
+    );
+  }
+
+  if (note.kind === 'conflict') {
+    const saved = resolveSpot(note.savedKey, layout, catalog)?.label ?? 'another place';
+    return (
+      <div className="toast question" role="alertdialog" aria-label={`Move ${note.itemName}?`}>
+        <span className="toast-text"><b>{note.itemName}</b> is in your cart. It’s saved at <b>{saved}</b> — is it here instead?</span>
+        <div className="toast-actions">
+          <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Keep {saved}</button>
+          <button className="btn primary" onClick={() => onNote(build.moveHereAndBuild(note.productId))}>Move here</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (note.kind === 'blocked') {
+    return (
+      <div className="toast question" role="status">
+        <span className="toast-text"><b>{note.itemName}</b> is in your cart, but there’s no room for a shelf here. Move a square and try again, or set its place from ⋯.</span>
+        <div className="toast-actions">
+          <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>OK</button>
+        </div>
+      </div>
+    );
+  }
+
+  const label = place?.label || (place?.kind === 'area' ? 'this area' : 'this shelf');
+  const text =
+    note.kind === 'area' ? <>New open area added around you.</>
+      : note.action === 'create' ? <><b>{note.itemName}</b> is in your cart. New shelf <b>“{label}”</b>.</>
+        : note.action === 'extend' ? <><b>{note.itemName}</b> is in your cart. Extended <b>“{label}”</b> to here.</>
+          : <><b>{note.itemName}</b> is in your cart · saved on <b>“{label}”</b>.</>;
+  const isNewShelf = note.kind === 'built' && note.action === 'create' && place?.kind === 'shelf';
+
+  return (
+    <div className="toast question" role="status">
+      {renaming ? (
+        <form className="rename" onSubmit={(e) => {
+          e.preventDefault();
+          if (place) build.renamePlace(place.id, name.trim());
+          setRenaming(false);
+        }}>
+          <input value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" autoFocus placeholder="e.g. Pasta or 5A" />
+          <button className="btn primary">Save</button>
+        </form>
+      ) : (
+        <span className="toast-text">{text}</span>
+      )}
+      <div className="toast-actions">
+        <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>
+        <span style={{ flex: 1 }} />
+        {isNewShelf && place?.kind === 'shelf' && (
+          <div className="segmented mini" role="group" aria-label="Shelf direction">
+            {(['vertical', 'horizontal'] as const).map((o) => (
+              <button key={o} className={place.orientation === o ? 'active' : ''} onClick={() => {
+                if (place.orientation !== o && !build.turnShelfHere(place.id)) {
+                  onNote({ kind: 'message', text: 'It won’t fit that way here.' });
+                }
+              }}>{o === 'vertical' ? '↕' : '↔'}</button>
+            ))}
+          </div>
+        )}
+        {place && !renaming && <button className="btn" onClick={() => setRenaming(true)}>Rename</button>}
+        <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
       </div>
     </div>
   );

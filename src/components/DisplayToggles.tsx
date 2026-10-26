@@ -4,6 +4,7 @@ const LABELS: Record<keyof Display, string> = {
   mapColors: 'Colors on map',
   mapIcons: 'Icons on map',
   listColors: 'Colors in list',
+  buildMode: '🛠 Build mode',
 };
 
 /** On/off switches for category colours and icons. */
@@ -19,7 +20,7 @@ export function DisplayToggles({ display, setDisplay, show }: {
           key={k}
           type="button"
           className="toggle"
-          aria-pressed={display[k]}
+          aria-pressed={!!display[k]}
           onClick={() => setDisplay((d) => ({ ...d, [k]: !d[k] }))}
         >
           <span className="knob" aria-hidden="true" />

@@ -39,6 +39,27 @@ re-orders it as you move.
    this store**. Items not available here, and items with no location yet,
    are listed at the bottom under "Not on the route".
 
+## Build mode: map a store as you shop
+
+Turn on **🛠 Build mode** on the Shop tab. Say where you are (tap the map, or
+use the ← ↑ ↓ → arrows to move a square at a time), then check items off or
+tap 🛒 Cart. The map builds itself around you (`src/core/build.ts`):
+
+- **On or right beside a shelf** – the item is saved on that shelf, level
+  with you, and its category is added to the shelf.
+- **In an open area** – saved at that spot in the area.
+- **Up to 3 squares past the end of a shelf** (lined up with it) – the shelf
+  is extended to you. Items already on it stay where they physically are.
+- **Anywhere else** – a new 3-square shelf is made through your square
+  (trimmed to fit), named after the item's category. The banner asks
+  ↕ / ↔ for its direction, and offers **Rename** and **Undo**.
+- An item already saved somewhere else in the store isn't moved without
+  asking (**Keep** / **Move here**).
+
+Also in Build mode: **+ Area here**, **Turn shelf**, **I'm at the entrance**,
+**I'm at checkout**, and **New store** to start a blank one. Stepping past
+the edge of the map makes the store bigger.
+
 ## Grocery items and categories
 
 The **Items** tab holds the master list of grocery items (about 290 to start).
@@ -164,6 +185,7 @@ src/core/catalog.ts               Master list lookups: name matching and suggest
 src/core/demoLayout.ts            Example store
 src/core/geometry.ts              Shelf/area shapes and pick-up spots
 src/core/migrate.ts               Converting old aisles to shelves
+src/core/build.ts                 Build mode: growing the map from where you shop
 src/core/floor.ts                 Walkable grid and walking distances
 src/core/locate.ts                Grocery item → spot in a store
 src/core/route.ts                 Route planning (shortest walk)
