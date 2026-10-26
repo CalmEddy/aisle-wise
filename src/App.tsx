@@ -299,8 +299,8 @@ export default function App() {
       </header>
 
       <nav className="tabs" role="tablist">
-        {tab('list', 'List')}
         {tab('items', 'Items')}
+        {tab('list', 'Shop')}
         {tab('layout', 'Store layout')}
       </nav>
 

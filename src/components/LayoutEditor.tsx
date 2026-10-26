@@ -285,7 +285,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
         {layout.id === demoLayout.id && (
           <button className="btn" onClick={() => update(() => structuredClone(demoLayout))}>Reset demo</button>
         )}
-        <button className="btn primary" onClick={onDone}>Done – back to my list</button>
+        <button className="btn primary" onClick={onDone}>Done – back to shopping</button>
       </div>
     </div>
   );

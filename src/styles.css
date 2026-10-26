@@ -370,3 +370,9 @@ button { cursor: pointer; }
 .updown { display: flex; flex-direction: column; flex: none; }
 .updown button { width: 28px; height: 20px; border: 0; background: none; color: var(--muted); font-size: 0.7rem; padding: 0; }
 .updown button:disabled { opacity: 0.25; }
+
+/* Tap a place or section in the list to move the marker there */
+button.goto { background: none; border: 0; padding: 0; text-align: left; color: inherit; cursor: pointer; }
+button.goto:hover h2, button.goto:hover h3, button.spot-detail.goto:hover { text-decoration: underline; text-underline-offset: 3px; }
+button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; color: var(--muted); }
+.next-card button.spot-detail.goto { color: var(--text); }

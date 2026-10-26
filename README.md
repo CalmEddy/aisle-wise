@@ -22,7 +22,8 @@ re-orders it as you move.
    stops are solved exactly; longer lists use nearest-neighbour + 2-opt
    (`src/core/route.ts`).
 3. **Follow along** – checking off an item moves you to that spot, and you
-   can tap anywhere on the map (or a place chip) to say where you are. Each move re-plans
+   can tap anywhere on the map, a place chip, or a place or section name in
+   the list (e.g. "Pasta & Rice") to say where you are. Each move re-plans
    the rest of the list.
 4. **Move items** – drag an item's ⠿ handle onto the exact spot on the map,
    or onto another item. The location is saved on that grocery item for this
@@ -77,7 +78,7 @@ Open the **Store layout** tab to build your own stores:
 
 ## Sharing
 
-- **Share a list** – tap **Share** at the top of the List tab.
+- **Share a list** – tap **Share** at the top of the Shop tab.
 - **Share a store** – in **Store layout**, pick the store and tap **Share**.
   The layout, its categories, where items are in that store and which items
   it doesn't carry all come along.

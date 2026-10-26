@@ -250,17 +250,17 @@ export function ShoppingView(props: Props) {
         )}
 
         {route.length > 0 && (
-          <p className="hint muted small">Drag ⠿ onto the map or another stop to move an item. The app remembers it for this store.</p>
+          <p className="hint muted small">Tap a place or section name to say you’re there. Drag ⠿ onto the map or another item to move an item.</p>
         )}
 
         {nextVisit && (
-          <VisitCard visit={nextVisit} next drag={drag} rows={(st) => (
+          <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} rows={(st) => (
             <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} colorOf={colorOf} big />
           )} />
         )}
 
         {laterVisits.map((v) => (
-          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} rows={(st) => (
+          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} rows={(st) => (
             <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} colorOf={colorOf} />
           )} />
         ))}
@@ -429,11 +429,13 @@ function overKey(drag: Drag | null, key: string) {
  * order. Each spot is a drop target, so dropping on an item puts the
  * dragged item right next to it.
  */
-function VisitCard({ visit, next, drag, rows }: {
+function VisitCard({ visit, next, drag, rows, onGoTo }: {
   visit: { number: number; stops: Stop[] };
   next?: boolean;
   drag: Drag | null;
   rows: (stop: Stop) => React.ReactNode;
+  /** Tapping the place or a section moves the "you are here" marker there. */
+  onGoTo: (stop: Stop) => void;
 }) {
   const first = visit.stops[0];
   const count = visit.stops.reduce((n, st) => n + st.items.length, 0);
@@ -443,12 +445,18 @@ function VisitCard({ visit, next, drag, rows }: {
     <section className={`card${next ? ' next-card' : ''}${over ? ' drop-over' : ''}`} data-drop={first.key}>
       <div className="stop-head">
         {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
-        {next ? <h2>{first.placeLabel || 'Unnamed'}</h2> : <h3>{first.placeLabel || 'Unnamed'}</h3>}
+        <button className="goto" onClick={() => onGoTo(first)} aria-label={`I'm at ${first.placeLabel || 'this place'}`}>
+          {next ? <h2>{first.placeLabel || 'Unnamed'}</h2> : <h3>{first.placeLabel || 'Unnamed'}</h3>}
+        </button>
         {count > 1 && <span className="muted small count-pill">{count} items</span>}
       </div>
       {visit.stops.map((st) => (
         <div key={st.key} className={`spot${overKey(drag, st.key)}`} data-drop={st.key}>
-          {showDetails && <div className="spot-detail">{capitalize(st.detail ?? 'anywhere here')}</div>}
+          {showDetails && (
+            <button className="spot-detail goto" onClick={() => onGoTo(st)} aria-label={`I'm at ${st.label}`}>
+              {capitalize(st.detail ?? 'anywhere here')}
+            </button>
+          )}
           {rows(st)}
         </div>
       ))}
