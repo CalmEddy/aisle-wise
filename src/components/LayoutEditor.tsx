@@ -291,7 +291,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
   );
 }
 
-function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories, looks }: {
+export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories, looks }: {
   place: Place;
   onChange: (patch: Partial<Shelf> | Partial<Area>) => void;
   onDelete: () => void;

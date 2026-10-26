@@ -15,7 +15,8 @@ import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Category, ListItem, Point, Product, StoreLayout } from './core/types';
+import type { Category, ListItem, Place, Point, Product, StoreLayout } from './core/types';
+import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
@@ -297,6 +298,28 @@ export default function App() {
     return true;
   }
 
+  /** Changes a list item's category (on its master-list item, creating one if needed). */
+  function setItemCategory(item: ListItem, categoryId: string | undefined) {
+    const product = productFor(item, catalog);
+    if (product) {
+      setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, categoryId } : p)));
+      if (item.productId !== product.id) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: product.id } : i)));
+      return;
+    }
+    const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), categoryId };
+    setProducts((prev) => [...prev, created]);
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
+  }
+
+  /** Edits a shelf or area in the current store (build mode's edit panel). */
+  function updatePlace(placeId: string, patch: Partial<Place>) {
+    replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? clampPlace({ ...p, ...patch } as Place, layout) : p)) });
+  }
+
+  function deletePlace(placeId: string) {
+    replaceLayout({ ...layout, places: layout.places.filter((p) => p.id !== placeId) });
+  }
+
   function renamePlace(placeId: string, label: string) {
     replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? { ...p, label } : p)) });
   }
@@ -459,7 +482,8 @@ export default function App() {
           setItems={setItems}
           setLocation={setLocation}
           quickAdd={quickAdd}
-          build={{ pickUpHere, moveHereAndBuild, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore }}
+          build={{ pickUpHere, moveHereAndBuild, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore, updatePlace, deletePlace }}
+          setItemCategory={setItemCategory}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

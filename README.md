@@ -35,8 +35,9 @@ re-orders it as you move.
    area share one number. The card lists them in walking order with where
    each one is ("near the top"), and the map shows one number per place, in
    the walkway beside it, with a dot for each item.
-   Tap **⋯** on an item to change its place or mark it **not available at
-   this store**. Items not available here, and items with no location yet,
+   Tap **⋯** on an item to change its **category**, change its place, or mark
+   it **not available at this store**. Each item shows its category icon
+   (switch off with **Icons in list**). Items not available here, and items with no location yet,
    are listed at the bottom under "Not on the route".
 
 ## Build mode: map a store as you shop
@@ -55,6 +56,9 @@ tap 🛒 Cart. The map builds itself around you (`src/core/build.ts`):
   ↕ / ↔ for its direction, and offers **Rename** and **Undo**.
 - An item already saved somewhere else in the store isn't moved without
   asking (**Keep** / **Move here**).
+
+Tap a shelf or area on the map to edit it right there – label, what's on
+it, direction, length, position or delete – just like in the store editor.
 
 Also in Build mode: **+ Area here**, **Turn shelf**, **I'm at the entrance**,
 **I'm at checkout**, and **New store** to start a blank one. Stepping past

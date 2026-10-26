@@ -4,6 +4,7 @@ const LABELS: Record<keyof Display, string> = {
   mapColors: 'Colors on map',
   mapIcons: 'Icons on map',
   listColors: 'Colors in list',
+  listIcons: 'Icons in list',
   buildMode: '🛠 Build mode',
 };
 
@@ -20,8 +21,8 @@ export function DisplayToggles({ display, setDisplay, show }: {
           key={k}
           type="button"
           className="toggle"
-          aria-pressed={!!display[k]}
-          onClick={() => setDisplay((d) => ({ ...d, [k]: !d[k] }))}
+          aria-pressed={display[k] ?? true}
+          onClick={() => setDisplay((d) => ({ ...d, [k]: !(d[k] ?? true) }))}
         >
           <span className="knob" aria-hidden="true" />
           {LABELS[k]}

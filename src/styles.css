@@ -411,3 +411,10 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .segmented.mini button { padding: 6px 12px; font-size: 1rem; }
 .toast .rename { display: flex; gap: 6px; }
 .toast .rename input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 0; font-size: 16px; }
+
+/* Item icons and build-mode editing */
+.item-icon { font-size: 1.05rem; width: 1.4em; text-align: center; flex: none; margin-right: -4px; }
+.build-edit { margin-top: 8px; }
+.build-edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 6px; }
+.build-edit-head h3 { margin: 0; font-size: 1rem; }
+.menu-category select { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; color: var(--text); }

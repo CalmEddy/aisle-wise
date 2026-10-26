@@ -6,9 +6,10 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, placeAt, spotPoint } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planRoute } from '../core/route';
-import type { ListItem, Point, Product, Stop, StoreLayout } from '../core/types';
+import type { ListItem, Place, Point, Product, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
+import { PlacePanel } from './LayoutEditor';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapVisit } from './StoreMap';
 
@@ -25,6 +26,7 @@ interface Props {
   undo: (snapshot: QuickAddResult['snapshot']) => void;
   setProductLocation: (productId: string, spotKey: string | null) => void;
   build: BuildApi;
+  setItemCategory: (item: ListItem, categoryId: string | undefined) => void;
   position: Point;
   setPosition: (p: Point) => void;
   onEditLayout: () => void;
@@ -44,6 +46,8 @@ export interface BuildApi {
   stepTo: (dir: Direction) => void;
   markHere: (which: 'entrance' | 'checkout') => void;
   startBlankStore: () => void;
+  updatePlace: (placeId: string, patch: Partial<Place>) => void;
+  deletePlace: (placeId: string) => void;
 }
 
 /** The build-mode banner: what just changed, with follow-up buttons. */
@@ -70,6 +74,9 @@ export function ShoppingView(props: Props) {
   const [menuFor, setMenuFor] = useState<ListItem | null>(null);
   const [note, setNote] = useState<BuildNote | null>(null);
   const building = props.display.buildMode;
+  // Build mode: the shelf or area being edited.
+  const [editingId, setEditingId] = useState<string>();
+  const editing = building ? layout.places.find((p) => p.id === editingId) : undefined;
 
   function markAvailable(item: ListItem, available: boolean) {
     const snapshot = setAvailable(item, available);
@@ -88,6 +95,10 @@ export function ShoppingView(props: Props) {
   }, [toast, picking, asking]);
 
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
+  /** Category icon for a list row, when list icons are on. */
+  const iconOf = (item: ListItem) =>
+    (props.display.listIcons ?? true) ? props.looks.get(productFor(item, catalog)?.categoryId ?? '')?.icon : undefined;
+
   /**
    * A section's category colour, when list colours are on: the category in
    * its spot key ("shelf:pasta"), otherwise the category most of its items share.
@@ -279,9 +290,34 @@ export function ShoppingView(props: Props) {
             look={props.mapLook}
             showGrid={building}
             highlightId={here?.id}
-            onMapTap={(x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+            selectedId={editing?.id}
+            onMapTap={(x, y, place) => {
+              // Build mode: tapping a shelf or area opens it for editing (and puts you there).
+              if (building) setEditingId(place?.id);
+              setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }));
+            }}
           />
-          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'mapColors', 'mapIcons', 'listColors']} />
+          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'mapColors', 'mapIcons', 'listColors', 'listIcons']} />
+          {editing && (
+            <div className="build-edit">
+              <div className="build-edit-head">
+                <h3>Editing “{editing.label || (editing.kind === 'shelf' ? 'shelf' : 'area')}”</h3>
+                <button className="btn primary" onClick={() => setEditingId(undefined)}>Done</button>
+              </div>
+              <PlacePanel
+                place={editing}
+                onChange={(patch) => props.build.updatePlace(editing.id, patch as Partial<Place>)}
+                onDelete={() => {
+                  if (!confirm(`Delete “${editing.label || 'this ' + editing.kind}”?`)) return;
+                  props.build.deletePlace(editing.id);
+                  setEditingId(undefined);
+                }}
+                usedElsewhere={(catId) => layout.places.find((p) => p.id !== editing.id && p.categories.includes(catId))?.label}
+                categories={catalog.categories}
+                looks={props.looks}
+              />
+            </div>
+          )}
           {building && (
             <BuildPanel
               layout={layout}
@@ -325,13 +361,13 @@ export function ShoppingView(props: Props) {
 
         {nextVisit && (
           <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} big />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} big />
           )} />
         )}
 
         {laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} />
           )} />
         ))}
 
@@ -351,6 +387,7 @@ export function ShoppingView(props: Props) {
                     <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
                     <label>
                       <input type="checkbox" checked={false} onChange={() => toggle(item)} aria-label={building ? `Got ${item.name} here` : `Got ${item.name}`} />
+                      {iconOf(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
                       <span className="name">{item.name}</span>
                     </label>
                     <select value="" onChange={(e) => setLocation(item, e.target.value)} aria-label={`Location of ${item.name}`}>
@@ -389,7 +426,7 @@ export function ShoppingView(props: Props) {
         {done.length > 0 && (
           <details className="card done">
             <summary>In the cart ({done.length})</summary>
-            <ItemRows items={done} onToggle={toggle} onRemove={remove} />
+            <ItemRows items={done} onToggle={toggle} onRemove={remove} iconOf={iconOf} />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
         )}
@@ -430,6 +467,10 @@ export function ShoppingView(props: Props) {
             return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
           })()}
           storeName={layout.name}
+          categoryId={productFor(menuFor, catalog)?.categoryId}
+          categories={catalog.categories}
+          looks={props.looks}
+          onCategory={(id) => props.setItemCategory(menuFor, id)}
           onChangePlace={() => {
             setPicking({ productId: productFor(menuFor, catalog)?.id, item: menuFor, name: menuFor.name });
             setMenuFor(null);
@@ -573,13 +614,14 @@ function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, big }: {
+function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, big }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
   onMenu?: (i: ListItem) => void;
   drag?: DragHandlers;
   dragging?: string;
+  iconOf?: (i: ListItem) => string | undefined;
   big?: boolean;
 }) {
   return (
@@ -594,6 +636,7 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, big }: {
           )}
           <label>
             <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
+            {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
             <span className="name">{item.name}</span>
           </label>
           {onMenu && (
@@ -700,10 +743,14 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
   );
 }
 
-function ItemMenu({ item, where, storeName, onChangePlace, onNotAvailable, onRemove, onCancel }: {
+function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onNotAvailable, onRemove, onCancel }: {
   item: ListItem;
   where: string;
   storeName: string;
+  categoryId?: string;
+  categories: { id: string; name: string }[];
+  looks: Map<string, { color: string; icon: string }>;
+  onCategory: (id: string | undefined) => void;
   onChangePlace: () => void;
   onNotAvailable: () => void;
   onRemove: () => void;
@@ -714,6 +761,13 @@ function ItemMenu({ item, where, storeName, onChangePlace, onNotAvailable, onRem
       <div className="sheet" role="dialog" aria-label={`Options for ${item.name}`} onClick={(e) => e.stopPropagation()}>
         <h2>{item.name}</h2>
         <p className="muted small">{where}</p>
+        <label className="field menu-category">
+          <span>Category</span>
+          <select value={categoryId ?? ''} onChange={(e) => onCategory(e.target.value || undefined)} aria-label={`Category of ${item.name}`}>
+            <option value="">No category</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{looks.get(c.id)?.icon} {c.name}</option>)}
+          </select>
+        </label>
         <button className="pick" onClick={onChangePlace}>📍 Change place</button>
         <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
         <button className="pick danger" onClick={onRemove}>Remove from list</button>
