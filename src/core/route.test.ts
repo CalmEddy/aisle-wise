@@ -5,7 +5,7 @@ import { footprint, spotPoint } from './geometry';
 import { Catalog } from './catalog';
 import { defaultCategories, defaultProducts } from './categories';
 import { groupIntoStops, locateItem, normalize, type Location } from './locate';
-import { planRoute, routeLength } from './route';
+import { planGroupedRoute, planRoute, routeLength } from './route';
 import type { ListItem, Shelf, StoreLayout } from './types';
 import { checkLayout } from './validate';
 
@@ -174,5 +174,46 @@ describe('planRoute', () => {
     expect(new Set(planned.map((s) => s.id)).size).toBe(stops.length);
     expect(routeLength(demoLayout.entrance, planned, demoLayout.checkout, floor.distance))
       .toBeLessThan(routeLength(demoLayout.entrance, stops, demoLayout.checkout, floor.distance));
+  });
+});
+
+describe('planGroupedRoute', () => {
+  // A shelf with an area beside its middle, checkout off past its top: the
+  // shortest walk would zig-zag shelf → area → shelf.
+  const layout: StoreLayout = {
+    id: 'g', name: 'G', width: 20, height: 20, entrance: { x: 11, y: 19 }, checkout: { x: 0, y: 0 },
+    places: [
+      { kind: 'shelf', id: 'shelf', label: 'Shelf 1', x: 10, y: 5, orientation: 'vertical', length: 10, categories: [] },
+      { kind: 'area', id: 'fruit', label: 'Fruit', x: 12, y: 9, w: 3, h: 3, categories: [] },
+    ],
+  };
+  const floor = new Floor(layout);
+  const stop = (id: string, placeId: string, x: number, y: number) => ({ id, placeId, point: { x, y } });
+  const stops = [
+    stop('olives', 'shelf', 10, 14), stop('pickles', 'shelf', 10, 5),
+    stop('kiwi', 'fruit', 13, 10), stop('bananas', 'fruit', 12, 9), stop('berries', 'fruit', 14, 11),
+  ];
+  const along = (s: { point: { x: number; y: number } }) => s.point.y * 1000 + s.point.x;
+
+  it('never splits a place, and walks each one end to end', () => {
+    const runs = (ids: string[]) => {
+      const places = ids.map((id) => stops.find((s) => s.id === id)!.placeId);
+      return places.filter((p, i) => p !== places[i - 1]).length;
+    };
+    // The plain planner zig-zags (this is the bug being fixed)…
+    expect(runs(planRoute(layout.entrance, stops, layout.checkout, floor.distance).map((s) => s.id))).toBe(3);
+    // …the grouped one visits each place once.
+    const route = planGroupedRoute(layout.entrance, stops, layout.checkout, floor.distance, along).map((s) => s.id);
+    expect(runs(route)).toBe(2);
+    expect(route).toEqual(['bananas', 'kiwi', 'berries', 'olives', 'pickles']); // shelf walked bottom to top, towards checkout
+  });
+
+  it('keeps every stop exactly once, and handles one place or none', () => {
+    expect(planGroupedRoute(layout.entrance, [], layout.checkout, floor.distance, along)).toEqual([]);
+    const one = planGroupedRoute(layout.entrance, stops.slice(0, 2), layout.checkout, floor.distance, along).map((s) => s.id);
+    expect(one).toEqual(['olives', 'pickles']);
+    const many = Array.from({ length: 14 }, (_, i) => stop(`s${i}`, `p${i}`, i, i % 5));
+    const planned = planGroupedRoute({ x: 0, y: 19 }, many, { x: 19, y: 19 }, new Floor({ ...layout, places: [] }).distance, along);
+    expect(new Set(planned.map((s) => s.id)).size).toBe(14);
   });
 });

@@ -17,10 +17,11 @@ re-orders it as you move.
    banner confirms each add, with **Change place** and **Undo**.
 2. **Plan the route** – items picked up at the same spot are grouped into one
    stop, and stops are ordered for the shortest walk from where you are to
-   the checkout. The store floor is a grid; shelves block walking, so
-   distances are real paths around them (`src/core/floor.ts`). Up to 12
-   stops are solved exactly; longer lists use nearest-neighbour + 2-opt
-   (`src/core/route.ts`).
+   the checkout. Each shelf or area is picked up in one pass (walked end to
+   end, in whichever direction is shorter), so a place is never split; only
+   the order of places is optimised. The store floor is a grid; shelves
+   block walking, so distances are real paths around them
+   (`src/core/floor.ts`, `src/core/route.ts`).
 3. **Follow along** – checking off an item moves you to that spot, and you
    can tap anywhere on the map, or a place or section name in the list
    (e.g. "Pasta & Rice"), to say where you are. Each move re-plans

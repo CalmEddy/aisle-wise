@@ -10,7 +10,7 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, planBuild, step, turnShelf, type BuildAction, type Direction } from './core/build';
+import { areaHere, blankStore, moveHere, pickUp, step, turnShelf, type BuildAction, type Direction } from './core/build';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -217,72 +217,25 @@ export default function App() {
    */
   function pickUpHere(name: string, itemId?: string): BuildOutcome {
     const snapshot: Snapshot = { items, products, layouts };
-    const listItem = itemId ? items.find((i) => i.id === itemId) : undefined;
-    let product = (listItem && productFor(listItem, catalog)) || catalog.exact(name);
-    const category = product?.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
-    const plan = planBuild(layout, position, category, 'vertical', display.buildArea ? 'area' : 'shelf');
-    const itemName = product?.name ?? capitalize(name.trim());
-
-    // Saved somewhere else here? Don't move it without asking.
-    const savedKey = product?.locations?.[layout.id];
-    const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
-    const conflict = saved && saved.placeId !== plan.placeId;
-
-    let nextProducts = products;
-    if (!conflict && !saved && plan.action !== 'blocked') {
-      if (plan.rekey) {
-        nextProducts = nextProducts.map((p) => {
-          const k = p.locations?.[layout.id];
-          const nk = k ? plan.rekey!(k) : k;
-          return nk && nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk } } : p;
-        });
-      }
-      if (product) {
-        const pid = product.id;
-        nextProducts = nextProducts.map((p) => (p.id === pid
-          ? { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
-          : p));
-      } else {
-        product = { id: `p-${newId()}`, name: itemName, locations: { [layout.id]: plan.spotKey! } };
-        nextProducts = [...nextProducts, product];
-      }
-      replaceLayout(plan.layout);
-    } else if (!product) {
-      product = { id: `p-${newId()}`, name: itemName };
-      nextProducts = [...nextProducts, product];
-    }
-
-    // Into the cart: tick the list entry, or add one already ticked.
-    const pid = product!.id;
-    const waiting = listItem ?? items.find((i) => !i.done && (i.productId === pid || productFor(i, catalog)?.id === pid));
-    const nextItems = waiting
-      ? items.map((i) => (i.id === waiting.id ? { ...i, done: true, productId: pid } : i))
-      : [...items, { id: newId(), name: itemName, done: true, productId: pid }];
-    setProducts(() => nextProducts);
-    setItems(() => nextItems);
-
-    if (conflict) return { kind: 'conflict', productId: pid, itemName, savedKey: savedKey!, snapshot };
-    if (plan.action === 'blocked') return { kind: 'blocked', itemName, snapshot };
-    if (saved) return { kind: 'built', action: 'onShelf', placeId: saved.placeId, label: saved.placeLabel, itemName, snapshot };
-    return { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, snapshot };
+    const r = pickUp({ items, products, layout, catalog }, name, itemId, position, display.buildArea ? 'area' : 'shelf');
+    if (r.layout !== layout) replaceLayout(r.layout);
+    setProducts(() => r.products);
+    setItems(() => r.items);
+    const o = r.outcome;
+    if (o.kind === 'conflict') return { kind: 'conflict', productId: o.productId, itemName: o.itemName, savedKey: o.savedKey, snapshot };
+    if (o.kind === 'blocked') return { kind: 'blocked', itemName: o.itemName, snapshot };
+    return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot };
   }
 
   /** "Move here" after a conflict: build at the current spot and move the item there. */
   function moveHereAndBuild(productId: string): BuildOutcome {
-    const product = catalog.productById.get(productId);
-    if (!product) return { kind: 'blocked', itemName: '', snapshot: { items, products, layouts } };
     const snapshot: Snapshot = { items, products, layouts };
-    const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
-    const plan = planBuild(layout, position, category, 'vertical', display.buildArea ? 'area' : 'shelf');
-    if (plan.action === 'blocked') return { kind: 'blocked', itemName: product.name, snapshot };
-    replaceLayout(plan.layout);
-    setProducts((prev) => prev.map((p) => {
-      const k = p.locations?.[layout.id];
-      const rekeyed = k && plan.rekey ? plan.rekey(k) : k;
-      if (p.id === productId) return { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! } };
-      return rekeyed !== k ? { ...p, locations: { ...p.locations, [layout.id]: rekeyed! } } : p;
-    }));
-    return { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName: product.name, snapshot };
+    const r = moveHere({ products, layout, catalog }, productId, position, display.buildArea ? 'area' : 'shelf');
+    const name = catalog.productById.get(productId)?.name ?? '';
+    if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
+    replaceLayout(r.layout);
+    setProducts(() => r.products);
+    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot };
   }
 
   /** Turns a shelf the other way round where the shopper stands. */

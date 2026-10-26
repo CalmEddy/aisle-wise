@@ -150,3 +150,98 @@ export function groupVisits<T extends { placeId: string }>(route: T[]): Visit<T>
   }
   return visits;
 }
+
+/** Above this many places, grouped routes use a heuristic instead of an exact solve. */
+const EXACT_GROUPS = 10;
+
+/**
+ * Plans a route that never splits a place: all the stops on one shelf (or in
+ * one area) are picked up in a single pass, walked end to end. `along` puts
+ * a place's stops in order (e.g. top to bottom of a shelf); each place can be
+ * walked in either direction. Only the order of places, and which way each is
+ * walked, is optimised.
+ */
+export function planGroupedRoute<T extends { point: Point; placeId: string }>(
+  start: Point, stops: T[], end: Point, d: Distance, along: (stop: T) => number,
+): T[] {
+  const byPlace = new Map<string, T[]>();
+  for (const s of stops) byPlace.set(s.placeId, [...(byPlace.get(s.placeId) ?? []), s]);
+  const paths = [...byPlace.values()].map((g) => [...g].sort((a, b) => along(a) - along(b)));
+  const n = paths.length;
+  if (n === 0) return [];
+
+  const inner = paths.map((p) => p.slice(1).reduce((sum, s, i) => sum + d(p[i].point, s.point), 0));
+  const first = (i: number, o: number) => (o ? paths[i][paths[i].length - 1] : paths[i][0]).point;
+  const last = (i: number, o: number) => (o ? paths[i][0] : paths[i][paths[i].length - 1]).point;
+  const walk = (order: [number, number][]) => order.flatMap(([i, o]) => (o ? [...paths[i]].reverse() : paths[i]));
+
+  if (n > EXACT_GROUPS) {
+    // Nearest place next, entering at whichever end is closer.
+    const left = new Set(paths.map((_, i) => i));
+    const order: [number, number][] = [];
+    let here = start;
+    while (left.size) {
+      let best: [number, number] = [-1, 0];
+      let bestD = Infinity;
+      for (const i of left) {
+        for (const o of [0, 1]) {
+          const dist = d(here, first(i, o));
+          if (dist < bestD) {
+            bestD = dist;
+            best = [i, o];
+          }
+        }
+      }
+      order.push(best);
+      left.delete(best[0]);
+      here = last(best[0], best[1]);
+    }
+    return walk(order);
+  }
+
+  // Held–Karp over places, with the direction each is walked as part of the state.
+  const full = (1 << n) - 1;
+  const cost = Array.from({ length: 1 << n }, () => new Float64Array(n * 2).fill(Infinity));
+  const prev = Array.from({ length: 1 << n }, () => new Int16Array(n * 2).fill(-1));
+  for (let i = 0; i < n; i++) {
+    for (const o of [0, 1]) cost[1 << i][i * 2 + o] = d(start, first(i, o)) * legWeight(0, n) + inner[i];
+  }
+  for (let mask = 1; mask <= full; mask++) {
+    const w = legWeight(popcount(mask), n);
+    for (let s = 0; s < n * 2; s++) {
+      const c = cost[mask][s];
+      const i = s >> 1;
+      if (!(mask & (1 << i)) || c === Infinity) continue;
+      for (let j = 0; j < n; j++) {
+        if (mask & (1 << j)) continue;
+        for (const o of [0, 1]) {
+          const nm = mask | (1 << j);
+          const nc = c + d(last(i, s & 1), first(j, o)) * w + inner[j];
+          if (nc < cost[nm][j * 2 + o]) {
+            cost[nm][j * 2 + o] = nc;
+            prev[nm][j * 2 + o] = s;
+          }
+        }
+      }
+    }
+  }
+  let best = 0;
+  let bestCost = Infinity;
+  for (let s = 0; s < n * 2; s++) {
+    const c = cost[full][s] + d(last(s >> 1, s & 1), end);
+    if (c < bestCost) {
+      bestCost = c;
+      best = s;
+    }
+  }
+  const order: [number, number][] = [];
+  let mask = full;
+  let cur = best;
+  while (cur !== -1) {
+    order.push([cur >> 1, cur & 1]);
+    const p = prev[mask][cur];
+    mask &= ~(1 << (cur >> 1));
+    cur = p;
+  }
+  return walk(order.reverse());
+}

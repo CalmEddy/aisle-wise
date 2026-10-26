@@ -5,7 +5,7 @@ import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, placeAt } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
-import { groupVisits, planRoute } from '../core/route';
+import { groupVisits, planGroupedRoute } from '../core/route';
 import type { ListItem, Place, Point, Product, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
@@ -120,7 +120,13 @@ export function ShoppingView(props: Props) {
   // Re-plans every time the list, the layout, the master list or the shopper's position changes.
   const { route, visits, unplaced, notSold } = useMemo(() => {
     const { stops, unplaced, notSold } = groupIntoStops(items, locate);
-    const route = planRoute(position, stops, layout.checkout, floor.distance);
+    // Each shelf or area is picked up in one pass, walked end to end.
+    const route = planGroupedRoute(position, stops, layout.checkout, floor.distance, (st) => {
+      const place = layout.places.find((p) => p.id === st.placeId);
+      if (!place) return 0;
+      const alongX = place.kind === 'shelf' ? place.orientation === 'horizontal' : place.w >= place.h;
+      return alongX ? st.point.x * 1000 + st.point.y : st.point.y * 1000 + st.point.x;
+    });
     return { route, visits: groupVisits(route), unplaced, notSold };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, layout, floor, catalog, position]);

@@ -1,5 +1,7 @@
+import type { Catalog } from './catalog';
 import { contains, exactKey, exactSpotAt, footprint, parseExactKey } from './geometry';
-import type { Area, Category, Orientation, Place, Point, Shelf, StoreLayout } from './types';
+import { resolveSpot } from './locate';
+import type { Area, Category, ListItem, Orientation, Place, Point, Product, Shelf, StoreLayout } from './types';
 
 /**
  * Build mode: grow a store's map from where the shopper is standing as they
@@ -385,4 +387,101 @@ function planArea(l: StoreLayout, p: Point, category?: Category): BuildPlan {
     }
   }
   return { action: 'blocked', layout: l, label: '' };
+}
+
+// ---------------------------------------------------------------------------
+// Picking an item up in build mode
+
+export type PickUpOutcome =
+  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; productId: string }
+  | { kind: 'conflict'; productId: string; itemName: string; savedKey: string }
+  | { kind: 'blocked'; itemName: string; productId: string };
+
+export interface PickUpResult {
+  layout: StoreLayout;
+  products: Product[];
+  items: ListItem[];
+  outcome: PickUpOutcome;
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Applies a plan's re-keying (a shelf/area grew) to every saved location in this store. */
+function rekeyAll(products: Product[], layoutId: string, rekey?: (k: string) => string): Product[] {
+  if (!rekey) return products;
+  return products.map((p) => {
+    const k = p.locations?.[layoutId];
+    const nk = k ? rekey(k) : k;
+    return nk && nk !== k ? { ...p, locations: { ...p.locations, [layoutId]: nk } } : p;
+  });
+}
+
+/**
+ * The shopper picked up an item (checked it off, or into the cart) at `at`
+ * in build mode. Builds the map around them and saves the item's spot.
+ *
+ * - The item's master-list entry is the list item's own, an exact name
+ *   match, or a new one (with the category a similar item has).
+ * - Saved in a different place in this store → nothing moves; the caller
+ *   asks first (`conflict`). Saved in the same place → updated to this spot.
+ * - The list entry is ticked, or added already ticked.
+ */
+export function pickUp(
+  state: { items: ListItem[]; products: Product[]; layout: StoreLayout; catalog: Catalog },
+  name: string, itemId: string | undefined, at: Point, target: BuildTarget = 'shelf',
+): PickUpResult {
+  const { items, catalog, layout } = state;
+  let products = state.products;
+  const listItem = itemId ? items.find((i) => i.id === itemId) : undefined;
+  let product = (listItem?.productId && catalog.productById.get(listItem.productId)) || catalog.exact(listItem?.name ?? name);
+  if (!product) {
+    // New to the master list: keep the name as typed, borrow a similar item's category.
+    const similar = catalog.match(listItem?.name ?? name);
+    product = { id: `p-${newId()}`, name: capitalize((listItem?.name ?? name).trim()), ...(similar?.categoryId && { categoryId: similar.categoryId }) };
+    products = [...products, product];
+  }
+  const pid = product.id;
+  const itemName = product.name;
+  const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
+  const plan = planBuild(layout, at, category, 'vertical', target);
+
+  const savedKey = product.locations?.[layout.id];
+  const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
+  const conflict = !!saved && saved.placeId !== plan.placeId;
+
+  let next = layout;
+  if (!conflict && plan.action !== 'blocked') {
+    next = plan.layout;
+    products = rekeyAll(products, layout.id, plan.rekey).map((p) => (p.id === pid
+      ? { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
+      : p));
+  }
+
+  const waiting = listItem ?? items.find((i) => !i.done && (i.productId === pid || catalog.exact(i.name)?.id === pid));
+  const nextItems = waiting
+    ? items.map((i) => (i.id === waiting.id ? { ...i, done: true, productId: pid } : i))
+    : [...items, { id: newId(), name: itemName, done: true, productId: pid }];
+
+  const outcome: PickUpOutcome = conflict
+    ? { kind: 'conflict', productId: pid, itemName, savedKey: savedKey! }
+    : plan.action === 'blocked'
+      ? { kind: 'blocked', itemName, productId: pid }
+      : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid };
+  return { layout: next, products, items: nextItems, outcome };
+}
+
+/** "Move here" after a conflict: build at `at` and move the item's saved spot there. */
+export function moveHere(
+  state: { products: Product[]; layout: StoreLayout; catalog: Catalog }, productId: string, at: Point, target: BuildTarget = 'shelf',
+): { layout: StoreLayout; products: Product[]; plan: BuildPlan } | undefined {
+  const product = state.catalog.productById.get(productId);
+  if (!product) return undefined;
+  const category = product.categoryId ? state.catalog.categoryById.get(product.categoryId) : undefined;
+  const plan = planBuild(state.layout, at, category, 'vertical', target);
+  if (plan.action === 'blocked') return { layout: state.layout, products: state.products, plan };
+  const lid = state.layout.id;
+  const products = rekeyAll(state.products, lid, plan.rekey).map((p) => (p.id === productId
+    ? { ...p, locations: { ...p.locations, [lid]: plan.spotKey! } }
+    : p));
+  return { layout: plan.layout, products, plan };
 }
