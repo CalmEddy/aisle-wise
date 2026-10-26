@@ -53,13 +53,13 @@ tap 🛒 Cart. The map builds itself around you (`src/core/build.ts`):
 - **Up to 3 squares past the end of a shelf** (lined up with it) – the shelf
   is extended to you. Items already on it stay where they physically are.
 - **Anywhere else** – a new 3-square shelf is made through your square
-  (trimmed to fit), named after the item's category. The banner asks
+  (trimmed to fit), numbered "Shelf 1", "Shelf 2"…. The banner asks
   ↕ / ↔ for its direction, and offers **Rename** and **Undo**.
 - An item already saved somewhere else in the store isn't moved without
   asking (**Keep** / **Move here**).
 - Switch **Build: Shelves | Areas** to make open areas instead: picking up on
-  open floor makes a 3 × 3 area around you (trimmed to fit, named after the
-  item's category), and picking up within 3 squares outside an area
+  open floor makes a 3 × 3 area around you (trimmed to fit, numbered "Area 1",
+  "Area 2"…), and picking up within 3 squares outside an area
   stretches it to include you.
 
 Tap a shelf or area on the map to edit it right there – label, what's on

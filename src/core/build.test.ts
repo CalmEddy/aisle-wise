@@ -16,19 +16,19 @@ const where = (l: StoreLayout, key?: string) => {
 };
 
 describe('build mode', () => {
-  it('creates a 3-square shelf centred on you, labelled and stocked with the item’s category', () => {
+  it('creates a 3-square shelf centred on you, numbered and stocked with the item’s category', () => {
     const plan = planBuild(store(), { x: 10, y: 10 }, cat('pasta'));
     expect(plan.action).toBe('create');
     const s = plan.layout.places[0] as Shelf;
     expect(footprint(s)).toEqual({ x: 10, y: 9, w: 1, h: 3 });
-    expect(s).toMatchObject({ label: 'Pasta & Rice', categories: ['pasta'], orientation: 'vertical' });
+    expect(s).toMatchObject({ label: 'Shelf 1', categories: ['pasta'], orientation: 'vertical' });
     expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
   });
 
-  it('names a shelf by number when the item has no category, and can start sideways', () => {
+  it('numbers a shelf when the item has no category too, and can start sideways', () => {
     const plan = planBuild(store([shelf({ x: 1 })]), { x: 10, y: 10 }, undefined, 'horizontal');
     const s = plan.layout.places[1] as Shelf;
-    expect(s).toMatchObject({ label: 'Shelf 2', categories: [], orientation: 'horizontal' });
+    expect(s).toMatchObject({ label: 'Shelf 1', categories: [], orientation: 'horizontal' }); // "Pasta & Rice" isn't numbered
     expect(footprint(s)).toEqual({ x: 9, y: 10, w: 3, h: 1 });
   });
 
@@ -121,10 +121,10 @@ describe('build mode', () => {
     expect(growStore(l, 'down').layout.places[0]).toMatchObject({ x: 5, y: 5 });
   });
 
-  it('in Area mode, makes a 3×3 area centred on you, named after the category', () => {
+  it('in Area mode, makes a 3×3 area centred on you, numbered', () => {
     const plan = planBuild(store(), { x: 10, y: 10 }, cat('fruit'), 'vertical', 'area');
     expect(plan.action).toBe('createArea');
-    expect(plan.layout.places[0]).toMatchObject({ kind: 'area', label: 'Fruit', x: 9, y: 9, w: 3, h: 3, categories: ['fruit'] });
+    expect(plan.layout.places[0]).toMatchObject({ kind: 'area', label: 'Area 1', x: 9, y: 9, w: 3, h: 3, categories: ['fruit'] });
     expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
     expect(planBuild(store(), { x: 1, y: 1 }, undefined, 'vertical', 'area').layout.places[0]).toMatchObject({ label: 'Area 1' });
   });
@@ -152,6 +152,14 @@ describe('build mode', () => {
     expect(planBuild(l, { x: 11, y: 6 }, undefined, 'vertical', 'area').action).toBe('createArea'); // 4 away
     // Inside or beside a shelf still wins over area building.
     expect(planBuild(store([shelf()]), { x: 6, y: 6 }, undefined, 'vertical', 'area').action).toBe('onShelf');
+  });
+
+  it('numbers new shelves and areas with the next free number', () => {
+    const l = store([shelf({ label: 'Shelf 1' }), shelf({ id: 's3', x: 1, label: 'Shelf 3' }), shelf({ id: 'p', x: 3, label: 'Pasta' })]);
+    expect((planBuild(l, { x: 15, y: 15 }, cat('pasta')).layout.places[3] as Shelf).label).toBe('Shelf 2');
+    const withArea = store([{ kind: 'area', id: 'a', label: 'Area 1', x: 0, y: 15, w: 2, h: 2, categories: [] }]);
+    expect(planBuild(withArea, { x: 15, y: 5 }, cat('fruit'), 'vertical', 'area').layout.places[1].label).toBe('Area 2');
+    expect(areaHere(withArea, { x: 10, y: 5 })!.area.label).toBe('Area 2');
   });
 });
 

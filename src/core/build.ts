@@ -39,6 +39,16 @@ export interface BuildPlan {
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
+
+/** The next free number for a new shelf or area label ("Shelf 4", "Area 2"). */
+export function nextLabel(l: StoreLayout, kind: Place['kind']): string {
+  const word = kind === 'shelf' ? 'Shelf' : 'Area';
+  const used = new Set(l.places.filter((p) => p.kind === kind)
+    .map((p) => new RegExp(`^${word} (\\d+)$`).exec(p.label.trim())?.[1]).filter(Boolean).map(Number));
+  let n = 1;
+  while (used.has(n)) n++;
+  return `${word} ${n}`;
+}
 const inBounds = (l: StoreLayout, p: Point) => p.x >= 0 && p.y >= 0 && p.x < l.width && p.y < l.height;
 
 /** Is a square free for a new shelf/area: inside the store and not part of another place? */
@@ -187,11 +197,10 @@ export function planBuild(
   // 4. A new shelf through where you're standing.
   const fit = fitShelf(l, p, orientation, NEW_SHELF_LENGTH);
   if (!fit) return { action: 'blocked', layout: l, label: '' };
-  const count = l.places.filter((pl) => pl.kind === 'shelf').length + 1;
   const shelf: Shelf = {
     kind: 'shelf',
     id: `s-${newId()}`,
-    label: category?.name ?? `Shelf ${count}`,
+    label: nextLabel(l, 'shelf'),
     orientation,
     length: fit.length,
     x: orientation === 'vertical' ? p.x : fit.start,
@@ -250,7 +259,7 @@ export function turnShelf(l: StoreLayout, shelfId: string, p: Point): { layout: 
 }
 
 /** An open area around `p`: as big as fits, up to 6 × 4. */
-export function areaHere(l: StoreLayout, p: Point, label = 'New area'): { layout: StoreLayout; area: Area } | undefined {
+export function areaHere(l: StoreLayout, p: Point, label = nextLabel(l, 'area')): { layout: StoreLayout; area: Area } | undefined {
   if (!free(l, p)) return undefined;
   for (const [w, h] of [[6, 4], [4, 4], [4, 3], [3, 3], [3, 2], [2, 2], [1, 1]]) {
     for (let dy = 0; dy < h; dy++) {
@@ -372,9 +381,8 @@ function planArea(l: StoreLayout, p: Point, category?: Category): BuildPlan {
         let ok = true;
         for (let yy = y; yy < y + h && ok; yy++) for (let xx = x; xx < x + w && ok; xx++) ok = free(l, { x: xx, y: yy });
         if (!ok) continue;
-        const count = l.places.filter((pl) => pl.kind === 'area').length + 1;
         const area: Area = {
-          kind: 'area', id: `ar-${newId()}`, label: category?.name ?? `Area ${count}`, x, y, w, h, categories: cat ? [cat] : [],
+          kind: 'area', id: `ar-${newId()}`, label: nextLabel(l, 'area'), x, y, w, h, categories: cat ? [cat] : [],
         };
         return {
           action: 'createArea',
