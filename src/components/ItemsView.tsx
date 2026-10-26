@@ -56,7 +56,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
   }, [catalog, query]);
 
   const startNew = () =>
-    setEditing({ id: `p-${newId()}`, name: query.trim(), categoryId: catalog.categories[0]?.id });
+    setEditing({ id: `p-${newId()}`, name: query.trim() });
 
   return (
     <div className="items-view">
@@ -121,8 +121,11 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
           layouts={layouts}
           onCancel={() => setEditing(null)}
           onSave={(p) => {
+            const isNew = !catalog.productById.has(p.id);
             setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [...prev, p]));
             setEditing(null);
+            // Ready for the next one.
+            if (isNew) setQuery('');
           }}
           onDelete={() => {
             setProducts((prev) => prev.filter((x) => x.id !== editing.id));
