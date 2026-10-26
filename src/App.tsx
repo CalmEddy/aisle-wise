@@ -5,7 +5,8 @@ import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { Catalog, normalize } from './core/catalog';
-import { defaultCategories, defaultProducts } from './core/categories';
+import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
+import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { productFor, resolveSpot } from './core/locate';
@@ -42,6 +43,7 @@ export default function App() {
   const [items, setItems] = usePersistentState<ListItem[]>('aw.items', []);
   const [products, setProducts] = usePersistentState<Product[]>('aw.products', defaultProducts);
   const [categories, setCategories] = usePersistentState<Category[]>('aw.categories', defaultCategories);
+  const [display, setDisplay] = usePersistentState<Display>('aw.display', defaultDisplay);
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
 
   useMoveOldLocationsIntoProducts(setProducts);
@@ -88,6 +90,12 @@ export default function App() {
   const layout = layouts.find((l) => l.id === activeId) ?? layouts[0] ?? demoLayout;
   const floor = useMemo(() => new Floor(layout), [layout]);
   const catalog = useMemo(() => new Catalog(products, categories), [products, categories]);
+  // Each category's colour and icon, and how the map should show them.
+  const looks = useMemo(() => new Map(categories.map((c, i) => [c.id, categoryLook(c, i)])), [categories]);
+  const mapLook: SectionLook = useMemo(() => ({
+    colorOf: display.mapColors ? (id: string) => looks.get(id)?.color : undefined,
+    iconOf: display.mapIcons ? (id: string) => looks.get(id)?.icon : undefined,
+  }), [looks, display.mapColors, display.mapIcons]);
   const position = pos?.layoutId === layout.id ? pos.point : layout.entrance;
   const done = items.filter((i) => i.done).length;
   const onList = useMemo(
@@ -311,6 +319,10 @@ export default function App() {
           position={position}
           setPosition={(point) => setPos({ layoutId: layout.id, point })}
           onEditLayout={() => setView('layout')}
+          display={display}
+          setDisplay={setDisplay}
+          mapLook={mapLook}
+          looks={looks}
         />
       )}
       {view === 'items' && (
@@ -334,6 +346,10 @@ export default function App() {
           categories={categories}
           onCopied={copyItemLocations}
           onShare={shareStore}
+          display={display}
+          setDisplay={setDisplay}
+          mapLook={mapLook}
+          looks={looks}
           onDone={() => setView('list')}
         />
       )}

@@ -141,3 +141,62 @@ export function describeExact(p: Place, s: ExactSpot): string {
   const side = vertical ? (s.v === 0 ? 'left side' : 'right side') : s.v === 0 ? 'top side' : 'bottom side';
   return `${side}, ${along}`;
 }
+
+// ---------------------------------------------------------------------------
+// Category sections
+
+/** Categories on each side of an aisle: [left/top shelf, right/bottom shelf]. */
+export function aisleSides(a: Aisle): [string[], string[]] {
+  return a.sides ?? [a.categories, a.categories];
+}
+
+/** Sets an aisle's sides, keeping `categories` (everything on either side) in step. */
+export function withSides(a: Aisle, sides: [string[], string[]]): Aisle {
+  const all = [...sides[0]];
+  for (const c of sides[1]) if (!all.includes(c)) all.push(c);
+  return { ...a, sides: [[...sides[0]], [...sides[1]]], categories: all };
+}
+
+/**
+ * Where a category sits in a place, as an exact spot. On an aisle a
+ * category on one side is on that shelf; on both sides, in the middle of the
+ * walkway. Sections share each side (or an area's long side) equally.
+ */
+export function categorySpot(p: Place, categoryId: string): ExactSpot | undefined {
+  const mid = (i: number, n: number) => (i + 0.5) / n;
+  if (p.kind === 'area') {
+    const i = p.categories.indexOf(categoryId);
+    if (i < 0) return undefined;
+    const t = mid(i, p.categories.length);
+    return p.w >= p.h ? { u: t, v: 0.5 } : { u: 0.5, v: t };
+  }
+  const [a, b] = aisleSides(p);
+  const ia = a.indexOf(categoryId);
+  const ib = b.indexOf(categoryId);
+  if (ia >= 0 && ib >= 0) return { u: (mid(ia, a.length) + mid(ib, b.length)) / 2, v: 0.5 };
+  if (ia >= 0) return { u: mid(ia, a.length), v: 0 };
+  if (ib >= 0) return { u: mid(ib, b.length), v: 1 };
+  return undefined;
+}
+
+export interface SectionShape {
+  categoryId: string;
+  /** Shelf segment (aisles) or band (areas), in grid units. */
+  rect: { x: number; y: number; w: number; h: number };
+}
+
+/** The coloured sections to draw for a place. */
+export function sectionShapes(p: Place): SectionShape[] {
+  const split = (r: Rect, ids: string[], alongX: boolean): SectionShape[] =>
+    ids.map((categoryId, i) => {
+      const n = ids.length;
+      return alongX
+        ? { categoryId, rect: { x: r.x + (r.w * i) / n, y: r.y, w: r.w / n, h: r.h } }
+        : { categoryId, rect: { x: r.x, y: r.y + (r.h * i) / n, w: r.w, h: r.h / n } };
+    });
+  if (p.kind === 'area') return split(footprint(p), p.categories, p.w >= p.h);
+  const [left, right] = shelves(p);
+  const [a, b] = aisleSides(p);
+  const alongX = p.orientation === 'horizontal';
+  return [...split(left, a, alongX), ...split(right, b, alongX)];
+}

@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import { demoLayout } from '../core/demoLayout';
 import { Floor } from '../core/floor';
-import { clampPlace, footprint } from '../core/geometry';
+import { aisleSides, clampPlace, footprint, withSides } from '../core/geometry';
 import type { Aisle, Area, Category, Place, Point, StoreLayout } from '../core/types';
 import { checkLayout } from '../core/validate';
+import type { Display, SectionLook } from '../display';
+import { DisplayToggles } from './DisplayToggles';
 import { StoreMap } from './StoreMap';
 
 interface Props {
@@ -16,6 +18,10 @@ interface Props {
   /** Called after a layout is copied, so item locations can be copied too. */
   onCopied: (fromId: string, toId: string) => void;
   onShare: (layout: StoreLayout) => void;
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+  mapLook: SectionLook;
+  looks: Map<string, { color: string; icon: string }>;
 }
 
 type Tool = 'select' | 'aisle-v' | 'aisle-h' | 'area' | 'entrance' | 'checkout';
@@ -36,7 +42,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
-export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDone, categories, onCopied, onShare }: Props) {
+export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDone, categories, onCopied, onShare, display, setDisplay, mapLook, looks }: Props) {
   const layout = layouts.find((l) => l.id === activeId) ?? layouts[0];
   const [tool, setTool] = useState<Tool>('select');
   const [selectedId, setSelectedId] = useState<string>();
@@ -208,6 +214,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
       <StoreMap
         ref={svgRef}
         layout={layout}
+        look={mapLook}
         selectedId={selectedId}
         showGrid
         onPlacePointerDown={onPlaceDown}
@@ -240,6 +247,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
           />
         )}
       </StoreMap>
+      <DisplayToggles display={display} setDisplay={setDisplay} show={['mapColors', 'mapIcons']} />
 
       {selected ? (
         <PlacePanel
@@ -250,6 +258,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
             setSelectedId(undefined);
           }}
           categories={categories}
+          looks={looks}
           usedElsewhere={(catId) => layout.places.find((p) => p.id !== selected.id && p.categories.includes(catId))?.label}
         />
       ) : (
@@ -282,22 +291,15 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
   );
 }
 
-function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories }: {
+function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories, looks }: {
   place: Place;
   onChange: (patch: Partial<Aisle> | Partial<Area>) => void;
   onDelete: () => void;
   usedElsewhere: (categoryId: string) => string | undefined;
   categories: Category[];
+  looks: Map<string, { color: string; icon: string }>;
 }) {
-  const nameOf = (id: string) => categories.find((c) => c.id === id)?.name ?? 'Deleted category';
-  const reorder = (index: number, delta: number) => {
-    const next = [...place.categories];
-    const [id] = next.splice(index, 1);
-    next.splice(index + delta, 0, id);
-    onChange({ categories: next });
-  };
   const f = footprint(place);
-  const available = categories.filter((c) => !place.categories.includes(c.id));
   const move = (dx: number, dy: number) => onChange({ x: place.x + dx, y: place.y + dy });
 
   return (
@@ -306,6 +308,22 @@ function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories }: {
         <span>{place.kind === 'aisle' ? 'Aisle label' : 'Area label'}</span>
         <input value={place.label} onChange={(e) => onChange({ label: e.target.value })} placeholder="e.g. Aisle 5 or Bakery" />
       </label>
+
+      {place.kind === 'aisle' ? (
+        <AisleSides aisle={place} onChange={onChange} categories={categories} looks={looks} usedElsewhere={usedElsewhere} />
+      ) : (
+        <div className="field">
+          <span>What’s in this area <span className="muted">({place.w >= place.h ? 'left to right' : 'top to bottom'} on the map)</span></span>
+          <CategoryList
+            ids={place.categories}
+            onChange={(ids) => onChange({ categories: ids })}
+            categories={categories}
+            looks={looks}
+            usedElsewhere={usedElsewhere}
+            addLabel="+ Add to this area…"
+          />
+        </div>
+      )}
 
       {place.kind === 'aisle' ? (
         <>
@@ -336,35 +354,121 @@ function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories }: {
         <button className="btn" onClick={() => move(1, 0)} aria-label="Move right">→</button>
       </div>
 
-      <div className="field">
-        <span>What’s here <span className="muted">(in order, {alongX(place) ? 'left to right' : 'top to bottom'} on the map)</span></span>
-        <ol className="stock-list">
-          {place.categories.map((id, i) => (
-            <li key={id} className="row">
-              <span className="num">{i + 1}</span>
-              <span className="name">{nameOf(id)}</span>
-              <button className="icon" onClick={() => reorder(i, -1)} disabled={i === 0} aria-label={`Move ${nameOf(id)} earlier`}>↑</button>
-              <button className="icon" onClick={() => reorder(i, 1)} disabled={i === place.categories.length - 1} aria-label={`Move ${nameOf(id)} later`}>↓</button>
-              <button className="icon" onClick={() => onChange({ categories: place.categories.filter((c) => c !== id) })} aria-label={`Remove ${nameOf(id)}`}>×</button>
-            </li>
-          ))}
-          {place.categories.length === 0 && <li className="muted small">Nothing yet.</li>}
-        </ol>
-        <select
-          value=""
-          onChange={(e) => onChange({ categories: [...place.categories, e.target.value] })}
-          aria-label="Add a category"
-        >
-          <option value="" disabled>+ Add what’s stocked here…</option>
-          {available.map((c) => {
-            const other = usedElsewhere(c.id);
-            return <option key={c.id} value={c.id}>{c.name}{other ? ` (now in ${other})` : ''}</option>;
-          })}
-        </select>
-      </div>
-
       <button className="btn danger" onClick={onDelete}>Delete {place.kind === 'aisle' ? 'aisle' : 'area'}</button>
     </section>
+  );
+}
+
+/** The two shelves of an aisle, each with its own ordered categories. */
+function AisleSides({ aisle, onChange, categories, looks, usedElsewhere }: {
+  aisle: Aisle;
+  onChange: (patch: Partial<Aisle>) => void;
+  categories: Category[];
+  looks: Map<string, { color: string; icon: string }>;
+  usedElsewhere: (categoryId: string) => string | undefined;
+}) {
+  const sides = aisleSides(aisle);
+  const vertical = aisle.orientation === 'vertical';
+  const names = vertical ? ['Left side', 'Right side'] : ['Top side', 'Bottom side'];
+  const order = vertical ? 'top to bottom' : 'left to right';
+  const set = (next: [string[], string[]]) => {
+    const updated = withSides(aisle, next);
+    onChange({ sides: updated.sides, categories: updated.categories });
+  };
+
+  return (
+    <div className="field">
+      <span>What’s on each side <span className="muted">({order} on the map)</span></span>
+      <div className="sides">
+        {[0, 1].map((s) => {
+          const mine = sides[s];
+          const other = sides[1 - s];
+          const setMine = (ids: string[]) => set(s === 0 ? [ids, other] : [other, ids]);
+          return (
+            <div key={s} className="side">
+              <h4>{s === 0 ? (vertical ? '◧ ' : '⬒ ') : ''}{names[s]}{s === 1 ? (vertical ? ' ◨' : ' ⬓') : ''}</h4>
+              <CategoryList
+                ids={mine}
+                onChange={setMine}
+                categories={categories}
+                looks={looks}
+                usedElsewhere={(id) => (other.includes(id) ? 'across the aisle' : usedElsewhere(id))}
+                addLabel={`+ Add to ${names[s].toLowerCase()}…`}
+                across={{
+                  label: `Move to ${names[1 - s].toLowerCase()}`,
+                  onMove: (id) => {
+                    const without = mine.filter((c) => c !== id);
+                    const to = other.includes(id) ? other : [...other, id];
+                    set(s === 0 ? [without, to] : [to, without]);
+                  },
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div className="field-row">
+        <button className="btn" onClick={() => set([sides[1], sides[0]])} disabled={!sides[0].length && !sides[1].length}>⇄ Swap sides</button>
+        <button
+          className="btn"
+          onClick={() => {
+            const all = withSides(aisle, sides).categories;
+            set([all, [...all]]);
+          }}
+          disabled={!sides[0].length && !sides[1].length}
+        >
+          Same on both sides
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** An ordered list of category chips with reorder, move-across and remove, plus an add menu. */
+function CategoryList({ ids, onChange, categories, looks, usedElsewhere, addLabel, across }: {
+  ids: string[];
+  onChange: (ids: string[]) => void;
+  categories: Category[];
+  looks: Map<string, { color: string; icon: string }>;
+  usedElsewhere: (categoryId: string) => string | undefined;
+  addLabel: string;
+  across?: { label: string; onMove: (id: string) => void };
+}) {
+  const nameOf = (id: string) => categories.find((c) => c.id === id)?.name ?? 'Deleted category';
+  const moveBy = (i: number, d: number) => {
+    const next = [...ids];
+    const [id] = next.splice(i, 1);
+    next.splice(i + d, 0, id);
+    onChange(next);
+  };
+  const available = categories.filter((c) => !ids.includes(c.id));
+  return (
+    <>
+      <ol className="stock-list">
+        {ids.map((id, i) => {
+          const look = looks.get(id);
+          return (
+            <li key={id} className="row stock">
+              <span className="cat-chip" style={{ '--cat': look?.color ?? '#999' } as React.CSSProperties}>
+                <span aria-hidden="true">{look?.icon}</span> {nameOf(id)}
+              </span>
+              <button className="icon" onClick={() => moveBy(i, -1)} disabled={i === 0} aria-label={`Move ${nameOf(id)} earlier`}>↑</button>
+              <button className="icon" onClick={() => moveBy(i, 1)} disabled={i === ids.length - 1} aria-label={`Move ${nameOf(id)} later`}>↓</button>
+              {across && <button className="icon" onClick={() => across.onMove(id)} aria-label={`${across.label}: ${nameOf(id)}`} title={across.label}>⇄</button>}
+              <button className="icon" onClick={() => onChange(ids.filter((c) => c !== id))} aria-label={`Remove ${nameOf(id)}`}>×</button>
+            </li>
+          );
+        })}
+        {ids.length === 0 && <li className="muted small">Nothing yet.</li>}
+      </ol>
+      <select value="" onChange={(e) => onChange([...ids, e.target.value])} aria-label={addLabel}>
+        <option value="" disabled>{addLabel}</option>
+        {available.map((c) => {
+          const where = usedElsewhere(c.id);
+          return <option key={c.id} value={c.id}>{looks.get(c.id)?.icon} {c.name}{where ? ` (${where === 'across the aisle' ? 'across the aisle' : `now in ${where}`})` : ''}</option>;
+        })}
+      </select>
+    </>
   );
 }
 
@@ -402,11 +506,6 @@ function handlePoint(p: Place): Point {
   const f = footprint(p);
   if (p.kind === 'area') return { x: f.x + f.w, y: f.y + f.h };
   return p.orientation === 'vertical' ? { x: f.x + f.w / 2, y: f.y + f.h } : { x: f.x + f.w, y: f.y + f.h / 2 };
-}
-
-/** Whether a place's categories are laid out left-to-right (else top-to-bottom). Matches spotPoint. */
-function alongX(p: Place) {
-  return p.kind === 'aisle' ? p.orientation === 'horizontal' : p.w >= p.h;
 }
 
 function clamp(v: number, min: number, max: number) {

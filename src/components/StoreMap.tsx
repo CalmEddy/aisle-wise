@@ -1,5 +1,6 @@
 import { forwardRef, type ReactNode, type SVGProps } from 'react';
-import { footprint, placeAt, shelves, walkway } from '../core/geometry';
+import { footprint, placeAt, sectionShapes, shelves, walkway } from '../core/geometry';
+import type { SectionLook } from '../display';
 import type { Place, Point, Rect, StoreLayout } from '../core/types';
 
 /** A numbered stop on the map, with a dot for each spot to pick up from. */
@@ -20,6 +21,8 @@ interface Props {
   preview?: { x: number; y: number };
   /** Zoom in on this rectangle (grid units). */
   focus?: Rect;
+  /** Colours and icons for category sections. */
+  look?: SectionLook;
   /** Tap anywhere: grid coordinates (fractions allowed) and the place there, if any. */
   onMapTap?: (x: number, y: number, place: Place | undefined) => void;
   /** Place to outline, e.g. the current drop target. */
@@ -52,7 +55,7 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, visits = [], preview, focus, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, visits = [], preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -85,6 +88,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           place={place}
           highlighted={highlightId === place.id}
           selected={selectedId === place.id}
+          look={look}
           onTap={onPlaceTap}
           onPointerDown={onPlacePointerDown}
         />
@@ -119,10 +123,11 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
   );
 });
 
-function PlaceShape({ place, highlighted, selected, onTap, onPointerDown }: {
+function PlaceShape({ place, highlighted, selected, look, onTap, onPointerDown }: {
   place: Place;
   highlighted: boolean;
   selected: boolean;
+  look?: SectionLook;
   onTap?: (p: Place) => void;
   onPointerDown?: (p: Place, e: React.PointerEvent) => void;
 }) {
@@ -134,6 +139,8 @@ function PlaceShape({ place, highlighted, selected, onTap, onPointerDown }: {
   const room = vertical ? f.h : f.w;
   const size = Math.min(1.5, Math.max(0.8, (vertical ? w.w : w.h) * 0.75), (room / Math.max(1, place.label.length)) * 1.7);
   const cls = ['place', place.kind, highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
+  const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
+  const isArea = place.kind === 'area';
 
   return (
     <g
@@ -146,6 +153,17 @@ function PlaceShape({ place, highlighted, selected, onTap, onPointerDown }: {
       {shelves(place).map((s, i) => (
         <rect key={i} x={s.x + 0.1} y={s.y + 0.1} width={s.w - 0.2} height={s.h - 0.2} className="place-shelf" rx={0.2} />
       ))}
+      {look?.colorOf && sections.map((sec, i) => {
+        const color = look.colorOf!(sec.categoryId);
+        if (!color) return null;
+        const r = sec.rect;
+        // Shelves: solid strips; areas: tinted bands.
+        const inset = isArea ? 0.15 : 0.1;
+        return (
+          <rect key={`c${i}`} className={isArea ? 'section-band' : 'section-shelf'} x={r.x + inset} y={r.y + inset}
+            width={Math.max(0, r.w - inset * 2)} height={Math.max(0, r.h - inset * 2)} rx={0.2} fill={color} />
+        );
+      })}
       <text
         x={cx}
         y={cy}
@@ -157,6 +175,20 @@ function PlaceShape({ place, highlighted, selected, onTap, onPointerDown }: {
       >
         {place.label}
       </text>
+      {look?.iconOf && sections.map((sec, i) => {
+        const icon = look.iconOf!(sec.categoryId);
+        if (!icon) return null;
+        const r = sec.rect;
+        const fit = isArea ? Math.min(1.8, Math.min(r.w, r.h) * 0.55) : Math.min(1.4, Math.max(r.w, r.h) * 0.7);
+        if (fit < 0.6) return null;
+        // Areas: icon in the section's corner so the area's label stays readable. Shelves: centred.
+        const x = isArea ? r.x + fit * 0.75 : r.x + r.w / 2;
+        const y = isArea ? r.y + fit * 0.75 : r.y + r.h / 2;
+        return (
+          <text key={`i${i}`} className="section-icon" x={x} y={y}
+            textAnchor="middle" dominantBaseline="central" fontSize={fit}>{icon}</text>
+        );
+      })}
     </g>
   );
 }

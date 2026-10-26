@@ -19,7 +19,10 @@ interface PlaceBase {
   /** Top-left corner of the place's footprint, in grid squares. */
   x: number;
   y: number;
-  /** Category ids stocked here, in order along the aisle/area. */
+  /**
+   * Category ids stocked here, in order along the area. For aisles this is
+   * every category on either side (kept in step with `sides`).
+   */
   categories: string[];
 }
 
@@ -31,6 +34,12 @@ export interface Aisle extends PlaceBase {
   length: number;
   /** Width of the walkway between the two shelves. */
   width: number;
+  /**
+   * Categories on each shelf, in order from the top/left end:
+   * [left (or top) shelf, right (or bottom) shelf]. Missing on aisles made
+   * before sides existed: then `categories` are on both sides.
+   */
+  sides?: [string[], string[]];
 }
 
 /** An open, walkable rectangle such as Produce or the Deli counter. */
@@ -64,6 +73,10 @@ export interface ListItem {
 export interface Category {
   id: string;
   name: string;
+  /** CSS colour, e.g. #4caf50. Defaults per category (see categories.ts). */
+  color?: string;
+  /** An emoji. */
+  icon?: string;
 }
 
 /** An item in the master grocery list. */

@@ -6,6 +6,8 @@ import { exactKey, exactSpotAt, placeAt, spotPoint } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planRoute } from '../core/route';
 import type { ListItem, Point, Product, Stop, StoreLayout } from '../core/types';
+import type { Display, SectionLook } from '../display';
+import { DisplayToggles } from './DisplayToggles';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapVisit } from './StoreMap';
 
@@ -24,6 +26,10 @@ interface Props {
   position: Point;
   setPosition: (p: Point) => void;
   onEditLayout: () => void;
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+  mapLook: SectionLook;
+  looks: Map<string, { color: string; icon: string }>;
 }
 
 interface Drag {
@@ -60,6 +66,9 @@ export function ShoppingView(props: Props) {
   }, [toast, picking, asking]);
 
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
+  /** Category colour for a list row, when list colours are on. */
+  const colorOf = (item: ListItem) =>
+    props.display.listColors ? props.looks.get(productFor(item, catalog)?.categoryId ?? '')?.color : undefined;
 
   // Re-plans every time the list, the layout, the master list or the shopper's position changes.
   const { route, visits, unplaced, notSold } = useMemo(() => {
@@ -207,9 +216,11 @@ export function ShoppingView(props: Props) {
             layout={layout}
             you={position}
             visits={mapVisits}
+            look={props.mapLook}
             highlightId={here?.id}
             onMapTap={(x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
           />
+          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors']} />
           <section className="here">
             <span className="muted">{hereLabel ? <>You’re at <b>{hereLabel}</b> — tap the map to move</> : 'Tap the map where you are, or pick a place'}</span>
             <div className="chips" role="list">
@@ -244,13 +255,13 @@ export function ShoppingView(props: Props) {
 
         {nextVisit && (
           <VisitCard visit={nextVisit} next drag={drag} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} big />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} colorOf={colorOf} big />
           )} />
         )}
 
         {laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} colorOf={colorOf} />
           )} />
         ))}
 
@@ -348,6 +359,7 @@ export function ShoppingView(props: Props) {
 
       {picking && (
         <SpotPicker
+          look={props.mapLook}
           title={`Where is ${picking.name}?`}
           layout={layout}
           catalog={catalog}
@@ -389,7 +401,7 @@ export function ShoppingView(props: Props) {
             <p>
               {overSpot ? <>Move <b>{drag.item.name}</b> to <b>{overSpot.label}</b></> : <>Drop <b>{drag.item.name}</b> on the exact spot</>}
             </p>
-            <StoreMap layout={layout} highlightId={overSpot?.placeId} preview={overSpot?.mark} />
+            <StoreMap layout={layout} look={props.mapLook} highlightId={overSpot?.placeId} preview={overSpot?.mark} />
           </div>
           <div className="drag-ghost" style={{ left: drag.x, top: drag.y }}>{drag.item.name}</div>
         </>
@@ -446,19 +458,24 @@ function VisitCard({ visit, next, drag, rows }: {
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, big }: {
+function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, colorOf, big }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
   onMenu?: (i: ListItem) => void;
   drag?: DragHandlers;
   dragging?: string;
+  colorOf?: (i: ListItem) => string | undefined;
   big?: boolean;
 }) {
   return (
     <ul className={big ? 'items big' : 'items'}>
       {items.map((item) => (
-        <li key={item.id} className={['row', item.done && 'checked', dragging === item.id && 'dragging'].filter(Boolean).join(' ')}>
+        <li
+          key={item.id}
+          className={['row', item.done && 'checked', dragging === item.id && 'dragging', colorOf?.(item) && 'colored'].filter(Boolean).join(' ')}
+          style={colorOf?.(item) ? ({ '--cat': colorOf(item) } as React.CSSProperties) : undefined}
+        >
           {drag && (
             <span className="handle" aria-label={`Drag ${item.name} to a new location`} {...drag(item)}>⠿</span>
           )}

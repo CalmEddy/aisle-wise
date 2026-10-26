@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { normalize, type Catalog } from '../core/catalog';
-import { parseExactKey } from '../core/geometry';
+import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
+import { aisleSides, parseExactKey, withSides } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './ShoppingView';
@@ -76,7 +77,14 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
 
       {groups.map((g) => (
         <section className="card group" key={g.id || 'none'}>
-          <h3>{g.name} <span className="muted small">{g.products.length}</span></h3>
+          <h3>
+            {g.id && (() => {
+              const i = catalog.categories.findIndex((c) => c.id === g.id);
+              const look = categoryLook(catalog.categories[i], i);
+              return <span className="cat-dot" style={{ background: look.color }} aria-hidden="true">{look.icon}</span>;
+            })()}
+            {g.name} <span className="muted small">{g.products.length}</span>
+          </h3>
           <ul className="items">
             {g.products.map((p) => (
               <li key={p.id} className="row">
@@ -264,8 +272,10 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
     return m;
   }, [catalog]);
 
-  const rename = (id: string, value: string) =>
-    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name: value } : c)));
+  const [iconFor, setIconFor] = useState<string | null>(null);
+  const update = (id: string, patch: Partial<Category>) =>
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  const rename = (id: string, value: string) => update(id, { name: value });
 
   const move = (index: number, delta: number) =>
     setCategories((prev) => {
@@ -285,14 +295,24 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
     setProducts((prev) => prev.map((p) => (p.categoryId === cat.id ? { ...p, categoryId: undefined } : p)));
     setLayouts((prev) => prev.map((l) => ({
       ...l,
-      places: l.places.map((p) => ({ ...p, categories: p.categories.filter((c) => c !== cat.id) })),
+      places: l.places.map((p) => {
+        const keep = (ids: string[]) => ids.filter((c) => c !== cat.id);
+        return p.kind === 'aisle'
+          ? withSides(p, [keep(aisleSides(p)[0]), keep(aisleSides(p)[1])])
+          : { ...p, categories: keep(p.categories) };
+      }),
     })));
   }
 
   function add() {
     const trimmed = name.trim();
     if (!trimmed) return;
-    setCategories((prev) => [...prev, { id: `c-${newId()}`, name: trimmed }]);
+    setCategories((prev) => {
+      // Next colour not already used, so new categories stand out.
+      const used = new Set(prev.map((c, i) => categoryLook(c, i).color));
+      const color = PALETTE.find((c) => !used.has(c)) ?? PALETTE[prev.length % PALETTE.length];
+      return [...prev, { id: `c-${newId()}`, name: trimmed, color, icon: '🛒' }];
+    });
     setName('');
   }
 
@@ -303,19 +323,49 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
         <button type="submit" disabled={!name.trim()}>Add</button>
       </form>
       <p className="muted small">
-        Rename categories here. This order is used for the grocery item list. To set where a category is in a store,
-        open <b>Store layout</b> and tap an aisle or area.
+        Tap a colour or icon to change it. Rename categories here; this order is used for the grocery item list.
+        To set where a category is in a store, open <b>Store layout</b> and tap an aisle or area.
       </p>
       <ul className="card cat-list">
-        {catalog.categories.map((c, i) => (
-          <li key={c.id} className="row">
+        {catalog.categories.map((c, i) => {
+          const look = categoryLook(c, i);
+          return (
+          <li key={c.id} className="cat-item">
+           <div className="row">
+            <label className="swatch" style={{ background: look.color }} title="Change colour">
+              <input type="color" value={look.color} onChange={(e) => update(c.id, { color: e.target.value })} aria-label={`Colour for ${c.name}`} />
+            </label>
+            <button className="icon-pick" onClick={() => setIconFor(iconFor === c.id ? null : c.id)} aria-label={`Icon for ${c.name}`} aria-expanded={iconFor === c.id}>
+              {look.icon}
+            </button>
             <input value={c.name} onChange={(e) => rename(c.id, e.target.value)} aria-label={`Category name`} />
             <span className="muted small count">{counts.get(c.id) ?? 0}</span>
-            <button className="icon" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${c.name} up`}>↑</button>
-            <button className="icon" onClick={() => move(i, 1)} disabled={i === catalog.categories.length - 1} aria-label={`Move ${c.name} down`}>↓</button>
+            <span className="updown">
+              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${c.name} up`}>▲</button>
+              <button onClick={() => move(i, 1)} disabled={i === catalog.categories.length - 1} aria-label={`Move ${c.name} down`}>▼</button>
+            </span>
             <button className="icon" onClick={() => remove(c)} aria-label={`Delete ${c.name}`}>×</button>
+           </div>
+           {iconFor === c.id && (
+             <div className="icon-grid" role="listbox" aria-label={`Choose an icon for ${c.name}`}>
+               {ICON_CHOICES.map((icon) => (
+                 <button key={icon} role="option" aria-selected={icon === look.icon} className={icon === look.icon ? 'active' : ''}
+                   onClick={() => { update(c.id, { icon }); setIconFor(null); }}>{icon}</button>
+               ))}
+               <input
+                 className="icon-own"
+                 placeholder="Or type any emoji"
+                 aria-label="Type an emoji"
+                 onChange={(e) => {
+                   const own = [...e.target.value.trim()].slice(0, 2).join('');
+                   if (own) update(c.id, { icon: own });
+                 }}
+               />
+             </div>
+           )}
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );

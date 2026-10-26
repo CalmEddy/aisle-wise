@@ -1,4 +1,5 @@
 import { Catalog, normalize } from './catalog';
+import { withSides } from './geometry';
 import type { Category, ListItem, Product, StoreLayout } from './types';
 
 /**
@@ -114,12 +115,12 @@ export interface Data {
 }
 
 /** Finds (or creates) the local category for a shared one: same id, then same name. */
-function categoryFor(name: string | undefined, id: string | undefined, cats: Category[]): string | undefined {
+function categoryFor(name: string | undefined, id: string | undefined, cats: Category[], look?: Pick<Category, 'color' | 'icon'>): string | undefined {
   if (id && cats.some((c) => c.id === id)) return id;
   if (!name) return undefined;
   const byName = cats.find((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase());
   if (byName) return byName.id;
-  const created = { id: id ?? `c-${newId()}`, name };
+  const created: Category = { id: id ?? `c-${newId()}`, name, ...(look?.color && { color: look.color }), ...(look?.icon && { icon: look.icon }) };
   cats.push(created);
   return created.id;
 }
@@ -163,7 +164,7 @@ export function applyListShare(share: ListShare, data: Data): Data & { added: nu
 export function applyStoreShare(share: StoreShare, data: Data, replaceId?: string): Data & { layoutId: string } {
   const categories = [...data.categories];
   // Shared category id → local category id.
-  const catMap = new Map(share.categories.map((c) => [c.id, categoryFor(c.name, c.id, categories)!]));
+  const catMap = new Map(share.categories.map((c) => [c.id, categoryFor(c.name, c.id, categories, c)!]));
   // Keep the sender's id when we can, so a later share of the same store is recognised.
   const layoutId = replaceId ?? (data.layouts.some((l) => l.id === share.layout.id) ? `l-${newId()}` : share.layout.id);
   const names = new Set(data.layouts.filter((l) => l.id !== replaceId).map((l) => l.name));
@@ -174,10 +175,11 @@ export function applyStoreShare(share: StoreShare, data: Data, replaceId?: strin
     ...share.layout,
     id: layoutId,
     name,
-    places: share.layout.places.map((p) => ({
-      ...p,
-      categories: p.categories.map((c) => catMap.get(c) ?? c).filter((c) => categories.some((x) => x.id === c)),
-    })),
+    places: share.layout.places.map((p) => {
+      const map = (ids: string[]) => ids.map((c) => catMap.get(c) ?? c).filter((c) => categories.some((x) => x.id === c));
+      const place = { ...p, categories: map(p.categories) };
+      return place.kind === 'aisle' && place.sides ? withSides(place, [map(place.sides[0]), map(place.sides[1])]) : place;
+    }),
   };
   const remapKey = (key: string) => {
     const [placeId, cat] = key.split(':');

@@ -1,5 +1,5 @@
 import type { Catalog } from './catalog';
-import { describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
+import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { ListItem, Product, Spot, Stop, StoreLayout } from './types';
 
 export { normalize } from './catalog';
@@ -25,24 +25,22 @@ export function resolveSpot(key: string, layout: StoreLayout, catalog: Catalog):
   const [placeId, categoryId] = key.split(':');
   const place = layout.places.find((p) => p.id === placeId);
   if (!place) return undefined;
-  const center = (pt: { x: number; y: number }) => ({ x: pt.x + 0.5, y: pt.y + 0.5 });
-  const index = categoryId ? place.categories.indexOf(categoryId) : -1;
-  if (index < 0) {
+  const at = categoryId ? categorySpot(place, categoryId) : undefined;
+  if (!at) {
     const point = spotPoint(place);
-    return { key: place.id, placeId: place.id, placeLabel: place.label, label: place.label, point, mark: center(point) };
+    return { key: place.id, placeId: place.id, placeLabel: place.label, label: place.label, point, mark: { x: point.x + 0.5, y: point.y + 0.5 } };
   }
   const cat = catalog.categoryById.get(categoryId);
   // Name the category only when it adds something ("Aisle 2 · Pasta & Rice", not "Bakery · Bakery").
   const detail = cat && place.categories.length > 1 && cat.name !== place.label ? cat.name : undefined;
-  const point = spotPoint(place, index, place.categories.length);
   return {
     key,
     placeId: place.id,
     placeLabel: place.label,
     detail,
     label: detail ? `${place.label} · ${detail}` : place.label,
-    point,
-    mark: center(point),
+    point: exactPoint(place, at),
+    mark: exactMark(place, at),
   };
 }
 

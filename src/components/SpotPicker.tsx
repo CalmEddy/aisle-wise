@@ -3,14 +3,16 @@ import type { Catalog } from '../core/catalog';
 import { exactKey, exactSpotAt, footprint, parseExactKey } from '../core/geometry';
 import { resolveSpot } from '../core/locate';
 import type { Place, StoreLayout } from '../core/types';
+import type { SectionLook } from '../display';
 import { StoreMap } from './StoreMap';
 
 /**
  * Choose where something is: tap a place on the store map to zoom in, then
  * tap the exact spot. In an aisle, tapping nearer a shelf picks that side.
  */
-export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, onCancel, extraActions }: {
+export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, onCancel, extraActions, look }: {
   title: string;
+  look?: SectionLook;
   layout: StoreLayout;
   catalog: Catalog;
   /** Saved spot key, if any. */
@@ -53,6 +55,7 @@ export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, o
           focus={focus ? footprint(focus) : undefined}
           highlightId={focus?.id}
           preview={spot?.mark}
+          look={look}
           onMapTap={tap}
         />
 

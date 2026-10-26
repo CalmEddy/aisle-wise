@@ -47,7 +47,11 @@ The **Items** tab holds the master list of grocery items (about 290 to start).
   "Automatic" uses wherever that store stocks the item's category, or pick
   a specific aisle or area.
 - Under **Categories**, add, rename, reorder and delete categories (Dairy,
-  Snacks, Pharmacy, …).
+  Snacks, Pharmacy, …), and tap a category's colour or icon to change it.
+  Every starter category has its own colour and icon (🥛 Dairy, 🍝 Pasta…).
+
+Switches under the map turn **colours on the map**, **icons on the map** and
+**colours in the list** on or off (remembered per phone).
 
 ## Store layout editor
 
@@ -57,8 +61,12 @@ Open the **Store layout** tab to build your own stores:
   Set the label, length and walkway width.
 - **Open areas** are rectangles you can walk through, for departments like
   Produce, Deli or Bakery.
-- For each aisle or area, choose **what's stocked there** (Dairy, Pasta &
-  Rice, …) and use the arrows to set their order along the aisle or area.
+- Tap an aisle to set **what's on each side**: the left and right shelves
+  (top and bottom for side-to-side aisles) each have their own ordered list
+  of categories, so soup can be straight across from pasta. Use ⇄ to move a
+  category across the aisle, **Swap sides**, or **Same on both sides**.
+  Open areas have one list. Each category's section shows on the map in its
+  colour, with its icon.
 - Drag shapes to move them and drag the round handle to resize, or use the
   arrows and +/− buttons for exact changes.
 - Set where the **entrance** and **checkout** are.

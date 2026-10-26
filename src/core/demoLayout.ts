@@ -1,13 +1,15 @@
+import { withSides } from './geometry';
 import type { Aisle, Area, StoreLayout } from './types';
 
 const area = (id: string, label: string, x: number, y: number, w: number, h: number, categories: string[] = []): Area => ({
   kind: 'area', id, label, x, y, w, h, categories,
 });
 
+/** An aisle with different categories on each side: [left, right] (or [top, bottom]). */
 const aisle = (
   id: string, label: string, x: number, y: number,
-  orientation: Aisle['orientation'], length: number, categories: string[],
-): Aisle => ({ kind: 'aisle', id, label, x, y, orientation, length, width: 2, categories });
+  orientation: Aisle['orientation'], length: number, left: string[], right: string[] = left,
+): Aisle => withSides({ kind: 'aisle', id, label, x, y, orientation, length, width: 2, categories: [] }, [left, right]);
 
 /**
  * A typical supermarket on a 60 × 40 grid: produce down the left, bakery,
@@ -29,13 +31,14 @@ export const demoLayout: StoreLayout = {
     area('produce', 'Produce', 1, 6, 8, 24, ['veg', 'fruit']),
     area('floral', 'Floral', 1, 33, 7, 5, ['floral']),
     area('pharmacy', 'Pharmacy', 50, 30, 9, 8, ['pharmacy']),
-    aisle('a1', 'Aisle 1', 10, 8, 'vertical', 22, ['coffee', 'breakfast']),
-    aisle('a2', 'Aisle 2', 14, 8, 'vertical', 22, ['canned', 'pasta']),
-    aisle('a3', 'Aisle 3', 18, 8, 'vertical', 22, ['condiments', 'baking']),
-    aisle('a4', 'Aisle 4', 22, 8, 'vertical', 22, ['cookies', 'snacks']),
-    aisle('a5', 'Aisle 5', 26, 8, 'vertical', 22, ['water', 'soda']),
-    aisle('a6', 'Aisle 6', 30, 8, 'vertical', 22, ['laundry', 'paper']),
-    aisle('a7', 'Aisle 7', 34, 8, 'vertical', 22, ['baby', 'health']),
+    // Different things on each side, e.g. soup straight across from pasta.
+    aisle('a1', 'Aisle 1', 10, 8, 'vertical', 22, ['coffee'], ['breakfast']),
+    aisle('a2', 'Aisle 2', 14, 8, 'vertical', 22, ['pasta'], ['canned']),
+    aisle('a3', 'Aisle 3', 18, 8, 'vertical', 22, ['baking'], ['condiments']),
+    aisle('a4', 'Aisle 4', 22, 8, 'vertical', 22, ['snacks'], ['cookies']),
+    aisle('a5', 'Aisle 5', 26, 8, 'vertical', 22, ['soda'], ['water']),
+    aisle('a6', 'Aisle 6', 30, 8, 'vertical', 22, ['paper'], ['laundry']),
+    aisle('a7', 'Aisle 7', 34, 8, 'vertical', 22, ['health', 'baby'], ['health', 'baby']),
     aisle('f1', 'Frozen A', 40, 10, 'horizontal', 9, ['frozen']),
     aisle('f2', 'Frozen B', 40, 16, 'horizontal', 9, ['icecream']),
   ],

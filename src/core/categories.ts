@@ -1,5 +1,6 @@
 import type { Category, Product } from './types';
 
+
 const groups: [id: string, name: string, items: string][] = [
   ['fruit', 'Fruit', 'Apples, Bananas, Oranges, Lemons, Limes, Grapes, Strawberries, Blueberries, Raspberries, Melon, Watermelon, Pears, Peaches, Plums, Mangoes, Pineapple, Avocados, Kiwi, Cherries'],
   ['veg', 'Vegetables', 'Lettuce, Spinach, Kale, Carrots, Celery, Onions, Garlic, Potatoes, Sweet potatoes, Tomatoes, Cucumbers, Bell peppers, Broccoli, Cauliflower, Zucchini, Mushrooms, Corn, Cilantro, Parsley, Basil, Ginger, Salad mix, Green beans'],
@@ -29,7 +30,60 @@ const groups: [id: string, name: string, items: string][] = [
   ['icecream', 'Ice Cream & Frozen Veg', 'Ice cream, Frozen vegetables, Frozen fruit, Frozen peas, Popsicles, Ice'],
 ];
 
-export const defaultCategories: Category[] = groups.map(([id, name]) => ({ id, name }));
+/** Default colour and icon for each starter category. */
+const looks: Record<string, [color: string, icon: string]> = {
+  fruit: ['#e4572e', '🍎'],
+  veg: ['#3fa34d', '🥦'],
+  bakery: ['#c8963e', '🍞'],
+  deli: ['#e8b931', '🧀'],
+  dairy: ['#4f9fd8', '🥛'],
+  eggs: ['#f2d06b', '🥚'],
+  meat: ['#c0392b', '🥩'],
+  seafood: ['#1f7a8c', '🐟'],
+  floral: ['#e07aa8', '💐'],
+  pharmacy: ['#8e7cc3', '💊'],
+  breakfast: ['#e9a03b', '🥣'],
+  coffee: ['#7b4b2a', '☕'],
+  pasta: ['#f0b429', '🍝'],
+  canned: ['#d2691e', '🥫'],
+  baking: ['#b08968', '🧂'],
+  condiments: ['#9aa63a', '🫒'],
+  snacks: ['#ff8c42', '🥨'],
+  cookies: ['#a0522d', '🍪'],
+  soda: ['#e63946', '🥤'],
+  water: ['#48cae4', '🧃'],
+  paper: ['#90a4ae', '🧻'],
+  laundry: ['#5c7cfa', '🧺'],
+  health: ['#2ec4b6', '🧴'],
+  baby: ['#ffafcc', '🍼'],
+  frozen: ['#4361ee', '🍕'],
+  icecream: ['#a2d2ff', '🍦'],
+};
+
+/** Colours for new categories, in order. */
+export const PALETTE = [
+  '#e4572e', '#3fa34d', '#4f9fd8', '#f0b429', '#8e7cc3', '#2ec4b6', '#e07aa8', '#ff8c42',
+  '#1f7a8c', '#c0392b', '#9aa63a', '#5c7cfa', '#b08968', '#e63946', '#48cae4', '#7b4b2a',
+];
+
+/** Icons offered when choosing one for a category. */
+export const ICON_CHOICES = [
+  '🍎', '🍌', '🍇', '🍓', '🥑', '🥦', '🥕', '🌽', '🧅', '🥔', '🍞', '🥐', '🥖', '🧀', '🥛', '🥚',
+  '🧈', '🥩', '🍗', '🥓', '🐟', '🦐', '🍝', '🍚', '🥫', '🍲', '🧂', '🫒', '🍯', '🥜', '🥨', '🍿',
+  '🍪', '🍫', '🍬', '🥤', '🧃', '💧', '☕', '🍵', '🍷', '🍺', '🥣', '🧇', '🍕', '🍦', '🧊', '🌮',
+  '🍜', '🌶️', '🧻', '🧺', '🧽', '🧴', '🪥', '💊', '🍼', '🐶', '🐱', '💐', '🎁', '🕯️', '🔋', '🛒',
+];
+
+export const defaultCategories: Category[] = groups.map(([id, name]) => ({ id, name, color: looks[id][0], icon: looks[id][1] }));
+
+/** A category's colour and icon, falling back to sensible defaults. */
+export function categoryLook(cat: Category | undefined, index = 0): { color: string; icon: string } {
+  const d = cat ? looks[cat.id] : undefined;
+  return {
+    color: cat?.color || d?.[0] || PALETTE[Math.abs(index) % PALETTE.length],
+    icon: cat?.icon || d?.[1] || '🛒',
+  };
+}
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
