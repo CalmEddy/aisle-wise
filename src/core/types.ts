@@ -15,31 +15,21 @@ export type Orientation = 'vertical' | 'horizontal';
 
 interface PlaceBase {
   id: string;
+  /** Shown on the map (on the shelf itself, for shelves) and in the list. */
   label: string;
-  /** Top-left corner of the place's footprint, in grid squares. */
+  /** Top-left corner, in grid squares. */
   x: number;
   y: number;
-  /**
-   * Category ids stocked here, in order along the area. For aisles this is
-   * every category on either side (kept in step with `sides`).
-   */
+  /** Category ids stocked here, in order along the shelf (top/left first) or across the area. */
   categories: string[];
 }
 
-/** A walkway with a row of shelves on each long side. */
-export interface Aisle extends PlaceBase {
-  kind: 'aisle';
+/** A shelf: a single run of shelving, one square thick, reachable from either side. */
+export interface Shelf extends PlaceBase {
+  kind: 'shelf';
   orientation: Orientation;
-  /** Length of the aisle in grid squares. */
+  /** Length in grid squares. */
   length: number;
-  /** Width of the walkway between the two shelves. */
-  width: number;
-  /**
-   * Categories on each shelf, in order from the top/left end:
-   * [left (or top) shelf, right (or bottom) shelf]. Missing on aisles made
-   * before sides existed: then `categories` are on both sides.
-   */
-  sides?: [string[], string[]];
 }
 
 /** An open, walkable rectangle such as Produce or the Deli counter. */
@@ -49,7 +39,7 @@ export interface Area extends PlaceBase {
   h: number;
 }
 
-export type Place = Aisle | Area;
+export type Place = Shelf | Area;
 
 export interface StoreLayout {
   id: string;

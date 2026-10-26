@@ -337,11 +337,7 @@ button { cursor: pointer; }
 .toggle[aria-pressed='true'] .knob::after { left: 11px; }
 .cat-icon { font-size: 1rem; width: 1.3em; text-align: center; flex: none; }
 
-/* Editor: categories per side */
-.sides { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; margin: 4px 0 8px; }
-.side { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: var(--bg); color: var(--text); }
-.side h4 { margin: 0 0 4px; font-size: 0.85rem; }
-.side select { width: 100%; }
+/* Editor: category chips */
 .row.stock { min-height: 40px; gap: 2px; }
 .row.stock .icon { width: 30px; }
 .cat-chip {
@@ -386,3 +382,14 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
   border-radius: 10px; padding: 2px 8px 2px 4px; margin: 6px -6px 0;
 }
 .spot.tinted + .spot.tinted { border-top: 0; }
+
+/* Shelves */
+.place.shelf .place-bg { fill: var(--shelf); }
+.place .hit { fill: transparent; }
+.shelf-label {
+  fill: var(--text); font-weight: 700; opacity: 1 !important;
+  paint-order: stroke; stroke: var(--surface); stroke-width: 0.18; stroke-linejoin: round;
+}
+.place.shelf.drop-over .place-bg { fill: var(--accent); }
+.place.shelf.selected .place-bg { stroke: var(--you); stroke-width: 0.25; stroke-dasharray: 0.6 0.4; }
+.section-shelf { opacity: 1; }

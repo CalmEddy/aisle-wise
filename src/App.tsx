@@ -9,6 +9,7 @@ import { categoryLook, defaultCategories, defaultProducts } from './core/categor
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
+import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -47,6 +48,14 @@ export default function App() {
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
 
   useMoveOldLocationsIntoProducts(setProducts);
+
+  // Stores saved (or synced from an older phone) with aisles: turn each aisle into two shelves.
+  useEffect(() => {
+    if (!hasOldAisles(layouts)) return;
+    const r = migrateToShelves(layouts, products);
+    setLayouts(() => r.layouts);
+    setProducts(() => r.products);
+  }, [layouts, products, setLayouts, setProducts]);
 
   // Live sharing with a household (Supabase). Off unless configured and joined.
   const syncData = useMemo(() => ({ items, products, categories, layouts }), [items, products, categories, layouts]);

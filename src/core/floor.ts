@@ -1,4 +1,4 @@
-import { shelves } from './geometry';
+import { blocks } from './geometry';
 import type { Point, StoreLayout } from './types';
 
 /** Distance used when there's no way to walk between two spots. */
@@ -20,7 +20,7 @@ export class Floor {
     this.height = layout.height;
     this.blocked = new Uint8Array(this.width * this.height);
     for (const place of layout.places) {
-      for (const s of shelves(place)) {
+      for (const s of blocks(place)) {
         for (let y = s.y; y < s.y + s.h; y++) {
           for (let x = s.x; x < s.x + s.w; x++) {
             if (this.inside({ x, y })) this.blocked[y * this.width + x] = 1;
@@ -58,12 +58,31 @@ export class Floor {
     return c;
   }
 
-  /** Walking distance in grid squares. */
+  /**
+   * Where you can stand to reach a square: the square itself if it's floor;
+   * for a shelf square, the floor squares beside it (either side); otherwise
+   * the nearest floor square.
+   */
+  private standing(p: Point): Point[] {
+    const c = { x: Math.round(p.x), y: Math.round(p.y) };
+    if (this.walkable(c)) return [c];
+    const beside = [
+      { x: c.x - 1, y: c.y }, { x: c.x + 1, y: c.y }, { x: c.x, y: c.y - 1 }, { x: c.x, y: c.y + 1 },
+    ].filter((q) => this.walkable(q));
+    return beside.length ? beside : [this.snap(c)];
+  }
+
+  /** Walking distance in grid squares. Shelf spots can be reached from either side, whichever is shorter. */
   distance = (a: Point, b: Point): number => {
-    const from = this.snap(a);
-    const to = this.snap(b);
-    const d = this.field(from)[to.y * this.width + to.x];
-    return d < 0 ? UNREACHABLE : d;
+    let best = UNREACHABLE;
+    for (const from of this.standing(a)) {
+      const field = this.field(from);
+      for (const to of this.standing(b)) {
+        const d = field[to.y * this.width + to.x];
+        if (d >= 0 && d < best) best = d;
+      }
+    }
+    return best;
   };
 
   reachable(a: Point, b: Point): boolean {

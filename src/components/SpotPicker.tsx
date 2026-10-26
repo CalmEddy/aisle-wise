@@ -8,7 +8,7 @@ import { StoreMap } from './StoreMap';
 
 /**
  * Choose where something is: tap a place on the store map to zoom in, then
- * tap the exact spot. In an aisle, tapping nearer a shelf picks that side.
+ * tap the exact spot along the shelf or in the area.
  */
 export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, onCancel, extraActions, look }: {
   title: string;
@@ -46,8 +46,8 @@ export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, o
         <h2>{title}</h2>
         <p className="muted small">
           {focus
-            ? <>Tap the exact spot in <b>{focus.label || 'this place'}</b>.{focus.kind === 'aisle' && ' Tap nearer a shelf to pick that side.'}</>
-            : <>At {layout.name}. Tap the aisle or area on the map.</>}
+            ? <>Tap the exact spot in <b>{focus.label || 'this place'}</b>.</>
+            : <>At {layout.name}. Tap the shelf or area on the map.</>}
         </p>
 
         <StoreMap

@@ -27,14 +27,14 @@ re-orders it as you move.
    the rest of the list.
 4. **Move items** – drag an item's ⠿ handle onto the exact spot on the map,
    or onto another item. The location is saved on that grocery item for this
-   store only. **Change place** (in the ⋯ menu) opens the map: tap an aisle or
-   area to zoom in, then tap the exact spot – tapping nearer a shelf picks
-   that side of the aisle. Spots are saved relative to the aisle or area, so
-   they stay right if you move or resize it.
-5. **Numbered stops** – back-to-back items in the same aisle or area share one
-   number. The card lists them in walking order with where each one is
-   ("right side, middle"), and the map shows one number per place with a dot
-   for each item.
+   store only. **Change place** (in the ⋯ menu) opens the map: tap a shelf or
+   area to zoom in, then tap the exact spot. Spots are saved relative to the
+   shelf or area, so they stay right if you move or resize it. A shelf can be
+   reached from either side; the route uses whichever is closer.
+5. **Numbered stops** – back-to-back items on the same shelf or in the same
+   area share one number. The card lists them in walking order with where
+   each one is ("near the top"), and the map shows one number per place, in
+   the walkway beside it, with a dot for each item.
    Tap **⋯** on an item to change its place or mark it **not available at
    this store**. Items not available here, and items with no location yet,
    are listed at the bottom under "Not on the route".
@@ -46,7 +46,7 @@ The **Items** tab holds the master list of grocery items (about 290 to start).
 - Search, add, rename and delete items, and set each item's category.
 - For each store, choose whether it's **available there** and **where it is**:
   "Automatic" uses wherever that store stocks the item's category, or pick
-  a specific aisle or area.
+  a specific shelf or area.
 - Under **Categories**, add, rename, reorder and delete categories (Dairy,
   Snacks, Pharmacy, …), and tap a category's colour or icon to change it.
   Every starter category has its own colour and icon (🥛 Dairy, 🍝 Pasta…).
@@ -58,16 +58,19 @@ Switches under the map turn **colours on the map**, **icons on the map** and
 
 Open the **Store layout** tab to build your own stores:
 
-- **Aisles** run up-and-down or side-to-side, with shelves on both sides.
-  Set the label, length and walkway width.
+- **Shelves** are single sticks, one square thick, running up-and-down or
+  side-to-side, any length. Give each a **label** – it's written on the
+  shelf itself on the map. Walkways are simply the floor between shelves,
+  so two shelves facing each other make an aisle (pasta on one, soup on the
+  other).
 - **Open areas** are rectangles you can walk through, for departments like
   Produce, Deli or Bakery.
-- Tap an aisle to set **what's on each side**: the left and right shelves
-  (top and bottom for side-to-side aisles) each have their own ordered list
-  of categories, so soup can be straight across from pasta. Use ⇄ to move a
-  category across the aisle, **Swap sides**, or **Same on both sides**.
-  Open areas have one list. Each category's section shows on the map in its
-  colour, with its icon.
+- Tap a shelf or area to choose **what's on it**: an ordered list of
+  categories along the shelf (or across the area). Each category's section
+  shows on the map in its colour, with its icon.
+- Stores made before shelves had "aisles"; each one is turned into two
+  shelves (its left and right sides) automatically, keeping saved item
+  locations (`src/core/migrate.ts`).
 - Drag shapes to move them and drag the round handle to resize, or use the
   arrows and +/− buttons for exact changes.
 - Set where the **entrance** and **checkout** are.
@@ -155,11 +158,12 @@ signal inside the store.
 ## Project layout
 
 ```
-src/core/types.ts                 Layout, aisle, area and list item types
+src/core/types.ts                 Layout, shelf, area and list item types
 src/core/categories.ts            Starter categories and grocery items
 src/core/catalog.ts               Master list lookups: name matching and suggestions
 src/core/demoLayout.ts            Example store
-src/core/geometry.ts              Aisle/area shapes and pick-up spots
+src/core/geometry.ts              Shelf/area shapes and pick-up spots
+src/core/migrate.ts               Converting old aisles to shelves
 src/core/floor.ts                 Walkable grid and walking distances
 src/core/locate.ts                Grocery item → spot in a store
 src/core/route.ts                 Route planning (shortest walk)

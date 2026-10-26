@@ -1,5 +1,5 @@
 import { Catalog, normalize } from './catalog';
-import { withSides } from './geometry';
+import { aislesToShelves } from './migrate';
 import type { Category, ListItem, Product, StoreLayout } from './types';
 
 /**
@@ -171,17 +171,20 @@ export function applyStoreShare(share: StoreShare, data: Data, replaceId?: strin
   let name = share.layout.name;
   if (!replaceId && names.has(name)) name = `${name} (shared)`;
 
+  // Links made before shelves existed may still have aisles.
+  const { layout: shared, remap: fromAisles } = aislesToShelves(share.layout);
   const layout: StoreLayout = {
-    ...share.layout,
+    ...shared,
     id: layoutId,
     name,
-    places: share.layout.places.map((p) => {
-      const map = (ids: string[]) => ids.map((c) => catMap.get(c) ?? c).filter((c) => categories.some((x) => x.id === c));
-      const place = { ...p, categories: map(p.categories) };
-      return place.kind === 'aisle' && place.sides ? withSides(place, [map(place.sides[0]), map(place.sides[1])]) : place;
-    }),
+    places: shared.places.map((p) => ({
+      ...p,
+      categories: p.categories.map((c) => catMap.get(c) ?? c).filter((c) => categories.some((x) => x.id === c)),
+    })),
   };
-  const remapKey = (key: string) => {
+  const remapKey = (raw: string) => {
+    const key = fromAisles(raw);
+    if (key.includes('@')) return key;
     const [placeId, cat] = key.split(':');
     return cat ? `${placeId}:${catMap.get(cat) ?? cat}` : placeId;
   };

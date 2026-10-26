@@ -1,5 +1,5 @@
 import { forwardRef, type ReactNode, type SVGProps } from 'react';
-import { footprint, placeAt, sectionShapes, shelves, walkway } from '../core/geometry';
+import { footprint, placeNear, sectionShapes } from '../core/geometry';
 import type { SectionLook } from '../display';
 import type { Place, Point, Rect, StoreLayout } from '../core/types';
 
@@ -50,7 +50,7 @@ export function toGrid(svg: SVGSVGElement, clientX: number, clientY: number): { 
 
 /** The place under a map position (grid units, fractions allowed). */
 export function placeUnder(layout: StoreLayout, x: number, y: number): Place | undefined {
-  return placeAt(layout, { x: Math.floor(x), y: Math.floor(y) });
+  return placeNear(layout, x, y);
 }
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
@@ -99,7 +99,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
 
       {visits.map((v) => (
         <g key={`v${v.number}`} className={v.next ? 'map-stop next' : 'map-stop'}>
-          {v.dots.length > 1 && v.dots.map((d, i) => <circle key={i} className="map-dot" cx={d.x} cy={d.y} r={0.45} />)}
+          {v.dots.map((d, i) => <circle key={i} className="map-dot" cx={d.x} cy={d.y} r={0.4} />)}
           <circle cx={v.at.x} cy={v.at.y} r={1.3} />
           <text x={v.at.x} y={v.at.y + 0.5} textAnchor="middle">{v.number}</text>
         </g>
@@ -132,15 +132,20 @@ function PlaceShape({ place, highlighted, selected, look, onTap, onPointerDown }
   onPointerDown?: (p: Place, e: React.PointerEvent) => void;
 }) {
   const f = footprint(place);
-  const w = walkway(place);
-  const vertical = place.kind === 'aisle' ? place.orientation === 'vertical' : f.h > f.w * 1.6;
+  const isShelf = place.kind === 'shelf';
+  const vertical = isShelf ? place.orientation === 'vertical' : f.h > f.w * 1.6;
   const cx = f.x + f.w / 2;
   const cy = f.y + f.h / 2;
-  const room = vertical ? f.h : f.w;
-  const size = Math.min(1.5, Math.max(0.8, (vertical ? w.w : w.h) * 0.75), (room / Math.max(1, place.label.length)) * 1.7);
+  const run = vertical ? f.h : f.w;
+  const thick = vertical ? f.w : f.h;
+  const chars = Math.max(1, place.label.length);
+  // Shelf labels sit on the shelf itself, so they're as tall as the shelf allows.
+  const size = isShelf
+    ? Math.min(0.78, (run / chars) * 1.6)
+    : Math.min(1.5, Math.max(0.8, thick * 0.4), (run / chars) * 1.7);
   const cls = ['place', place.kind, highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
-  const isArea = place.kind === 'area';
+  const pad = 0.6; // easier to tap a thin shelf
 
   return (
     <g
@@ -149,41 +154,48 @@ function PlaceShape({ place, highlighted, selected, look, onTap, onPointerDown }
       onClick={onTap ? () => onTap(place) : undefined}
       onPointerDown={onPointerDown ? (e) => onPointerDown(place, e) : undefined}
     >
-      <rect x={f.x} y={f.y} width={f.w} height={f.h} className="place-bg" rx={place.kind === 'area' ? 0.6 : 0.2} />
-      {shelves(place).map((s, i) => (
-        <rect key={i} x={s.x + 0.1} y={s.y + 0.1} width={s.w - 0.2} height={s.h - 0.2} className="place-shelf" rx={0.2} />
-      ))}
+      {isShelf && <rect className="hit" x={f.x - pad} y={f.y - pad} width={f.w + pad * 2} height={f.h + pad * 2} />}
+      <rect x={f.x} y={f.y} width={f.w} height={f.h} className="place-bg" rx={isShelf ? 0.25 : 0.6} />
       {look?.colorOf && sections.map((sec, i) => {
         const color = look.colorOf!(sec.categoryId);
         if (!color) return null;
         const r = sec.rect;
-        // Shelves: solid strips; areas: tinted bands.
-        const inset = isArea ? 0.15 : 0.1;
+        const inset = isShelf ? 0.06 : 0.15;
         return (
-          <rect key={`c${i}`} className={isArea ? 'section-band' : 'section-shelf'} x={r.x + inset} y={r.y + inset}
+          <rect key={`c${i}`} className={isShelf ? 'section-shelf' : 'section-band'} x={r.x + inset} y={r.y + inset}
             width={Math.max(0, r.w - inset * 2)} height={Math.max(0, r.h - inset * 2)} rx={0.2} fill={color} />
         );
       })}
-      <text
-        x={cx}
-        y={cy}
-        className="place-label"
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={size}
-        transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}
-      >
-        {place.label}
-      </text>
+      {place.label && (
+        <text
+          x={cx}
+          y={cy}
+          className={isShelf ? 'place-label shelf-label' : 'place-label'}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={size}
+          transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}
+        >
+          {place.label}
+        </text>
+      )}
       {look?.iconOf && sections.map((sec, i) => {
         const icon = look.iconOf!(sec.categoryId);
         if (!icon) return null;
         const r = sec.rect;
-        const fit = isArea ? Math.min(1.8, Math.min(r.w, r.h) * 0.55) : Math.min(1.4, Math.max(r.w, r.h) * 0.7);
+        const fit = isShelf ? 0.85 : Math.min(1.8, Math.min(r.w, r.h) * 0.55);
         if (fit < 0.6) return null;
-        // Areas: icon in the section's corner so the area's label stays readable. Shelves: centred.
-        const x = isArea ? r.x + fit * 0.75 : r.x + r.w / 2;
-        const y = isArea ? r.y + fit * 0.75 : r.y + r.h / 2;
+        // Icons go at the start of each section, or its end if the start would cover the shelf's label.
+        let along = 0;
+        if (isShelf) {
+          const start = (vertical ? r.y : r.x) + fit * 0.7;
+          const end = (vertical ? r.y + r.h : r.x + r.w) - fit * 0.7;
+          const half = place.label ? (place.label.length * size * 0.55) / 2 + fit * 0.6 : 0;
+          const mid = vertical ? cy : cx;
+          along = Math.abs(start - mid) >= half || Math.abs(end - mid) < half ? start : end;
+        }
+        const x = isShelf ? (vertical ? r.x + r.w / 2 : along) : r.x + fit * 0.75;
+        const y = isShelf ? (vertical ? along : r.y + r.h / 2) : r.y + fit * 0.75;
         return (
           <text key={`i${i}`} className="section-icon" x={x} y={y}
             textAnchor="middle" dominantBaseline="central" fontSize={fit}>{icon}</text>

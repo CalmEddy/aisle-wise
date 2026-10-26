@@ -68,7 +68,7 @@ export function ShoppingView(props: Props) {
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
   /**
    * A section's category colour, when list colours are on: the category in
-   * its spot key ("aisle:pasta"), otherwise the category most of its items share.
+   * its spot key ("shelf:pasta"), otherwise the category most of its items share.
    */
   const sectionColor = (stop: Stop) => {
     if (!props.display.listColors) return undefined;
@@ -93,12 +93,22 @@ export function ShoppingView(props: Props) {
   }, [items, layout, floor, catalog, position]);
 
   // One number per visit on the map, with a dot for each item spot.
-  const mapVisits: MapVisit[] = visits.map((v, i) => ({
-    number: v.number,
-    next: i === 0,
-    at: v.stops[0].mark,
-    dots: v.stops.map((st) => st.mark),
-  }));
+  // Numbers go on the floor beside a shelf (where you'd stand), so they don't cover its label.
+  const standMark = (pt: Point) => {
+    if (floor.walkable(pt)) return { x: pt.x + 0.5, y: pt.y + 0.5 };
+    const beside = [{ x: pt.x - 1, y: pt.y }, { x: pt.x + 1, y: pt.y }, { x: pt.x, y: pt.y + 1 }, { x: pt.x, y: pt.y - 1 }]
+      .find((q) => floor.walkable(q));
+    return beside ? { x: beside.x + 0.5, y: beside.y + 0.5 } : { x: pt.x + 0.5, y: pt.y + 0.5 };
+  };
+  const mapVisits: MapVisit[] = [];
+  for (const [i, v] of visits.entries()) {
+    const at = standMark(v.stops[0].point);
+    // Two stops facing the same walkway would stack: nudge this number until it's clear.
+    for (let tries = 0; tries < 6 && mapVisits.some((m) => Math.hypot(m.at.x - at.x, m.at.y - at.y) < 2.6); tries++) {
+      at.y += at.y > layout.height - 4 ? -2.7 : 2.7;
+    }
+    mapVisits.push({ number: v.number, next: i === 0, at, dots: v.stops.map((st) => st.mark) });
+  }
 
   // Suggestions for whatever is after the last comma.
   const segment = draft.split(',').pop() ?? '';

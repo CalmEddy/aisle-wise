@@ -109,7 +109,7 @@ function StoreImport({ share, layouts, onAddStore, onCancel }: {
       <h2>A store was shared with you</h2>
       <p><b>{share.layout.name}</b></p>
       <p className="muted small">
-        {share.layout.places.length} aisles and areas · {located} item location{located === 1 ? '' : 's'}
+        {share.layout.places.length} shelves and areas · {located} item location{located === 1 ? '' : 's'}
         {unavailable > 0 && <> · {unavailable} item{unavailable === 1 ? '' : 's'} not available there</>}
       </p>
       {mine && (

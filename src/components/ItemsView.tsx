@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { normalize, type Catalog } from '../core/catalog';
 import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
-import { aisleSides, parseExactKey, withSides } from '../core/geometry';
+import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './ShoppingView';
@@ -298,12 +298,7 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
     setProducts((prev) => prev.map((p) => (p.categoryId === cat.id ? { ...p, categoryId: undefined } : p)));
     setLayouts((prev) => prev.map((l) => ({
       ...l,
-      places: l.places.map((p) => {
-        const keep = (ids: string[]) => ids.filter((c) => c !== cat.id);
-        return p.kind === 'aisle'
-          ? withSides(p, [keep(aisleSides(p)[0]), keep(aisleSides(p)[1])])
-          : { ...p, categories: keep(p.categories) };
-      }),
+      places: l.places.map((p) => ({ ...p, categories: p.categories.filter((c) => c !== cat.id) })),
     })));
   }
 
