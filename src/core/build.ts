@@ -12,7 +12,13 @@ export const REACH = 3;
 /** Length of a newly created shelf. */
 export const NEW_SHELF_LENGTH = 3;
 
-export type BuildAction = 'onShelf' | 'inArea' | 'extend' | 'create' | 'blocked';
+export type BuildAction = 'onShelf' | 'inArea' | 'extend' | 'create' | 'extendArea' | 'createArea' | 'blocked';
+
+/** What picking up on open floor builds. */
+export type BuildTarget = 'shelf' | 'area';
+
+/** Size of a new area (squares). */
+export const NEW_AREA_SIZE = 3;
 
 export interface BuildPlan {
   action: BuildAction;
@@ -116,7 +122,9 @@ function fitShelf(l: StoreLayout, p: Point, orientation: Orientation, length: nu
  * squares past a shelf's end (lined up with it) → extend it; otherwise →
  * a new shelf through `p`.
  */
-export function planBuild(l: StoreLayout, p: Point, category?: Category, orientation: Orientation = 'vertical'): BuildPlan {
+export function planBuild(
+  l: StoreLayout, p: Point, category?: Category, orientation: Orientation = 'vertical', target: BuildTarget = 'shelf',
+): BuildPlan {
   const cat = category?.id;
 
   // 1. On or beside a shelf.
@@ -134,6 +142,8 @@ export function planBuild(l: StoreLayout, p: Point, category?: Category, orienta
     const updated = withCategory(area, cat, 'end');
     return { action: 'inArea', layout: replacePlace(l, updated), spotKey: exactKey(area.id, spot), placeId: area.id, label: area.label };
   }
+
+  if (target === 'area') return planArea(l, p, category);
 
   // 3. Just past the end of a shelf, lined up with it.
   let ext: { shelf: Shelf; start: number; end: number; gap: number; atStart: boolean } | undefined;
@@ -298,4 +308,81 @@ export function blankStore(name = 'New store'): StoreLayout {
     id: `l-${newId()}`, name, width: 30, height: 24, places: [],
     entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
   };
+}
+
+/** Spot keys in an area that changed size: keep each item at the same physical square. */
+export function rekeyResizedArea(before: Area, after: Area) {
+  return (key: string) => {
+    const exact = parseExactKey(key);
+    if (!exact || exact.placeId !== before.id) return key;
+    const x = before.x + exact.spot.u * before.w;
+    const y = before.y + exact.spot.v * before.h;
+    const clamp = (n: number) => Math.max(0, Math.min(1, n));
+    return exactKey(after.id, { u: clamp((x - after.x) / after.w), v: clamp((y - after.y) / after.h) });
+  };
+}
+
+/**
+ * Area building, for open floor (no shelf or area at `p`): within REACH
+ * squares outside an area → stretch it to include `p`; otherwise → a new
+ * 3 × 3 area centred on `p`, trimmed to fit.
+ */
+function planArea(l: StoreLayout, p: Point, category?: Category): BuildPlan {
+  const cat = category?.id;
+
+  // Stretch the nearest area within reach, if the new squares are free.
+  let best: { area: Area; grown: Area; d: number } | undefined;
+  for (const pl of l.places) {
+    if (pl.kind !== 'area') continue;
+    const dx = Math.max(pl.x - p.x, 0, p.x - (pl.x + pl.w - 1));
+    const dy = Math.max(pl.y - p.y, 0, p.y - (pl.y + pl.h - 1));
+    const d = Math.max(dx, dy);
+    if (d < 1 || d > REACH) continue;
+    const x0 = Math.min(pl.x, p.x);
+    const y0 = Math.min(pl.y, p.y);
+    const x1 = Math.max(pl.x + pl.w - 1, p.x);
+    const y1 = Math.max(pl.y + pl.h - 1, p.y);
+    let ok = true;
+    for (let y = y0; y <= y1 && ok; y++) for (let x = x0; x <= x1 && ok; x++) ok = free(l, { x, y }, pl.id);
+    if (ok && (!best || d < best.d)) {
+      best = { area: pl, grown: { ...pl, x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 }, d };
+    }
+  }
+  if (best) {
+    const grown = withCategory(best.grown, cat, 'end');
+    return {
+      action: 'extendArea',
+      layout: replacePlace(l, grown),
+      spotKey: exactKey(grown.id, exactSpotAt(grown, p.x + 0.5, p.y + 0.5)),
+      placeId: grown.id,
+      label: grown.label,
+      rekey: rekeyResizedArea(best.area, grown),
+    };
+  }
+
+  // A new area around you: 3 × 3 if it fits, otherwise smaller.
+  for (const [w, h] of [[3, 3], [3, 2], [2, 3], [2, 2], [2, 1], [1, 2], [1, 1]]) {
+    // Centred first, then shifted so `p` is still inside.
+    const xs = [p.x - Math.floor((w - 1) / 2), ...Array.from({ length: w }, (_, i) => p.x - i)];
+    const ys = [p.y - Math.floor((h - 1) / 2), ...Array.from({ length: h }, (_, i) => p.y - i)];
+    for (const y of ys) {
+      for (const x of xs) {
+        let ok = true;
+        for (let yy = y; yy < y + h && ok; yy++) for (let xx = x; xx < x + w && ok; xx++) ok = free(l, { x: xx, y: yy });
+        if (!ok) continue;
+        const count = l.places.filter((pl) => pl.kind === 'area').length + 1;
+        const area: Area = {
+          kind: 'area', id: `ar-${newId()}`, label: category?.name ?? `Area ${count}`, x, y, w, h, categories: cat ? [cat] : [],
+        };
+        return {
+          action: 'createArea',
+          layout: { ...l, places: [...l.places, area] },
+          spotKey: exactKey(area.id, exactSpotAt(area, p.x + 0.5, p.y + 0.5)),
+          placeId: area.id,
+          label: area.label,
+        };
+      }
+    }
+  }
+  return { action: 'blocked', layout: l, label: '' };
 }

@@ -220,7 +220,7 @@ export default function App() {
     const listItem = itemId ? items.find((i) => i.id === itemId) : undefined;
     let product = (listItem && productFor(listItem, catalog)) || catalog.exact(name);
     const category = product?.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
-    const plan = planBuild(layout, position, category);
+    const plan = planBuild(layout, position, category, 'vertical', display.buildArea ? 'area' : 'shelf');
     const itemName = product?.name ?? capitalize(name.trim());
 
     // Saved somewhere else here? Don't move it without asking.
@@ -273,7 +273,7 @@ export default function App() {
     if (!product) return { kind: 'blocked', itemName: '', snapshot: { items, products, layouts } };
     const snapshot: Snapshot = { items, products, layouts };
     const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
-    const plan = planBuild(layout, position, category);
+    const plan = planBuild(layout, position, category, 'vertical', display.buildArea ? 'area' : 'shelf');
     if (plan.action === 'blocked') return { kind: 'blocked', itemName: product.name, snapshot };
     replaceLayout(plan.layout);
     setProducts((prev) => prev.map((p) => {

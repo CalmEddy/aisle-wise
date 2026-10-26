@@ -22,8 +22,8 @@ re-orders it as you move.
    stops are solved exactly; longer lists use nearest-neighbour + 2-opt
    (`src/core/route.ts`).
 3. **Follow along** – checking off an item moves you to that spot, and you
-   can tap anywhere on the map, a place chip, or a place or section name in
-   the list (e.g. "Pasta & Rice") to say where you are. Each move re-plans
+   can tap anywhere on the map, or a place or section name in the list
+   (e.g. "Pasta & Rice"), to say where you are. Each move re-plans
    the rest of the list.
 4. **Move items** – drag an item's ⠿ handle onto the exact spot on the map,
    or onto another item. The location is saved on that grocery item for this
@@ -56,6 +56,10 @@ tap 🛒 Cart. The map builds itself around you (`src/core/build.ts`):
   ↕ / ↔ for its direction, and offers **Rename** and **Undo**.
 - An item already saved somewhere else in the store isn't moved without
   asking (**Keep** / **Move here**).
+- Switch **Build: Shelves | Areas** to make open areas instead: picking up on
+  open floor makes a 3 × 3 area around you (trimmed to fit, named after the
+  item's category), and picking up within 3 squares outside an area
+  stretches it to include you.
 
 Tap a shelf or area on the map to edit it right there – label, what's on
 it, direction, length, position or delete – just like in the store editor.

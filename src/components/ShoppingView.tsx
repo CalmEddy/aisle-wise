@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
-import { planBuild, type Direction } from '../core/build';
+import { planBuild, type BuildTarget, type Direction } from '../core/build';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
-import { exactKey, exactSpotAt, placeAt, spotPoint } from '../core/geometry';
+import { exactKey, exactSpotAt, placeAt } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planRoute } from '../core/route';
 import type { ListItem, Place, Point, Product, Stop, StoreLayout } from '../core/types';
@@ -155,7 +155,6 @@ export function ShoppingView(props: Props) {
 
   const done = items.filter((i) => i.done);
   const here = placeAt(layout, position);
-  const atEntrance = position.x === layout.entrance.x && position.y === layout.entrance.y;
   // Where the shopper is standing, as an exact spot (side = the lane they're in).
   const hereKey = here ? exactKey(here.id, exactSpotAt(here, position.x + 0.5, position.y + 0.5)) : undefined;
   const hereLabel = hereKey ? resolveSpot(hereKey, layout, catalog)?.label : undefined;
@@ -286,7 +285,7 @@ export function ShoppingView(props: Props) {
           <StoreMap
             layout={layout}
             you={position}
-            visits={mapVisits}
+            visits={props.display.mapNumbers ?? true ? mapVisits : []}
             look={props.mapLook}
             showGrid={building}
             highlightId={here?.id}
@@ -297,7 +296,7 @@ export function ShoppingView(props: Props) {
               setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }));
             }}
           />
-          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'mapColors', 'mapIcons', 'listColors', 'listIcons']} />
+          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'mapColors', 'mapIcons', 'mapNumbers', 'listColors', 'listIcons']} />
           {editing && (
             <div className="build-edit">
               <div className="build-edit-head">
@@ -322,25 +321,13 @@ export function ShoppingView(props: Props) {
             <BuildPanel
               layout={layout}
               position={position}
+              target={props.display.buildArea ? 'area' : 'shelf'}
+              setTarget={(t) => props.setDisplay((d) => ({ ...d, buildArea: t === 'area' }))}
               build={props.build}
               lastShelfId={note && 'placeId' in note && layout.places.some((p) => p.id === note.placeId && p.kind === 'shelf') ? note.placeId : undefined}
               onNote={setNote}
             />
           )}
-          <section className="here">
-            <span className="muted">{hereLabel ? <>You’re at <b>{hereLabel}</b> — tap the map to move</> : 'Tap the map where you are, or pick a place'}</span>
-            <div className="chips" role="list">
-              <Chip label="Entrance" active={atEntrance} onClick={() => setPosition(layout.entrance)} />
-              {layout.places.map((p) => (
-                <Chip
-                  key={p.id}
-                  label={p.label || 'Unnamed'}
-                  active={!atEntrance && here?.id === p.id}
-                  onClick={() => setPosition(spotPoint(p))}
-                />
-              ))}
-            </div>
-          </section>
         </>
       )}
 
@@ -649,14 +636,6 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, b
   );
 }
 
-function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button role="listitem" className={active ? 'chip active' : 'chip'} onClick={onClick}>
-      {label}
-    </button>
-  );
-}
-
 type Toast = QuickAddResult & { mode: 'list' | 'cart'; /** Plain message instead of an add summary. */ note?: string };
 
 function SuggestionRow({ name, detail, onList, onAdd }: {
@@ -785,18 +764,22 @@ const ACTION_TEXT: Record<string, (label: string) => string> = {
   inArea: (l) => `in “${l || 'this area'}”`,
   extend: (l) => `extends “${l || 'this shelf'}” to here`,
   create: () => 'creates a new shelf here',
+  createArea: () => 'creates a new area here',
+  extendArea: (l) => `stretches “${l || 'this area'}” to here`,
   blocked: () => 'can’t fit a shelf here',
 };
 
 /** Build mode controls: what checking off here will do, walk arrows and tools. */
-function BuildPanel({ layout, position, build, lastShelfId, onNote }: {
+function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, onNote }: {
   layout: StoreLayout;
   position: Point;
+  target: BuildTarget;
+  setTarget: (t: BuildTarget) => void;
   build: BuildApi;
   lastShelfId?: string;
   onNote: (n: BuildNote) => void;
 }) {
-  const preview = planBuild(layout, position);
+  const preview = planBuild(layout, position, undefined, 'vertical', target);
   const besideShelf = preview.action === 'onShelf' ? preview.placeId : undefined;
   const turnId = besideShelf ?? lastShelfId;
   const arrow = (dir: Direction, label: string, glyph: string) => (
@@ -804,6 +787,14 @@ function BuildPanel({ layout, position, build, lastShelfId, onNote }: {
   );
   return (
     <section className="card build-panel">
+      <div className="segmented build-target" role="group" aria-label="What to build on open floor">
+        <span className="muted small">Build:</span>
+        {(['shelf', 'area'] as const).map((t) => (
+          <button key={t} className={target === t ? 'active' : ''} aria-pressed={target === t} onClick={() => setTarget(t)}>
+            {t === 'shelf' ? '▮ Shelves' : '▦ Areas'}
+          </button>
+        ))}
+      </div>
       <p className="build-preview">
         <b>Picking up here</b> {ACTION_TEXT[preview.action](preview.label)}.
       </p>
@@ -893,6 +884,8 @@ function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: 
     note.kind === 'area' ? <>New open area added around you.</>
       : note.action === 'create' ? <><b>{note.itemName}</b> is in your cart. New shelf <b>“{label}”</b>.</>
         : note.action === 'extend' ? <><b>{note.itemName}</b> is in your cart. Extended <b>“{label}”</b> to here.</>
+          : note.action === 'createArea' ? <><b>{note.itemName}</b> is in your cart. New area <b>“{label}”</b> — tap it on the map to resize.</>
+            : note.action === 'extendArea' ? <><b>{note.itemName}</b> is in your cart. Stretched <b>“{label}”</b> to here.</>
           : <><b>{note.itemName}</b> is in your cart · saved on <b>“{label}”</b>.</>;
   const isNewShelf = note.kind === 'built' && note.action === 'create' && place?.kind === 'shelf';
 

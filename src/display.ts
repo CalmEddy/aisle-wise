@@ -5,8 +5,12 @@ export interface Display {
   listColors: boolean;
   /** Category icon next to each item in the list. */
   listIcons?: boolean;
+  /** Stop numbers on the map. */
+  mapNumbers?: boolean;
   /** Build the store map from where you pick things up. */
   buildMode: boolean;
+  /** In build mode, what picking up on open floor makes. */
+  buildArea?: boolean;
 }
 
 export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listColors: true, listIcons: true, buildMode: false };

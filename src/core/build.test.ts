@@ -120,4 +120,38 @@ describe('build mode', () => {
     expect(up.layout.entrance.y).toBe(l.entrance.y + 5);
     expect(growStore(l, 'down').layout.places[0]).toMatchObject({ x: 5, y: 5 });
   });
+
+  it('in Area mode, makes a 3×3 area centred on you, named after the category', () => {
+    const plan = planBuild(store(), { x: 10, y: 10 }, cat('fruit'), 'vertical', 'area');
+    expect(plan.action).toBe('createArea');
+    expect(plan.layout.places[0]).toMatchObject({ kind: 'area', label: 'Fruit', x: 9, y: 9, w: 3, h: 3, categories: ['fruit'] });
+    expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
+    expect(planBuild(store(), { x: 1, y: 1 }, undefined, 'vertical', 'area').layout.places[0]).toMatchObject({ label: 'Area 1' });
+  });
+
+  it('trims a new area to fit against walls and shelves', () => {
+    const atCorner = planBuild(store(), { x: 0, y: 0 }, undefined, 'vertical', 'area');
+    expect(footprint(atCorner.layout.places[0])).toEqual({ x: 0, y: 0, w: 3, h: 3 });
+    const corner = planBuild(store(), { x: 19, y: 19 }, undefined, 'vertical', 'area');
+    expect(footprint(corner.layout.places[0])).toEqual({ x: 17, y: 17, w: 3, h: 3 });
+    // Fits right up against shelves, and between two shelves three squares apart.
+    const narrow = planBuild(store([shelf({ x: 12, y: 0, length: 20 })]), { x: 10, y: 5 }, undefined, 'vertical', 'area');
+    expect(footprint(narrow.layout.places[1])).toEqual({ x: 9, y: 4, w: 3, h: 3 });
+    const tight = planBuild(store([shelf({ x: 12, y: 0, length: 20 }), shelf({ id: 's2', x: 8, y: 0, length: 20 })]), { x: 10, y: 5 }, undefined, 'vertical', 'area');
+    expect(footprint(tight.layout.places[2])).toEqual({ x: 9, y: 4, w: 3, h: 3 });
+  });
+
+  it('stretches an area to include you from up to 3 squares away, keeping items in place', () => {
+    const area: Place = { kind: 'area', id: 'a', label: 'Produce', x: 5, y: 5, w: 3, h: 3, categories: ['veg'] };
+    const l = store([area]);
+    const plan = planBuild(l, { x: 10, y: 6 }, cat('fruit'), 'vertical', 'area');
+    expect(plan.action).toBe('extendArea');
+    expect(footprint(plan.layout.places[0])).toEqual({ x: 5, y: 5, w: 6, h: 3 });
+    expect(plan.layout.places[0].categories).toEqual(['veg', 'fruit']);
+    expect(where(plan.layout, plan.rekey!('a@0.5,0.5'))).toEqual({ x: 6, y: 6 });
+    expect(planBuild(l, { x: 11, y: 6 }, undefined, 'vertical', 'area').action).toBe('createArea'); // 4 away
+    // Inside or beside a shelf still wins over area building.
+    expect(planBuild(store([shelf()]), { x: 6, y: 6 }, undefined, 'vertical', 'area').action).toBe('onShelf');
+  });
 });
+

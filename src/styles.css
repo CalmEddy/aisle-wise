@@ -83,7 +83,6 @@ button { cursor: pointer; }
 @keyframes pulse { from { transform: scale(0.6); opacity: 0.45; } to { transform: scale(1.6); opacity: 0; } }
 
 /* Shopping view */
-.here { margin: 10px 0 14px; font-size: 0.85rem; }
 .chips { display: flex; gap: 6px; overflow-x: auto; padding: 6px 0 2px; scrollbar-width: none; }
 .chips.wrap { flex-wrap: wrap; overflow: visible; }
 .chip {
@@ -418,3 +417,9 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .build-edit-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 2px 6px; }
 .build-edit-head h3 { margin: 0; font-size: 1rem; }
 .menu-category select { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; color: var(--text); }
+
+.build-target { display: flex; align-items: center; gap: 0; margin: 0 0 8px; border: 0; }
+.build-target .muted { margin-right: 8px; }
+.build-target button { flex: 1; border: 1px solid var(--line); }
+.build-target button:first-of-type { border-radius: 10px 0 0 10px; }
+.build-target button:last-of-type { border-radius: 0 10px 10px 0; }
