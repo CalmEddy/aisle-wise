@@ -471,3 +471,16 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 @media (prefers-reduced-motion: reduce) { .map-ghost.fill { animation: none; } }
 .toast-fill { display: flex; gap: 8px; align-items: center; margin: 6px 0 2px; font-size: 0.9rem; }
 .toast-fill span { flex: 1; }
+
+/* Shelf block tool */
+.map.drawing { touch-action: none; cursor: crosshair; }
+.block-panel .block-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.block-options { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.block-options .mini-seg button { padding: 8px 10px; font-size: 0.85rem; }
+.lane-field { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.lane-field .stepper { width: 120px; }
+.lane-field .stepper input { padding: 8px 0; }
+.map-ghost.block { --ghost: var(--accent); --ghost-fill: color-mix(in srgb, var(--accent) 22%, transparent); }
+.map-block-outline { fill: none; stroke: var(--accent); stroke-width: 0.12; stroke-dasharray: 0.3 0.3; pointer-events: none; }
+.double-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin: 6px 0; }
+.double-toggle input { width: 20px; height: 20px; accent-color: var(--accent); }

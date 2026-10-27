@@ -1,6 +1,9 @@
 import type { Display } from '../display';
 
-const LABELS: Record<keyof Display, string> = {
+/** Display settings that are on/off switches. */
+type Switch = { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display];
+
+const LABELS: Record<Switch, string> = {
   mapColors: 'Colors on map',
   mapIcons: 'Icons on map',
   groupList: 'Group by section',
@@ -8,15 +11,16 @@ const LABELS: Record<keyof Display, string> = {
   listIcons: 'Icons in list',
   buildMode: '🛠 Build mode',
   buildArea: 'Build areas',
+  buildDouble: 'Double shelves',
 };
 
 /** On/off switches for category colours and icons. */
-export function DisplayToggles({ display, setDisplay, show, offByDefault = ['buildMode', 'buildArea'] }: {
+export function DisplayToggles({ display, setDisplay, show, offByDefault = ['buildMode', 'buildArea', 'buildDouble'] }: {
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
-  show: (keyof Display)[];
+  show: Switch[];
   /** Switches that start off when never set. */
-  offByDefault?: (keyof Display)[];
+  offByDefault?: Switch[];
 }) {
   return (
     <div className="toggles" role="group" aria-label="Display">

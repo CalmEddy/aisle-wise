@@ -34,6 +34,8 @@ export interface BuildPlan {
   label: string;
   /** A new shelf copied its direction and length from this neighbouring shelf. */
   matched?: string;
+  /** With double shelves: the new shelf's back-to-back partner. */
+  pairId?: string;
   /**
    * When a shelf grew, saved spots on it must be recalculated so items stay
    * where they physically are. Maps an old spot key to the new one.
@@ -138,7 +140,7 @@ function fitShelf(l: StoreLayout, p: Point, orientation: Orientation, length: nu
  * a new shelf through `p`.
  */
 export function planBuild(
-  l: StoreLayout, p: Point, category?: Category, orientation: Orientation = 'vertical', target: BuildTarget = 'shelf',
+  l: StoreLayout, p: Point, category?: Category, orientation: Orientation = 'vertical', target: BuildTarget = 'shelf', double = false,
 ): BuildPlan {
   const cat = category?.id;
 
@@ -181,9 +183,24 @@ export function planBuild(
     y: copy?.y ?? (dir === 'vertical' ? fit!.start : p.y),
     categories: cat ? [cat] : [],
   };
+  // Double shelves: a partner back to back with it, away from the row it copied (else whichever side fits).
+  let partner: Shelf | undefined;
+  if (double) {
+    const withShelf = { ...l, places: [...l.places, shelf] };
+    const acrossAt = dir === 'vertical' ? shelf.x : shelf.y;
+    const away = template ? Math.sign(acrossAt - (dir === 'vertical' ? template.x : template.y)) || 1 : 1;
+    for (const side of [away, -away]) {
+      const s2 = shelfLike(withShelf, shelf, acrossAt + side);
+      if (s2) {
+        partner = { ...s2, id: `s-${newId()}`, label: nextLabel(withShelf, 'shelf') };
+        break;
+      }
+    }
+  }
   return {
     action: 'create',
-    layout: { ...l, places: [...l.places, shelf] },
+    layout: { ...l, places: [...l.places, shelf, ...(partner ? [partner] : [])] },
+    ...(partner && { pairId: partner.id }),
     spotKey: exactKey(shelf.id, { u: alongShelf(shelf, p), v: 0.5 }),
     placeId: shelf.id,
     label: shelf.label,
@@ -257,12 +274,12 @@ function extendTo(l: StoreLayout, c: ExtendCandidate, p: Point, cat?: string): B
 export type BuildChoice = { extend: string } | 'shelf' | 'area';
 
 /** The plan for a chosen way of placing an item picked up at `p`. */
-export function planChoice(l: StoreLayout, p: Point, category: Category | undefined, choice: BuildChoice): BuildPlan {
+export function planChoice(l: StoreLayout, p: Point, category: Category | undefined, choice: BuildChoice, double = false): BuildPlan {
   if (typeof choice === 'object') {
     const c = extendCandidates(l, p).find((x) => x.shelfId === choice.extend);
     return c ? extendTo(l, c, p, category?.id) : { action: 'blocked', layout: l, label: '' };
   }
-  return planBuild(l, p, category, 'vertical', choice);
+  return planBuild(l, p, category, 'vertical', choice, double);
 }
 
 /**
@@ -450,7 +467,7 @@ function planArea(l: StoreLayout, p: Point, category?: Category): BuildPlan {
 // Picking an item up in build mode
 
 export type PickUpOutcome =
-  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; productId: string; matched?: string }
+  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; productId: string; matched?: string; pairId?: string }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string }
   /** Picked up on open floor with shelves that could be extended: ask which (or new shelf/area). */
   | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[] }
@@ -487,7 +504,7 @@ function rekeyAll(products: Product[], layoutId: string, rekey?: (k: string) => 
  */
 export function pickUp(
   state: { items: ListItem[]; products: Product[]; layout: StoreLayout; catalog: Catalog },
-  name: string, itemId: string | undefined, at: Point, target: BuildTarget = 'shelf',
+  name: string, itemId: string | undefined, at: Point, target: BuildTarget = 'shelf', double = false,
 ): PickUpResult {
   const { items, catalog, layout } = state;
   let products = state.products;
@@ -502,7 +519,7 @@ export function pickUp(
   const pid = product.id;
   const itemName = product.name;
   const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
-  const plan = planBuild(layout, at, category, 'vertical', target);
+  const plan = planBuild(layout, at, category, 'vertical', target, double);
 
   const savedKey = product.locations?.[layout.id];
   const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
@@ -529,23 +546,56 @@ export function pickUp(
       ? { kind: 'choose', productId: pid, itemName, at, options }
     : plan.action === 'blocked'
       ? { kind: 'blocked', itemName, productId: pid }
-      : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid, matched: plan.matched };
+      : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid, matched: plan.matched, pairId: plan.pairId };
   return { layout: next, products, items: nextItems, outcome };
 }
 
 /** Places an item picked up at `at` (after a conflict or a choice): build there and save its spot. */
 export function moveHere(
   state: { products: Product[]; layout: StoreLayout; catalog: Catalog }, productId: string, at: Point,
-  choice: BuildTarget | BuildChoice = 'shelf',
+  choice: BuildTarget | BuildChoice = 'shelf', double = false,
 ): { layout: StoreLayout; products: Product[]; plan: BuildPlan } | undefined {
   const product = state.catalog.productById.get(productId);
   if (!product) return undefined;
   const category = product.categoryId ? state.catalog.categoryById.get(product.categoryId) : undefined;
-  const plan = planChoice(state.layout, at, category, choice);
+  const plan = planChoice(state.layout, at, category, choice, double);
   if (plan.action === 'blocked') return { layout: state.layout, products: state.products, plan };
   const lid = state.layout.id;
   const products = rekeyAll(state.products, lid, plan.rekey).map((p) => (p.id === productId
     ? { ...p, locations: { ...p.locations, [lid]: plan.spotKey! } }
     : p));
   return { layout: plan.layout, products, plan };
+}
+
+/**
+ * Turns a back-to-back pair of shelves the other way round together: `aId`
+ * turns as `turnShelf` would, and `bId` stays right behind it on the same
+ * side (or the other side if that's blocked). Undefined if they don't fit.
+ */
+export function turnPair(l: StoreLayout, aId: string, bId: string, p: Point): { layout: StoreLayout; rekey: (key: string) => string } | undefined {
+  const a = l.places.find((pl): pl is Shelf => pl.id === aId && pl.kind === 'shelf');
+  const b = l.places.find((pl): pl is Shelf => pl.id === bId && pl.kind === 'shelf');
+  if (!a || !b) return undefined;
+  const acrossOf = (s: Shelf) => (s.orientation === 'vertical' ? s.x : s.y);
+  const side = Math.sign(acrossOf(b) - acrossOf(a)) || 1;
+  const withoutB = { ...l, places: l.places.filter((pl) => pl.id !== bId) };
+  const turned = turnShelf(withoutB, aId, p);
+  if (!turned) return undefined;
+  const a2 = turned.layout.places.find((pl): pl is Shelf => pl.id === aId && pl.kind === 'shelf')!;
+  let b2: Shelf | undefined;
+  for (const s of [side, -side]) {
+    const fit = shelfLike(turned.layout, a2, acrossOf(a2) + s);
+    if (fit) {
+      b2 = { ...b, orientation: fit.orientation, length: fit.length, x: fit.x, y: fit.y };
+      break;
+    }
+  }
+  if (!b2) return undefined;
+  // Items on b move the same way as items on a (the pair is the same shape).
+  const rekey = (key: string) => {
+    const exact = parseExactKey(key);
+    if (exact?.placeId === bId) return turned.rekey(exactKey(aId, exact.spot)).replace(aId, bId);
+    return turned.rekey(key);
+  };
+  return { layout: { ...turned.layout, places: [...turned.layout.places, b2] }, rekey };
 }

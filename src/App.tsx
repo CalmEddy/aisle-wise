@@ -10,7 +10,7 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate } from './core/build';
+import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate } from './core/build';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -48,7 +48,7 @@ export interface Snapshot {
 
 /** What happened when something was picked up in build mode. */
 export type BuildOutcome =
-  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot; /** A new shelf copied this neighbour. */ matched?: string }
+  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot; /** A new shelf copied this neighbour. */ matched?: string; /** Its back-to-back partner (double shelves). */ pairId?: string }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string; snapshot: Snapshot }
   | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[]; snapshot: Snapshot }
   | { kind: 'blocked'; itemName: string; snapshot: Snapshot };
@@ -218,7 +218,7 @@ export default function App() {
    */
   function pickUpHere(name: string, itemId?: string): BuildOutcome {
     const snapshot: Snapshot = { items, products, layouts };
-    const r = pickUp({ items, products, layout, catalog }, name, itemId, position, display.buildArea ? 'area' : 'shelf');
+    const r = pickUp({ items, products, layout, catalog }, name, itemId, position, display.buildArea ? 'area' : 'shelf', !!display.buildDouble);
     if (r.layout !== layout) replaceLayout(r.layout);
     setProducts(() => r.products);
     setItems(() => r.items);
@@ -226,28 +226,28 @@ export default function App() {
     if (o.kind === 'conflict') return { kind: 'conflict', productId: o.productId, itemName: o.itemName, savedKey: o.savedKey, snapshot };
     if (o.kind === 'blocked') return { kind: 'blocked', itemName: o.itemName, snapshot };
     if (o.kind === 'choose') return { ...o, snapshot };
-    return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot, matched: o.matched };
+    return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot, matched: o.matched, pairId: o.pairId };
   }
 
   /** "Move here" after a conflict: build at the current spot and move the item there. */
   function moveHereAndBuild(productId: string): BuildOutcome {
     const snapshot: Snapshot = { items, products, layouts };
-    const r = moveHere({ products, layout, catalog }, productId, position, display.buildArea ? 'area' : 'shelf');
+    const r = moveHere({ products, layout, catalog }, productId, position, display.buildArea ? 'area' : 'shelf', !!display.buildDouble);
     const name = catalog.productById.get(productId)?.name ?? '';
     if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
     replaceLayout(r.layout);
     setProducts(() => r.products);
-    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot, matched: r.plan.matched };
+    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot, matched: r.plan.matched, pairId: r.plan.pairId };
   }
 
   /** The shopper chose where an item picked up on open floor goes: extend a shelf, or a new shelf/area. */
   function placeChosen(productId: string, at: Point, choice: BuildChoice, snapshot: Snapshot): BuildOutcome {
-    const r = moveHere({ products, layout, catalog }, productId, at, choice);
+    const r = moveHere({ products, layout, catalog }, productId, at, choice, !!display.buildDouble);
     const name = catalog.productById.get(productId)?.name ?? '';
     if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
     replaceLayout(r.layout);
     setProducts(() => r.products);
-    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot, matched: r.plan.matched };
+    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot, matched: r.plan.matched, pairId: r.plan.pairId };
   }
 
   /**
@@ -268,9 +268,9 @@ export default function App() {
   }
 
   /** Turns a shelf the other way round where the shopper stands. Returns what Undo restores, or nothing if it can't turn. */
-  function turnShelfHere(shelfId: string): Snapshot | undefined {
+  function turnShelfHere(shelfId: string, pairId?: string): Snapshot | undefined {
     const snapshot: Snapshot = { items, products, layouts };
-    const r = turnShelf(layout, shelfId, position);
+    const r = pairId ? turnPair(layout, shelfId, pairId, position) : turnShelf(layout, shelfId, position);
     if (!r) return undefined;
     replaceLayout(r.layout);
     setProducts((prev) => prev.map((p) => {

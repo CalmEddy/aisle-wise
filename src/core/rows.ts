@@ -100,45 +100,52 @@ function partner(l: StoreLayout, s: Shelf, side: -1 | 1): Shelf | undefined {
 }
 
 /**
- * Where the next shelf after `s` goes on one side, at the row's spacing: back
- * to back with `s` when shelves come in pairs and `s` doesn't have its
- * partner yet, otherwise across a walkway. Undefined if it doesn't fit.
+ * The next shelf (or back-to-back pair, if `double`) after `s` on one side,
+ * across a walkway of the row's usual width. Starts from the far shelf of
+ * `s`'s pair if it has one. Empty if it doesn't fit.
  */
-export function nextShelf(l: StoreLayout, s: Shelf, side: -1 | 1): Shelf | undefined {
-  const pattern = learnPattern(l, s);
-  // Already has a shelf right behind it on this side: carry on from that one.
+export function nextShelves(l: StoreLayout, s: Shelf, side: -1 | 1, double = false): Shelf[] {
+  const { lane } = learnPattern(l, s);
   let base = s;
   for (let guard = 0; guard < 3; guard++) {
     const behind = partner(l, base, side);
     if (!behind) break;
     base = behind;
   }
-  const hasPair = !!partner(l, base, -side as -1 | 1) || base !== s;
-  const gap = pattern.paired && !hasPair ? 0 : pattern.lane;
-  return shelfLike(l, s, across(base) + side * (gap + 1));
+  const first = shelfLike(l, s, across(base) + side * (lane + 1));
+  if (!first) return [];
+  if (!double) return [first];
+  const second = shelfLike({ ...l, places: [...l.places, first] }, s, across(base) + side * (lane + 2));
+  return second ? [first, second] : [];
 }
 
 /**
  * Shelves the shopper probably walked past to get from an existing shelf to
- * the new shelf `made`: the gap between them on the nearer side, filled at
- * the row's spacing, keeping a walkway beside each open side. Ordered from
- * the existing shelf towards `made`. Empty when the gap is just a walkway.
+ * the newly made shelf (or pair) `made`: the gap between them on the nearer
+ * side, filled with single shelves or back-to-back pairs (`double`), keeping
+ * a walkway of the row's usual width beside each open side. Ordered from the
+ * existing shelf towards `made`. Empty when the gap is just a walkway.
  */
-export function skippedShelves(l: StoreLayout, made: Shelf): Shelf[] {
-  const mates = rowMates(l, made);
+export function skippedShelves(l: StoreLayout, made: Shelf | Shelf[], double = false): Shelf[] {
+  const group = Array.isArray(made) ? made : [made];
+  const ref = group[0];
+  if (!ref) return [];
+  const ids = new Set(group.map((g) => g.id));
+  const mates = rowMates(l, ref).filter((o) => !ids.has(o.id));
+  const edge = (side: -1 | 1) => (side > 0 ? Math.max : Math.min)(...group.map(across));
   const sides = ([-1, 1] as const).map((side) => {
     const near = mates
-      .filter((o) => (across(o) - across(made)) * side > 0)
-      .sort((a, b) => Math.abs(across(a) - across(made)) - Math.abs(across(b) - across(made)))[0];
-    return near ? { side, near } : undefined;
-  }).filter((x): x is { side: -1 | 1; near: Shelf } => !!x)
-    .sort((a, b) => Math.abs(across(a.near) - across(made)) - Math.abs(across(b.near) - across(made)));
+      .filter((o) => (across(o) - edge(side)) * side > 0)
+      .sort((a, b) => Math.abs(across(a) - edge(side)) - Math.abs(across(b) - edge(side)))[0];
+    return near ? { side, near, d: Math.abs(across(near) - edge(side)) } : undefined;
+  }).filter((x): x is { side: -1 | 1; near: Shelf; d: number } => !!x)
+    .sort((a, b) => a.d - b.d);
 
-  for (const { side, near } of sides) {
-    const { lane, paired } = learnPattern(l, near);
-    const unit = paired ? 2 : 1;
+  for (const { side, near, d } of sides) {
+    const { lane } = learnPattern(l, near);
+    const unit = double ? 2 : 1;
     // Squares strictly between them, counted from the existing shelf.
-    const total = Math.abs(across(made) - across(near)) - 1;
+    const total = d - 1;
     let k = 0;
     while ((k + 1) * unit + (k + 2) * lane <= total) k++;
     if (k === 0) continue;
@@ -150,7 +157,7 @@ export function skippedShelves(l: StoreLayout, made: Shelf): Shelf[] {
     let c = across(near) + dir * (lanes[0] + 1);
     for (let i = 0; i < k; i++) {
       for (let j = 0; j < unit; j++) {
-        const s = shelfLike({ ...l, places: [...l.places, ...out] }, made, c + dir * j);
+        const s = shelfLike({ ...l, places: [...l.places, ...out] }, ref, c + dir * j);
         if (s) out.push(s);
       }
       c += dir * (unit + lanes[i + 1]);
@@ -158,6 +165,50 @@ export function skippedShelves(l: StoreLayout, made: Shelf): Shelf[] {
     if (out.length) return out;
   }
   return [];
+}
+
+/** Options for filling a rectangle with shelves. */
+export interface BlockOptions {
+  orientation: Orientation;
+  /** Back-to-back pairs instead of single shelves. */
+  double: boolean;
+  /** Walkway width between shelves (squares). */
+  lane: number;
+}
+
+/** Which way shelves should run in a dragged-out block: along its longer side. */
+export function blockOrientation(r: Rect): Orientation {
+  return r.h >= r.w ? 'vertical' : 'horizontal';
+}
+
+/**
+ * Fills a rectangle with shelves running the full length of it: single shelves
+ * or back-to-back pairs, separated by walkways of `lane` squares, centred
+ * across the rectangle. Shelves that would hit something already there are
+ * left out. Ordered left to right (or top to bottom).
+ */
+export function fillBlock(l: StoreLayout, r: Rect, o: BlockOptions): Shelf[] {
+  const v = o.orientation === 'vertical';
+  const span = v ? r.w : r.h;
+  const length = v ? r.h : r.w;
+  const start = v ? r.y : r.x;
+  if (length < 1 || span < 1) return [];
+  const unit = o.double ? 2 : 1;
+  const lane = Math.max(1, o.lane);
+  let k = 0;
+  while ((k + 1) * unit + k * lane <= span) k++;
+  const used = k * unit + (k - 1) * lane;
+  let c = (v ? r.x : r.y) + Math.floor((span - used) / 2);
+  const template: Shelf = { kind: 'shelf', id: '', label: '', orientation: o.orientation, length, categories: [], x: v ? 0 : start, y: v ? start : 0 };
+  const out: Shelf[] = [];
+  for (let i = 0; i < k; i++) {
+    for (let j = 0; j < unit; j++) {
+      const s = shelfLike(l, template, c + j);
+      if (s) out.push(s);
+    }
+    c += unit + lane;
+  }
+  return out;
 }
 
 /** The squares a planned change adds to a shelf or area: the whole place if new, else just the new part. */

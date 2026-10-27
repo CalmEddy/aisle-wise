@@ -10,7 +10,7 @@ import type { Place, Point, Rect, StoreLayout } from '../core/types';
  */
 export interface MapGhost {
   rect: Rect;
-  kind: 'preview' | 'next' | 'fill';
+  kind: 'preview' | 'next' | 'fill' | 'block';
   onTap?: () => void;
   label?: string;
 }

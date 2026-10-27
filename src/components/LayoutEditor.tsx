@@ -6,8 +6,10 @@ import type { Area, Category, Place, Point, Shelf, StoreLayout } from '../core/t
 import { checkLayout } from '../core/validate';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
-import { StoreMap } from './StoreMap';
+import { StoreMap, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
+import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
+import { nextLabel } from '../core/build';
 
 interface Props {
   layouts: StoreLayout[];
@@ -25,7 +27,7 @@ interface Props {
   looks: Map<string, { color: string; icon: string }>;
 }
 
-type Tool = 'select' | 'shelf-v' | 'shelf-h' | 'area' | 'entrance' | 'checkout';
+type Tool = 'select' | 'shelf-v' | 'shelf-h' | 'block' | 'area' | 'entrance' | 'checkout';
 
 type DragState =
   | { mode: 'move'; id: string; start: Point; orig: Place }
@@ -36,6 +38,7 @@ const TOOLS: { id: Tool; label: string; hint: string }[] = [
   { id: 'select', label: 'Select', hint: 'Tap a shape to edit it. Drag to move; drag the round handle to resize.' },
   { id: 'shelf-v', label: '+ Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
   { id: 'shelf-h', label: '+ Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
+  { id: 'block', label: '▤ Shelf block', hint: 'Drag across the map to fill that space with shelves, then pick single or double and the walkway width.' },
   { id: 'area', label: '+ Open area', hint: 'Tap the map to add an open area, like Produce or the Deli.' },
   { id: 'entrance', label: 'Entrance', hint: 'Tap the map where shoppers come in.' },
   { id: 'checkout', label: 'Checkout', hint: 'Tap the map where shoppers pay.' },
@@ -53,6 +56,21 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
   const floor = useMemo(() => new Floor(layout), [layout]);
   const problems = useMemo(() => checkLayout(layout, floor, categories), [layout, floor, categories]);
   const selected = layout.places.find((p) => p.id === selectedId);
+  const blockLane = display.blockLane ?? 2;
+  const block = useShelfBlock(layout, !!display.buildDouble, blockLane);
+  const blockGhosts: MapGhost[] = tool === 'block' ? block.shelves.map((s) => ({ rect: footprint(s), kind: 'block' })) : [];
+
+  function addBlock() {
+    update((l) => {
+      let next = l;
+      for (const s of block.shelves) {
+        next = { ...next, places: [...next.places, { ...s, id: newId(), label: nextLabel(next, 'shelf') }] };
+      }
+      return next;
+    });
+    block.reset();
+    setTool('select');
+  }
 
   // --- Layout updates ---
   const update = (fn: (l: StoreLayout) => StoreLayout) =>
@@ -103,7 +121,11 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
     dragRef.current = state;
   }
 
-  function onBackgroundDown(e: React.PointerEvent) {
+  function onBackgroundDown(e: React.PointerEvent<SVGSVGElement>) {
+    if (tool === 'block') {
+      block.svgHandlers.onPointerDown(e);
+      return;
+    }
     const cell = toCell(e);
     if (tool === 'shelf-v' || tool === 'shelf-h' || tool === 'area') addPlace(tool, cell);
     else if (tool === 'entrance' || tool === 'checkout') {
@@ -118,7 +140,8 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
     beginDrag({ mode: 'move', id: place.id, start: toCell(e), orig: place }, e);
   }
 
-  function onMove(e: React.PointerEvent) {
+  function onMove(e: React.PointerEvent<SVGSVGElement>) {
+    if (tool === 'block') block.drag.move(e);
     const d = dragRef.current;
     if (!d) return;
     const cell = toCell(e);
@@ -142,6 +165,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
   }
 
   function endDrag() {
+    block.drag.up();
     dragRef.current = null;
   }
 
@@ -205,7 +229,7 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
 
       <div className="toolbar" role="toolbar">
         {TOOLS.map((t) => (
-          <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} onClick={() => setTool(t.id)}>
+          <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} onClick={() => { setTool(t.id); block.reset(); if (t.id === 'block') setSelectedId(undefined); }}>
             {t.label}
           </button>
         ))}
@@ -217,10 +241,11 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
         layout={layout}
         look={mapLook}
         selectedId={selectedId}
+        ghosts={blockGhosts}
         showGrid
         onPlacePointerDown={onPlaceDown}
         svgProps={{
-          className: `map editing tool-${tool}`,
+          className: `map editing tool-${tool}${tool === 'block' ? ' drawing' : ''}`,
           onPointerDown: onBackgroundDown,
           onPointerMove: onMove,
           onPointerUp: endDrag,
@@ -238,6 +263,9 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
             onPointerDown={(e) => tool === 'select' && beginDrag({ mode: which }, e)}
           />
         ))}
+        {tool === 'block' && block.drag.rect && (
+          <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
+        )}
         {selected && handle && (
           <circle
             className="resize-handle"
@@ -250,7 +278,20 @@ export function LayoutEditor({ layouts, setLayouts, activeId, setActiveId, onDon
       </StoreMap>
       <DisplayToggles display={display} setDisplay={setDisplay} show={['mapColors', 'mapIcons']} />
 
-      {selected ? (
+      {tool === 'block' ? (
+        <ShelfBlockPanel
+          rect={block.drag.rect}
+          shelves={block.shelves}
+          orientation={block.orientation}
+          setOrientation={block.setOrientation}
+          double={!!display.buildDouble}
+          setDouble={(d) => setDisplay((x) => ({ ...x, buildDouble: d }))}
+          lane={blockLane}
+          setLane={(n) => setDisplay((x) => ({ ...x, blockLane: n }))}
+          onAdd={addBlock}
+          onCancel={() => { block.reset(); setTool('select'); }}
+        />
+      ) : selected ? (
         <PlacePanel
           place={selected}
           onChange={(patch) => updatePlace(selected.id, patch)}

@@ -11,6 +11,10 @@ export interface Display {
   buildMode: boolean;
   /** In build mode, what picking up on open floor makes. */
   buildArea?: boolean;
+  /** New shelves come in back-to-back pairs. */
+  buildDouble?: boolean;
+  /** Walkway width (squares) between shelves in a shelf block. */
+  blockLane?: number;
 }
 
 export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listColors: true, listIcons: true, buildMode: false };

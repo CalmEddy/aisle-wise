@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
 import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type Direction } from '../core/build';
-import { addedRect, nextShelf, skippedShelves } from '../core/rows';
+import { addedRect, nextShelves, skippedShelves } from '../core/rows';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt } from '../core/geometry';
@@ -14,6 +14,7 @@ import { PlacePanel } from './LayoutEditor';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
+import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
 
 interface Props {
   layout: StoreLayout;
@@ -46,7 +47,7 @@ export interface BuildApi {
   /** Adds shelves (numbered in order); returns their ids and what Undo restores. */
   addShelves: (shelves: Shelf[]) => { placeIds: string[]; snapshot: Snapshot };
   /** Returns what Undo restores, or nothing if the shelf can't turn. */
-  turnShelfHere: (shelfId: string) => Snapshot | undefined;
+  turnShelfHere: (shelfId: string, pairId?: string) => Snapshot | undefined;
   renamePlace: (placeId: string, label: string) => void;
   addAreaHere: () => { placeId: string; snapshot: Snapshot } | undefined;
   stepTo: (dir: Direction) => void;
@@ -92,14 +93,25 @@ export function ShoppingView(props: Props) {
   useEffect(() => {
     if (note && 'placeId' in note && layout.places.some((p) => p.id === note.placeId && p.kind === 'shelf')) setLastShelfId(note.placeId);
   }, [note, layout]);
-  const buildPreview = building ? planBuild(layout, position, undefined, 'vertical', props.display.buildArea ? 'area' : 'shelf') : undefined;
+  const double = !!props.display.buildDouble;
+  const lane = props.display.blockLane ?? 2;
+  const setDouble = (d: boolean) => props.setDisplay((x) => ({ ...x, buildDouble: d }));
+  // Shelf block tool: drag out a rectangle to fill with shelves.
+  const [blockMode, setBlockMode] = useState(false);
+  const block = useShelfBlock(layout, double, lane);
+  const blocking = building && blockMode;
+  const buildPreview = building ? planBuild(layout, position, undefined, 'vertical', props.display.buildArea ? 'area' : 'shelf', double) : undefined;
   const findShelf = (id?: string) => layout.places.find((p): p is Shelf => p.id === id && p.kind === 'shelf');
   const baseShelf = findShelf(editing?.id) ?? findShelf(buildPreview?.action === 'onShelf' ? buildPreview.placeId : undefined) ?? findShelf(lastShelfId);
   // Shelves probably walked past on the way to a shelf that was just made.
   const justMade = note?.kind === 'built' && note.action === 'create' ? findShelf(note.placeId) : undefined;
-  const skipped = useMemo(() => (building && justMade ? skippedShelves(layout, justMade) : []), [building, justMade, layout]);
-  const nextOptions = building && baseShelf && !skipped.length
-    ? ([-1, 1] as const).map((side) => ({ side, shelf: nextShelf(layout, baseShelf, side) })).filter((o): o is { side: -1 | 1; shelf: Shelf } => !!o.shelf)
+  const justPair = note?.kind === 'built' ? findShelf(note.pairId) : undefined;
+  const skipped = useMemo(
+    () => (building && justMade ? skippedShelves(layout, justPair ? [justMade, justPair] : [justMade], double) : []),
+    [building, justMade, justPair, layout, double],
+  );
+  const nextOptions = building && !blocking && baseShelf && !skipped.length
+    ? ([-1, 1] as const).map((side) => ({ side, shelves: nextShelves(layout, baseShelf, side, double) })).filter((o) => o.shelves.length > 0)
     : [];
 
   function stampShelves(shelves: Shelf[], filled: boolean) {
@@ -109,11 +121,17 @@ export function ShoppingView(props: Props) {
   }
 
   const ghosts: MapGhost[] = [];
-  if (building) {
+  if (blocking) {
+    for (const sh of block.shelves) ghosts.push({ rect: footprint(sh), kind: 'block' });
+  } else if (building) {
     const added = buildPreview && buildPreview.action !== 'onShelf' && buildPreview.action !== 'inArea'
       ? addedRect(layout, buildPreview.layout, buildPreview.placeId) : undefined;
     if (added) ghosts.push({ rect: added, kind: 'preview' });
-    for (const o of nextOptions) ghosts.push({ rect: footprint(o.shelf), kind: 'next', label: '+', onTap: () => stampShelves([o.shelf], false) });
+    const pairGhost = buildPreview?.pairId ? buildPreview.layout.places.find((p) => p.id === buildPreview.pairId) : undefined;
+    if (pairGhost) ghosts.push({ rect: footprint(pairGhost), kind: 'preview' });
+    for (const o of nextOptions) {
+      for (const sh of o.shelves) ghosts.push({ rect: footprint(sh), kind: 'next', label: '+', onTap: () => stampShelves(o.shelves, false) });
+    }
     for (const s of skipped) ghosts.push({ rect: footprint(s), kind: 'fill', onTap: () => stampShelves(skipped, true) });
   }
 
@@ -353,12 +371,17 @@ export function ShoppingView(props: Props) {
             showGrid={building}
             highlightId={here?.id}
             selectedId={editing?.id}
-            onMapTap={(x, y, place) => {
+            onMapTap={blocking ? undefined : (x, y, place) => {
               // Build mode: tapping a shelf or area opens it for editing (and puts you there).
               if (building) setEditingId(place?.id);
               setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }));
             }}
-          />
+            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : undefined}
+          >
+            {blocking && block.drag.rect && (
+              <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
+            )}
+          </StoreMap>
           <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']} />
           {editing && (
             <div className="build-edit">
@@ -380,7 +403,21 @@ export function ShoppingView(props: Props) {
               />
             </div>
           )}
-          {building && (
+          {blocking && (
+            <ShelfBlockPanel
+              rect={block.drag.rect}
+              shelves={block.shelves}
+              orientation={block.orientation}
+              setOrientation={block.setOrientation}
+              double={double}
+              setDouble={setDouble}
+              lane={lane}
+              setLane={(n) => props.setDisplay((x) => ({ ...x, blockLane: n }))}
+              onAdd={() => { stampShelves(block.shelves, false); block.reset(); setBlockMode(false); }}
+              onCancel={() => { block.reset(); setBlockMode(false); }}
+            />
+          )}
+          {building && !blocking && (
             <BuildPanel
               layout={layout}
               position={position}
@@ -390,7 +427,10 @@ export function ShoppingView(props: Props) {
               preview={buildPreview!}
               turnId={baseShelf?.id}
               nextOptions={nextOptions}
-              onNext={(shelf) => stampShelves([shelf], false)}
+              onNext={(shelves) => stampShelves(shelves, false)}
+              double={double}
+              setDouble={setDouble}
+              onBlock={() => { setEditingId(undefined); setNote(null); block.reset(); setBlockMode(true); }}
               onNote={setNote}
             />
           )}
@@ -891,7 +931,7 @@ const ACTION_TEXT: Record<string, (label: string) => string> = {
 };
 
 /** Build mode controls: what checking off here will do, walk arrows and tools. */
-function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, onNote }: {
+function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, double, setDouble, onBlock, onNote }: {
   layout: StoreLayout;
   position: Point;
   target: BuildTarget;
@@ -901,9 +941,13 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
   preview: ReturnType<typeof planBuild>;
   /** The shelf "Turn shelf" turns. */
   turnId?: string;
-  /** Where "next shelf" can go, either side of the current shelf. */
-  nextOptions: { side: -1 | 1; shelf: Shelf }[];
-  onNext: (shelf: Shelf) => void;
+  /** Where "next shelf" (or pair) can go, either side of the current shelf. */
+  nextOptions: { side: -1 | 1; shelves: Shelf[] }[];
+  onNext: (shelves: Shelf[]) => void;
+  double: boolean;
+  setDouble: (d: boolean) => void;
+  /** Start the shelf block tool. */
+  onBlock: () => void;
   onNote: (n: BuildNote) => void;
 }) {
   const options = preview.action === 'create' || preview.action === 'createArea' ? extendCandidates(layout, position) : [];
@@ -920,13 +964,17 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
           </button>
         ))}
       </div>
+      <label className="double-toggle">
+        <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
+        <span>Double shelves <span className="muted small">(back to back)</span></span>
+      </label>
       <p className="build-preview">
         <b>Picking up here</b>{' '}
         {options.length
           ? <>lets you extend {options.map((o) => `“${o.label || 'a shelf'}”`).join(' or ')}, or make a new shelf or area.</>
           : preview.action === 'create' && preview.matched
-            ? <>creates a new shelf lined up with “{preview.matched}” (shown in blue).</>
-            : <>{ACTION_TEXT[preview.action](preview.label)}{preview.action === 'create' || preview.action === 'extend' ? ' (shown in blue)' : ''}.</>}
+            ? <>creates a new {preview.pairId ? 'pair of shelves' : 'shelf'} lined up with “{preview.matched}” (shown in blue).</>
+            : <>{preview.pairId ? 'creates a new double shelf here' : ACTION_TEXT[preview.action](preview.label)}{preview.action === 'create' || preview.action === 'extend' ? ' (shown in blue)' : ''}.</>}
       </p>
       <p className="muted small">
         Tap the map or use the arrows to say where you are, then check items off or tap 🛒 Cart.
@@ -940,11 +988,15 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
           {arrow('down', 'Move down', '↓')}
         </div>
         <div className="build-tools">
-          {nextOptions.map(({ side, shelf }) => (
-            <button key={side} className="btn primary" onClick={() => onNext(shelf)}>
-              {shelf.orientation === 'vertical' ? (side < 0 ? '← Next shelf' : 'Next shelf →') : (side < 0 ? '↑ Next shelf' : '↓ Next shelf')}
-            </button>
-          ))}
+          {nextOptions.map(({ side, shelves }) => {
+            const what = shelves.length > 1 ? 'Next pair' : 'Next shelf';
+            return (
+              <button key={side} className="btn primary" onClick={() => onNext(shelves)}>
+                {shelves[0].orientation === 'vertical' ? (side < 0 ? `← ${what}` : `${what} →`) : (side < 0 ? `↑ ${what}` : `↓ ${what}`)}
+              </button>
+            );
+          })}
+          <button className="btn" onClick={onBlock}>▤ Shelf block</button>
           <button className="btn" onClick={() => {
             const r = build.addAreaHere();
             onNote(r ? { kind: 'area', ...r } : { kind: 'message', text: 'There’s no free floor here for an area.' });
@@ -1051,8 +1103,10 @@ function BuildBanner({ note, skipped, onFill, layout, catalog, build, onUndo, on
     note.kind === 'area' ? <>New open area added around you.</>
       : note.kind === 'shelves' ? (note.filled
         ? <>Added the <b>{note.count}</b> shelves you walked past.</>
-        : <>Added <b>“{label}”</b>. Tap the next <b>+</b> on the map for another.</>)
-      : note.action === 'create' ? <><b>{note.itemName}</b> is in your cart. New shelf <b>“{label}”</b>{note.matched ? <>, lined up with “{note.matched}”</> : null}.</>
+        : note.count > 1
+          ? <>Added <b>{note.count}</b> shelves.</>
+          : <>Added <b>“{label}”</b>. Tap the next <b>+</b> on the map for another.</>)
+      : note.action === 'create' ? <><b>{note.itemName}</b> is in your cart. New {note.pairId ? 'double shelf' : 'shelf'} <b>“{label}”</b>{note.matched ? <>, lined up with “{note.matched}”</> : null}.</>
         : note.action === 'extend' ? <><b>{note.itemName}</b> is in your cart. Extended <b>“{label}”</b> to here.</>
           : note.action === 'createArea' ? <><b>{note.itemName}</b> is in your cart. New area <b>“{label}”</b> — tap it on the map to resize.</>
             : note.action === 'extendArea' ? <><b>{note.itemName}</b> is in your cart. Stretched <b>“{label}”</b> to here.</>
@@ -1087,7 +1141,7 @@ function BuildBanner({ note, skipped, onFill, layout, catalog, build, onUndo, on
           <div className="segmented mini" role="group" aria-label="Shelf direction">
             {(['vertical', 'horizontal'] as const).map((o) => (
               <button key={o} className={place.orientation === o ? 'active' : ''} onClick={() => {
-                if (place.orientation !== o && !build.turnShelfHere(place.id)) {
+                if (place.orientation !== o && !build.turnShelfHere(place.id, note.kind === 'built' ? note.pairId : undefined)) {
                   onNote({ kind: 'message', text: 'It won’t fit that way here.' });
                 }
               }}>{o === 'vertical' ? '↕' : '↔'}</button>
