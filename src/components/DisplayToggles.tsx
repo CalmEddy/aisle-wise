@@ -3,7 +3,7 @@ import type { Display } from '../display';
 const LABELS: Record<keyof Display, string> = {
   mapColors: 'Colors on map',
   mapIcons: 'Icons on map',
-  mapNumbers: 'Numbers on map',
+  groupList: 'Group by section',
   listColors: 'Colors in list',
   listIcons: 'Icons in list',
   buildMode: '🛠 Build mode',

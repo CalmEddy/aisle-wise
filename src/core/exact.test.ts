@@ -83,4 +83,16 @@ describe('visits', () => {
     const along = visits.find((v) => v.placeId === 'snacks')!.stops.map((s) => s.items[0].name);
     expect([['Pretzels', 'Peanuts', 'Popcorn'], ['Popcorn', 'Peanuts', 'Pretzels']]).toContainEqual(along);
   });
+
+  it('puts items on the same square of a shelf in one stop', () => {
+    const at: Record<string, string> = {
+      'Tomato soup': 'soup@0.51,0.5', 'Vegetable soup': 'soup@0.53,0.5', 'Cream of mushroom': 'soup@0.52,0.5', Chickpeas: 'soup@0.9,0.5',
+    };
+    const products = Object.entries(at).map(([name, key], i) => ({ id: `x${i}`, name, locations: { demo: key } }));
+    const c = new Catalog(products, defaultCategories);
+    const items: ListItem[] = Object.keys(at).map((name) => ({ id: name, name, done: false }));
+    const { stops } = groupIntoStops(items, (i) => locateItem(i, demoLayout, c));
+    expect(stops.map((s) => s.items.map((i) => i.name))).toEqual([['Tomato soup', 'Vegetable soup', 'Cream of mushroom'], ['Chickpeas']]);
+  });
 });
+

@@ -71,7 +71,11 @@ export function locateItem(item: Pick<ListItem, 'name' | 'productId'>, layout: S
   return product ? locateProduct(product, layout, catalog) : { kind: 'unknown' };
 }
 
-/** Groups unchecked items by pick-up spot. */
+/**
+ * Groups unchecked items by pick-up spot. Items whose spots fall on the same
+ * square of the same shelf or area share a stop – e.g. tomato soup and
+ * vegetable soup saved a hair apart are picked up together.
+ */
 export function groupIntoStops(items: ListItem[], locate: (item: ListItem) => Location) {
   const byKey = new Map<string, Stop>();
   const unplaced: ListItem[] = [];
@@ -82,9 +86,10 @@ export function groupIntoStops(items: ListItem[], locate: (item: ListItem) => Lo
     if (loc.kind === 'not-sold') notSold.push(item);
     else if (loc.kind === 'unknown') unplaced.push(item);
     else {
-      const stop = byKey.get(loc.spot.key) ?? { ...loc.spot, items: [] };
+      const square = `${loc.spot.placeId}#${loc.spot.point.x},${loc.spot.point.y}`;
+      const stop = byKey.get(square) ?? { ...loc.spot, items: [] };
       stop.items.push(item);
-      byKey.set(loc.spot.key, stop);
+      byKey.set(square, stop);
     }
   }
   return { stops: [...byKey.values()], unplaced, notSold };

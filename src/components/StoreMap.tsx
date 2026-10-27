@@ -3,20 +3,20 @@ import { footprint, placeNear, sectionShapes } from '../core/geometry';
 import type { SectionLook } from '../display';
 import type { Place, Point, Rect, StoreLayout } from '../core/types';
 
-/** A numbered stop on the map, with a dot for each spot to pick up from. */
-export interface MapVisit {
-  number: number;
-  next: boolean;
-  /** Where the number goes. */
-  at: { x: number; y: number };
-  /** Item spots in this visit (drawn as small dots when there's more than one). */
-  dots: { x: number; y: number }[];
+/** A small dot marking where items on the list are; `next` for the next stop. */
+export interface MapDot {
+  x: number;
+  y: number;
+  next?: boolean;
 }
 
 interface Props {
   layout: StoreLayout;
   you?: Point;
-  visits?: MapVisit[];
+  /** Where the items on the list are. */
+  dots?: MapDot[];
+  /** Red pulsing circles: items the shopper asked to pinpoint. */
+  pins?: { x: number; y: number }[];
   /** A pin showing a spot being chosen. */
   preview?: { x: number; y: number };
   /** Zoom in on this rectangle (grid units). */
@@ -55,7 +55,7 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, visits = [], preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -97,11 +97,12 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
       <Marker point={layout.entrance} label="IN" className="map-entrance" />
       <Marker point={layout.checkout} label="$" className="map-checkout" />
 
-      {visits.map((v) => (
-        <g key={`v${v.number}`} className={v.next ? 'map-stop next' : 'map-stop'}>
-          {v.dots.map((d, i) => <circle key={i} className="map-dot" cx={d.x} cy={d.y} r={0.4} />)}
-          <circle cx={v.at.x} cy={v.at.y} r={1.3} />
-          <text x={v.at.x} y={v.at.y + 0.5} textAnchor="middle">{v.number}</text>
+      {dots.map((d, i) => <circle key={`d${i}`} className={d.next ? 'map-dot next' : 'map-dot'} cx={d.x} cy={d.y} r={0.42} />)}
+
+      {pins.map((p, i) => (
+        <g key={`p${i}-${p.x}-${p.y}`} className="map-pin">
+          <circle cx={p.x} cy={p.y} r={1.6} className="ring" />
+          <circle cx={p.x} cy={p.y} r={0.7} />
         </g>
       ))}
 

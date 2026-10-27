@@ -429,3 +429,17 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .toast-choices .btn { text-align: left; }
 .toast-choices .btn:not(.primary) { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }
 .muted-on-dark { opacity: 0.75; font-weight: 400; }
+
+/* Item dots and pinpointing */
+.map-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 0.12; opacity: 0.75; }
+.map-dot.next { opacity: 1; stroke-width: 0.18; }
+.map-pin { pointer-events: none; }
+.map-pin circle { fill: #e5383b; }
+.map-pin .ring { fill: none; stroke: #e5383b; stroke-width: 0.35; transform-box: fill-box; transform-origin: center; animation: pin-pulse 1.2s ease-out infinite; }
+@keyframes pin-pulse { from { transform: scale(0.5); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
+.pin { font-size: 1rem; filter: grayscale(1); opacity: 0.55; }
+.pin[aria-pressed='true'] { filter: none; opacity: 1; }
+.row .sub { display: block; font-size: 0.75rem; color: var(--muted); }
+.row.nearest .name { font-weight: 700; }
+.row.tinted { background: color-mix(in srgb, var(--cat) 13%, var(--surface)); border-radius: 8px; padding: 0 4px; margin: 3px 0; }
+.flat-list .items { margin-top: 2px; }

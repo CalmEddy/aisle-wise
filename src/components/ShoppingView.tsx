@@ -11,7 +11,7 @@ import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { PlacePanel } from './LayoutEditor';
 import { SpotPicker } from './SpotPicker';
-import { StoreMap, placeUnder, toGrid, type MapVisit } from './StoreMap';
+import { StoreMap, placeUnder, toGrid, type MapDot } from './StoreMap';
 
 interface Props {
   layout: StoreLayout;
@@ -132,23 +132,39 @@ export function ShoppingView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, layout, floor, catalog, position]);
 
-  // One number per visit on the map, with a dot for each item spot.
-  // Numbers go on the floor beside a shelf (where you'd stand), so they don't cover its label.
-  const standMark = (pt: Point) => {
-    if (floor.walkable(pt)) return { x: pt.x + 0.5, y: pt.y + 0.5 };
-    const beside = [{ x: pt.x - 1, y: pt.y }, { x: pt.x + 1, y: pt.y }, { x: pt.x, y: pt.y + 1 }, { x: pt.x, y: pt.y - 1 }]
-      .find((q) => floor.walkable(q));
-    return beside ? { x: beside.x + 0.5, y: beside.y + 0.5 } : { x: pt.x + 0.5, y: pt.y + 0.5 };
+  // A dot on the map for each spot on the list (the next stop's stand out).
+  const mapDots: MapDot[] = visits.flatMap((v, i) => v.stops.map((st) => ({ ...st.mark, next: i === 0 })));
+
+  // Items pinpointed on the map with a red pulsing circle.
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  const pinOf = (item: ListItem) => {
+    const loc = locate(item);
+    return loc.kind === 'spot' ? loc.spot.mark : undefined;
   };
-  const mapVisits: MapVisit[] = [];
-  for (const [i, v] of visits.entries()) {
-    const at = standMark(v.stops[0].point);
-    // Two stops facing the same walkway would stack: nudge this number until it's clear.
-    for (let tries = 0; tries < 6 && mapVisits.some((m) => Math.hypot(m.at.x - at.x, m.at.y - at.y) < 2.6); tries++) {
-      at.y += at.y > layout.height - 4 ? -2.7 : 2.7;
-    }
-    mapVisits.push({ number: v.number, next: i === 0, at, dots: v.stops.map((st) => st.mark) });
+  const pins = items.filter((i) => pinned.has(i.id)).map(pinOf).filter((p): p is { x: number; y: number } => !!p);
+  function togglePin(item: ListItem) {
+    setPinned((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) next.delete(item.id);
+      else {
+        next.add(item.id);
+        // Bring the map into view so the pin can be seen.
+        const map = document.querySelector('.app > svg.map');
+        const r = map?.getBoundingClientRect();
+        if (map && r && (r.bottom < 60 || r.top > window.innerHeight - 60)) map.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      return next;
+    });
   }
+
+  // Without grouping: every item on the route, nearest first (by walking distance from you).
+  const grouped = props.display.groupList ?? true;
+  const nearestFirst = useMemo(() => {
+    if (grouped) return [];
+    return route
+      .flatMap((st, order) => st.items.map((item) => ({ item, stop: st, order, d: floor.distance(position, st.point) })))
+      .sort((a, b) => a.d - b.d || a.order - b.order);
+  }, [grouped, route, floor, position]);
 
   // Suggestions for whatever is after the last comma.
   const segment = draft.split(',').pop() ?? '';
@@ -292,7 +308,8 @@ export function ShoppingView(props: Props) {
           <StoreMap
             layout={layout}
             you={position}
-            visits={props.display.mapNumbers ?? true ? mapVisits : []}
+            dots={mapDots}
+            pins={pins}
             look={props.mapLook}
             showGrid={building}
             highlightId={here?.id}
@@ -303,7 +320,7 @@ export function ShoppingView(props: Props) {
               setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }));
             }}
           />
-          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'mapColors', 'mapIcons', 'mapNumbers', 'listColors', 'listIcons']} />
+          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']} />
           {editing && (
             <div className="build-edit">
               <div className="build-edit-head">
@@ -353,15 +370,39 @@ export function ShoppingView(props: Props) {
           <p className="hint muted small">Tap a place or section name to say you’re there. Drag ⠿ onto the map or another item to move an item.</p>
         )}
 
-        {nextVisit && (
+        {!grouped && nearestFirst.length > 0 && (
+          <section className="card flat-list">
+            <div className="stop-head">
+              <h3>Nearest first</h3>
+              <span className="muted small count-pill">{nearestFirst.length} item{nearestFirst.length === 1 ? '' : 's'}</span>
+            </div>
+            <ItemRows
+              items={nearestFirst.map((e) => e.item)}
+              onToggle={toggle}
+              onRemove={remove}
+              onMenu={setMenuFor}
+              drag={dragHandlers}
+              dragging={drag?.item.id}
+              iconOf={iconOf}
+              pinned={pinned}
+              onPin={togglePin}
+              subOf={(item) => nearestFirst.find((e) => e.item.id === item.id)?.stop.label}
+              tintOf={(item) => { const e = nearestFirst.find((x) => x.item.id === item.id); return e && sectionColor(e.stop); }}
+              dropOf={(item) => nearestFirst.find((e) => e.item.id === item.id)?.stop.key}
+              firstIsNearest
+            />
+          </section>
+        )}
+
+        {grouped && nextVisit && (
           <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} big />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} big />
           )} />
         )}
 
-        {laterVisits.map((v) => (
+        {grouped && laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} />
           )} />
         ))}
 
@@ -608,7 +649,7 @@ function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, big }: {
+function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -616,6 +657,16 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, b
   drag?: DragHandlers;
   dragging?: string;
   iconOf?: (i: ListItem) => string | undefined;
+  /** Items pinpointed on the map, and the button that toggles it. */
+  pinned?: Set<string>;
+  onPin?: (i: ListItem) => void;
+  /** A second line under the name (where it is). */
+  subOf?: (i: ListItem) => string | undefined;
+  /** Row tint (category colour). */
+  tintOf?: (i: ListItem) => string | undefined;
+  /** Drop target key per row. */
+  dropOf?: (i: ListItem) => string | undefined;
+  firstIsNearest?: boolean;
   big?: boolean;
 }) {
   return (
@@ -623,7 +674,10 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, b
       {items.map((item) => (
         <li
           key={item.id}
-          className={['row', item.done && 'checked', dragging === item.id && 'dragging'].filter(Boolean).join(' ')}
+          className={['row', item.done && 'checked', dragging === item.id && 'dragging', tintOf?.(item) && 'tinted',
+            firstIsNearest && item === items[0] && 'nearest'].filter(Boolean).join(' ')}
+          style={tintOf?.(item) ? ({ '--cat': tintOf(item) } as React.CSSProperties) : undefined}
+          data-drop={dropOf?.(item)}
         >
           {drag && (
             <span className="handle" aria-label={`Drag ${item.name} to a new location`} {...drag(item)}>⠿</span>
@@ -631,8 +685,20 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, b
           <label>
             <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
             {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
-            <span className="name">{item.name}</span>
+            <span className="name">
+              {item.name}
+              {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
+            </span>
           </label>
+          {onPin && !item.done && (
+            <button
+              className="icon pin"
+              onClick={() => onPin(item)}
+              aria-pressed={!!pinned?.has(item.id)}
+              aria-label={pinned?.has(item.id) ? `Stop showing ${item.name} on the map` : `Show ${item.name} on the map`}
+              title="Show on map"
+            >📍</button>
+          )}
           {onMenu && (
             <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
           )}

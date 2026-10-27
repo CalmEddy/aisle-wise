@@ -32,10 +32,12 @@ re-orders it as you move.
    area to zoom in, then tap the exact spot. Spots are saved relative to the
    shelf or area, so they stay right if you move or resize it. A shelf can be
    reached from either side; the route uses whichever is closer.
-5. **Numbered stops** – back-to-back items on the same shelf or in the same
-   area share one number. The card lists them in walking order with where
-   each one is ("near the top"), and the map shows one number per place, in
-   the walkway beside it, with a dot for each item.
+5. **Stops** – items on the same shelf or in the same area share one card,
+   listed in walking order with where each one is ("near the top"). Items on
+   the same square count as one spot (tomato soup and vegetable soup side by
+   side are picked up together). Turn **Group by section** off for one list,
+   nearest first, that re-sorts as you move. The map shows a dot for each
+   item; tap 📍 on an item to pinpoint it with a red pulsing circle.
    Tap **⋯** on an item to change its **category**, change its place, or mark
    it **not available at this store**. Each item shows its category icon
    (switch off with **Icons in list**). Items not available here, and items with no location yet,

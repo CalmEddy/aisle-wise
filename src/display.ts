@@ -5,8 +5,8 @@ export interface Display {
   listColors: boolean;
   /** Category icon next to each item in the list. */
   listIcons?: boolean;
-  /** Stop numbers on the map. */
-  mapNumbers?: boolean;
+  /** Group the shopping list by shelf/area (off: one list, nearest first). */
+  groupList?: boolean;
   /** Build the store map from where you pick things up. */
   buildMode: boolean;
   /** In build mode, what picking up on open floor makes. */
