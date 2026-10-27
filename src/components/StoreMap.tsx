@@ -3,6 +3,18 @@ import { footprint, placeNear, sectionShapes, shelfBacks, type Segment } from '.
 import type { SectionLook } from '../display';
 import type { Place, Point, Rect, StoreLayout } from '../core/types';
 
+/**
+ * A faint, dashed shape for something that could be built: `preview` is what
+ * picking up here would build, `next` a shelf you can stamp at the row's
+ * spacing, `fill` the shelves you probably walked past. Tappable if `onTap`.
+ */
+export interface MapGhost {
+  rect: Rect;
+  kind: 'preview' | 'next' | 'fill';
+  onTap?: () => void;
+  label?: string;
+}
+
 /** A small dot marking where items on the list are; `next` for the next stop. */
 export interface MapDot {
   x: number;
@@ -19,6 +31,8 @@ interface Props {
   pins?: { x: number; y: number }[];
   /** A pin showing a spot being chosen. */
   preview?: { x: number; y: number };
+  /** Shelves that could be built, drawn faint and dashed. */
+  ghosts?: MapGhost[];
   /** Zoom in on this rectangle (grid units). */
   focus?: Rect;
   /** Colours and icons for category sections. */
@@ -55,7 +69,7 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -94,6 +108,22 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           onPointerDown={onPlacePointerDown}
         />
       ))}
+
+      {ghosts.map((g, i) => {
+        const r = g.rect;
+        const vertical = r.h > r.w;
+        return (
+          <g key={`g${i}-${r.x}-${r.y}`} className={`map-ghost ${g.kind}${g.onTap ? ' tappable' : ''}`}
+            onClick={g.onTap ? (e) => { e.stopPropagation(); g.onTap!(); } : undefined}>
+            {g.onTap && <rect className="hit" x={r.x - 0.6} y={r.y - 0.6} width={r.w + 1.2} height={r.h + 1.2} />}
+            <rect x={r.x + 0.08} y={r.y + 0.08} width={r.w - 0.16} height={r.h - 0.16} rx={0.25} />
+            {g.label && (
+              <text x={r.x + r.w / 2} y={r.y + r.h / 2} textAnchor="middle" dominantBaseline="central" fontSize={0.8}
+                transform={vertical ? `rotate(-90 ${r.x + r.w / 2} ${r.y + r.h / 2})` : undefined}>{g.label}</text>
+            )}
+          </g>
+        );
+      })}
 
       <Marker point={layout.entrance} label="IN" className="map-entrance" />
       <Marker point={layout.checkout} label="$" className="map-checkout" />

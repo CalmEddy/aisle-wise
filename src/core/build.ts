@@ -1,6 +1,7 @@
 import type { Catalog } from './catalog';
 import { contains, exactKey, exactSpotAt, footprint, parseExactKey } from './geometry';
 import { resolveSpot } from './locate';
+import { matchNeighbour, shelfLike } from './rows';
 import type { Area, Category, ListItem, Orientation, Place, Point, Product, Shelf, StoreLayout } from './types';
 
 /**
@@ -31,6 +32,8 @@ export interface BuildPlan {
   placeId?: string;
   /** Shelf/area label, for messages. */
   label: string;
+  /** A new shelf copied its direction and length from this neighbouring shelf. */
+  matched?: string;
   /**
    * When a shelf grew, saved spots on it must be recalculated so items stay
    * where they physically are. Maps an old spot key to the new one.
@@ -161,17 +164,21 @@ export function planBuild(
   const near = extendCandidates(l, p).filter((c) => c.gap <= REACH).sort((a, b) => a.gap - b.gap)[0];
   if (near) return extendTo(l, near, p, cat);
 
-  // 4. A new shelf through where you're standing.
-  const fit = fitShelf(l, p, orientation, NEW_SHELF_LENGTH);
-  if (!fit) return { action: 'blocked', layout: l, label: '' };
+  // 4. A new shelf through where you're standing: a copy of the row's
+  //    neighbouring shelf (same direction, ends lined up) when there is one.
+  const template = matchNeighbour(l, p);
+  const copy = template && shelfLike(l, template, template.orientation === 'vertical' ? p.x : p.y);
+  const dir = template?.orientation ?? orientation;
+  const fit = copy ? undefined : fitShelf(l, p, dir, template ? template.length : NEW_SHELF_LENGTH);
+  if (!copy && !fit) return { action: 'blocked', layout: l, label: '' };
   const shelf: Shelf = {
     kind: 'shelf',
     id: `s-${newId()}`,
     label: nextLabel(l, 'shelf'),
-    orientation,
-    length: fit.length,
-    x: orientation === 'vertical' ? p.x : fit.start,
-    y: orientation === 'vertical' ? fit.start : p.y,
+    orientation: dir,
+    length: copy?.length ?? fit!.length,
+    x: copy?.x ?? (dir === 'vertical' ? p.x : fit!.start),
+    y: copy?.y ?? (dir === 'vertical' ? fit!.start : p.y),
     categories: cat ? [cat] : [],
   };
   return {
@@ -180,6 +187,7 @@ export function planBuild(
     spotKey: exactKey(shelf.id, { u: alongShelf(shelf, p), v: 0.5 }),
     placeId: shelf.id,
     label: shelf.label,
+    ...(template && { matched: template.label || 'the shelf beside it' }),
   };
 }
 
@@ -442,7 +450,7 @@ function planArea(l: StoreLayout, p: Point, category?: Category): BuildPlan {
 // Picking an item up in build mode
 
 export type PickUpOutcome =
-  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; productId: string }
+  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; productId: string; matched?: string }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string }
   /** Picked up on open floor with shelves that could be extended: ask which (or new shelf/area). */
   | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[] }
@@ -521,7 +529,7 @@ export function pickUp(
       ? { kind: 'choose', productId: pid, itemName, at, options }
     : plan.action === 'blocked'
       ? { kind: 'blocked', itemName, productId: pid }
-      : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid };
+      : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid, matched: plan.matched };
   return { layout: next, products, items: nextItems, outcome };
 }
 

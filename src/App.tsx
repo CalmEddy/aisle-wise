@@ -10,12 +10,12 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, moveHere, pickUp, step, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate } from './core/build';
+import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate } from './core/build';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Category, ListItem, Place, Point, Product, StoreLayout } from './core/types';
+import type { Category, ListItem, Place, Point, Product, Shelf, StoreLayout } from './core/types';
 import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
@@ -48,7 +48,7 @@ export interface Snapshot {
 
 /** What happened when something was picked up in build mode. */
 export type BuildOutcome =
-  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot }
+  | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot; /** A new shelf copied this neighbour. */ matched?: string }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string; snapshot: Snapshot }
   | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[]; snapshot: Snapshot }
   | { kind: 'blocked'; itemName: string; snapshot: Snapshot };
@@ -226,7 +226,7 @@ export default function App() {
     if (o.kind === 'conflict') return { kind: 'conflict', productId: o.productId, itemName: o.itemName, savedKey: o.savedKey, snapshot };
     if (o.kind === 'blocked') return { kind: 'blocked', itemName: o.itemName, snapshot };
     if (o.kind === 'choose') return { ...o, snapshot };
-    return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot };
+    return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot, matched: o.matched };
   }
 
   /** "Move here" after a conflict: build at the current spot and move the item there. */
@@ -237,7 +237,7 @@ export default function App() {
     if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
     replaceLayout(r.layout);
     setProducts(() => r.products);
-    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot };
+    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot, matched: r.plan.matched };
   }
 
   /** The shopper chose where an item picked up on open floor goes: extend a shelf, or a new shelf/area. */
@@ -247,20 +247,38 @@ export default function App() {
     if (!r || r.plan.action === 'blocked') return { kind: 'blocked', itemName: name, snapshot };
     replaceLayout(r.layout);
     setProducts(() => r.products);
-    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot };
+    return { kind: 'built', action: r.plan.action, placeId: r.plan.placeId!, label: r.plan.label, itemName: name, snapshot, matched: r.plan.matched };
   }
 
-  /** Turns a shelf the other way round where the shopper stands. */
-  function turnShelfHere(shelfId: string): boolean {
+  /**
+   * Adds shelves (from "next shelf" or the skipped-shelves suggestion),
+   * numbered in the order given. Returns their ids and what Undo restores.
+   */
+  function addShelves(shelves: Shelf[]): { placeIds: string[]; snapshot: Snapshot } {
+    const snapshot: Snapshot = { items, products, layouts };
+    let next = layout;
+    const placeIds: string[] = [];
+    for (const s of shelves) {
+      const shelf: Shelf = { ...s, id: `s-${newId()}`, label: nextLabel(next, 'shelf'), categories: [] };
+      next = { ...next, places: [...next.places, shelf] };
+      placeIds.push(shelf.id);
+    }
+    replaceLayout(next);
+    return { placeIds, snapshot };
+  }
+
+  /** Turns a shelf the other way round where the shopper stands. Returns what Undo restores, or nothing if it can't turn. */
+  function turnShelfHere(shelfId: string): Snapshot | undefined {
+    const snapshot: Snapshot = { items, products, layouts };
     const r = turnShelf(layout, shelfId, position);
-    if (!r) return false;
+    if (!r) return undefined;
     replaceLayout(r.layout);
     setProducts((prev) => prev.map((p) => {
       const k = p.locations?.[layout.id];
       const nk = k ? r.rekey(k) : k;
       return nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk! } } : p;
     }));
-    return true;
+    return snapshot;
   }
 
   /** Changes a list item's category (on its master-list item, creating one if needed). */
@@ -303,8 +321,10 @@ export default function App() {
     setPos({ layoutId: layout.id, point: r.position });
   }
 
-  function markHere(which: 'entrance' | 'checkout') {
+  function markHere(which: 'entrance' | 'checkout'): Snapshot {
+    const snapshot: Snapshot = { items, products, layouts };
     replaceLayout({ ...layout, [which]: floor.snap(position) });
+    return snapshot;
   }
 
   function startBlankStore() {
@@ -447,7 +467,7 @@ export default function App() {
           setItems={setItems}
           setLocation={setLocation}
           quickAdd={quickAdd}
-          build={{ pickUpHere, moveHereAndBuild, placeChosen, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore, updatePlace, deletePlace }}
+          build={{ pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore, updatePlace, deletePlace }}
           setItemCategory={setItemCategory}
           undo={undo}
           setProductLocation={setProductLocation}

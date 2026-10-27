@@ -458,3 +458,16 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 
 /* Shelf backs: where two shelves stand back to back */
 .shelf-back { stroke: var(--shelf-back); stroke-width: 0.22; stroke-linecap: butt; pointer-events: none; }
+
+/* Ghost shelves: what could be built */
+.map-ghost rect:not(.hit) { fill: var(--ghost-fill); stroke: var(--ghost); stroke-width: 0.14; stroke-dasharray: 0.45 0.3; }
+.map-ghost .hit { fill: transparent; }
+.map-ghost text { fill: var(--ghost); font-weight: 700; pointer-events: none; }
+.map-ghost.preview { --ghost: var(--you); --ghost-fill: color-mix(in srgb, var(--you) 14%, transparent); }
+.map-ghost.next { --ghost: var(--muted); --ghost-fill: color-mix(in srgb, var(--muted) 12%, transparent); }
+.map-ghost.fill { --ghost: var(--accent); --ghost-fill: color-mix(in srgb, var(--accent) 18%, transparent); animation: ghost-breathe 1.6s ease-in-out infinite; }
+.map-ghost.tappable { cursor: pointer; }
+@keyframes ghost-breathe { 50% { opacity: 0.55; } }
+@media (prefers-reduced-motion: reduce) { .map-ghost.fill { animation: none; } }
+.toast-fill { display: flex; gap: 8px; align-items: center; margin: 6px 0 2px; font-size: 0.9rem; }
+.toast-fill span { flex: 1; }

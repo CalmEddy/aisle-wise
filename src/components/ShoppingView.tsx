@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
 import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type Direction } from '../core/build';
+import { addedRect, nextShelf, skippedShelves } from '../core/rows';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
-import { exactKey, exactSpotAt, placeAt } from '../core/geometry';
+import { exactKey, exactSpotAt, footprint, placeAt } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { ListItem, Place, Point, Product, Stop, StoreLayout } from '../core/types';
+import type { ListItem, Place, Point, Product, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { PlacePanel } from './LayoutEditor';
 import { SpotPicker } from './SpotPicker';
-import { StoreMap, placeUnder, toGrid, type MapDot } from './StoreMap';
+import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
 
 interface Props {
@@ -42,11 +43,14 @@ export interface BuildApi {
   pickUpHere: (name: string, itemId?: string) => BuildOutcome;
   moveHereAndBuild: (productId: string) => BuildOutcome;
   placeChosen: (productId: string, at: Point, choice: BuildChoice, snapshot: Snapshot) => BuildOutcome;
-  turnShelfHere: (shelfId: string) => boolean;
+  /** Adds shelves (numbered in order); returns their ids and what Undo restores. */
+  addShelves: (shelves: Shelf[]) => { placeIds: string[]; snapshot: Snapshot };
+  /** Returns what Undo restores, or nothing if the shelf can't turn. */
+  turnShelfHere: (shelfId: string) => Snapshot | undefined;
   renamePlace: (placeId: string, label: string) => void;
   addAreaHere: () => { placeId: string; snapshot: Snapshot } | undefined;
   stepTo: (dir: Direction) => void;
-  markHere: (which: 'entrance' | 'checkout') => void;
+  markHere: (which: 'entrance' | 'checkout') => Snapshot;
   startBlankStore: () => void;
   updatePlace: (placeId: string, patch: Partial<Place>) => void;
   deletePlace: (placeId: string) => void;
@@ -56,7 +60,9 @@ export interface BuildApi {
 type BuildNote =
   | (BuildOutcome & { turned?: boolean })
   | { kind: 'area'; placeId: string; snapshot: Snapshot }
-  | { kind: 'message'; text: string };
+  /** Shelves added with "next shelf" or the skipped-shelves suggestion; `placeId` is the last one. */
+  | { kind: 'shelves'; placeId: string; count: number; filled: boolean; snapshot: Snapshot }
+  | { kind: 'message'; text: string; snapshot?: Snapshot };
 
 interface Drag {
   item: ListItem;
@@ -79,6 +85,37 @@ export function ShoppingView(props: Props) {
   // Build mode: the shelf or area being edited.
   const [editingId, setEditingId] = useState<string>();
   const editing = building ? layout.places.find((p) => p.id === editingId) : undefined;
+
+  // Build mode: the shelf "next shelf" copies – the one being edited, the one
+  // you're beside, or the last one built.
+  const [lastShelfId, setLastShelfId] = useState<string>();
+  useEffect(() => {
+    if (note && 'placeId' in note && layout.places.some((p) => p.id === note.placeId && p.kind === 'shelf')) setLastShelfId(note.placeId);
+  }, [note, layout]);
+  const buildPreview = building ? planBuild(layout, position, undefined, 'vertical', props.display.buildArea ? 'area' : 'shelf') : undefined;
+  const findShelf = (id?: string) => layout.places.find((p): p is Shelf => p.id === id && p.kind === 'shelf');
+  const baseShelf = findShelf(editing?.id) ?? findShelf(buildPreview?.action === 'onShelf' ? buildPreview.placeId : undefined) ?? findShelf(lastShelfId);
+  // Shelves probably walked past on the way to a shelf that was just made.
+  const justMade = note?.kind === 'built' && note.action === 'create' ? findShelf(note.placeId) : undefined;
+  const skipped = useMemo(() => (building && justMade ? skippedShelves(layout, justMade) : []), [building, justMade, layout]);
+  const nextOptions = building && baseShelf && !skipped.length
+    ? ([-1, 1] as const).map((side) => ({ side, shelf: nextShelf(layout, baseShelf, side) })).filter((o): o is { side: -1 | 1; shelf: Shelf } => !!o.shelf)
+    : [];
+
+  function stampShelves(shelves: Shelf[], filled: boolean) {
+    const r = props.build.addShelves(shelves);
+    const last = r.placeIds[r.placeIds.length - 1];
+    if (last) setNote({ kind: 'shelves', placeId: last, count: r.placeIds.length, filled, snapshot: r.snapshot });
+  }
+
+  const ghosts: MapGhost[] = [];
+  if (building) {
+    const added = buildPreview && buildPreview.action !== 'onShelf' && buildPreview.action !== 'inArea'
+      ? addedRect(layout, buildPreview.layout, buildPreview.placeId) : undefined;
+    if (added) ghosts.push({ rect: added, kind: 'preview' });
+    for (const o of nextOptions) ghosts.push({ rect: footprint(o.shelf), kind: 'next', label: '+', onTap: () => stampShelves([o.shelf], false) });
+    for (const s of skipped) ghosts.push({ rect: footprint(s), kind: 'fill', onTap: () => stampShelves(skipped, true) });
+  }
 
   function markAvailable(item: ListItem, available: boolean) {
     const snapshot = setAvailable(item, available);
@@ -311,6 +348,7 @@ export function ShoppingView(props: Props) {
             you={position}
             dots={mapDots}
             pins={pins}
+            ghosts={ghosts}
             look={props.mapLook}
             showGrid={building}
             highlightId={here?.id}
@@ -349,7 +387,10 @@ export function ShoppingView(props: Props) {
               target={props.display.buildArea ? 'area' : 'shelf'}
               setTarget={(t) => props.setDisplay((d) => ({ ...d, buildArea: t === 'area' }))}
               build={props.build}
-              lastShelfId={note && 'placeId' in note && layout.places.some((p) => p.id === note.placeId && p.kind === 'shelf') ? note.placeId : undefined}
+              preview={buildPreview!}
+              turnId={baseShelf?.id}
+              nextOptions={nextOptions}
+              onNext={(shelf) => stampShelves([shelf], false)}
               onNote={setNote}
             />
           )}
@@ -471,6 +512,8 @@ export function ShoppingView(props: Props) {
       {note && !drag && (
         <BuildBanner
           note={note}
+          skipped={skipped}
+          onFill={() => stampShelves(skipped, true)}
           layout={layout}
           catalog={catalog}
           build={props.build}
@@ -848,19 +891,22 @@ const ACTION_TEXT: Record<string, (label: string) => string> = {
 };
 
 /** Build mode controls: what checking off here will do, walk arrows and tools. */
-function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, onNote }: {
+function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, onNote }: {
   layout: StoreLayout;
   position: Point;
   target: BuildTarget;
   setTarget: (t: BuildTarget) => void;
   build: BuildApi;
-  lastShelfId?: string;
+  /** What picking up here would do. */
+  preview: ReturnType<typeof planBuild>;
+  /** The shelf "Turn shelf" turns. */
+  turnId?: string;
+  /** Where "next shelf" can go, either side of the current shelf. */
+  nextOptions: { side: -1 | 1; shelf: Shelf }[];
+  onNext: (shelf: Shelf) => void;
   onNote: (n: BuildNote) => void;
 }) {
-  const preview = planBuild(layout, position, undefined, 'vertical', target);
   const options = preview.action === 'create' || preview.action === 'createArea' ? extendCandidates(layout, position) : [];
-  const besideShelf = preview.action === 'onShelf' ? preview.placeId : undefined;
-  const turnId = besideShelf ?? lastShelfId;
   const arrow = (dir: Direction, label: string, glyph: string) => (
     <button className={`btn arrow ${dir}`} onClick={() => build.stepTo(dir)} aria-label={label}>{glyph}</button>
   );
@@ -878,9 +924,14 @@ function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, o
         <b>Picking up here</b>{' '}
         {options.length
           ? <>lets you extend {options.map((o) => `“${o.label || 'a shelf'}”`).join(' or ')}, or make a new shelf or area.</>
-          : <>{ACTION_TEXT[preview.action](preview.label)}.</>}
+          : preview.action === 'create' && preview.matched
+            ? <>creates a new shelf lined up with “{preview.matched}” (shown in blue).</>
+            : <>{ACTION_TEXT[preview.action](preview.label)}{preview.action === 'create' || preview.action === 'extend' ? ' (shown in blue)' : ''}.</>}
       </p>
-      <p className="muted small">Tap the map or use the arrows to say where you are, then check items off or tap 🛒 Cart.</p>
+      <p className="muted small">
+        Tap the map or use the arrows to say where you are, then check items off or tap 🛒 Cart.
+        {nextOptions.length > 0 && <> Tap a grey <b>+</b> shelf on the map to add the next one in the row.</>}
+      </p>
       <div className="build-row">
         <div className="arrows" role="group" aria-label="Move one square">
           {arrow('up', 'Move up', '↑')}
@@ -889,15 +940,21 @@ function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, o
           {arrow('down', 'Move down', '↓')}
         </div>
         <div className="build-tools">
+          {nextOptions.map(({ side, shelf }) => (
+            <button key={side} className="btn primary" onClick={() => onNext(shelf)}>
+              {shelf.orientation === 'vertical' ? (side < 0 ? '← Next shelf' : 'Next shelf →') : (side < 0 ? '↑ Next shelf' : '↓ Next shelf')}
+            </button>
+          ))}
           <button className="btn" onClick={() => {
             const r = build.addAreaHere();
             onNote(r ? { kind: 'area', ...r } : { kind: 'message', text: 'There’s no free floor here for an area.' });
           }}>+ Area here</button>
           <button className="btn" disabled={!turnId} onClick={() => {
-            if (!turnId || !build.turnShelfHere(turnId)) onNote({ kind: 'message', text: 'That shelf can’t turn here – something’s in the way.' });
+            const snapshot = turnId ? build.turnShelfHere(turnId) : undefined;
+            onNote(snapshot ? { kind: 'message', text: 'Shelf turned.', snapshot } : { kind: 'message', text: 'That shelf can’t turn here – something’s in the way.' });
           }}>⟳ Turn shelf</button>
-          <button className="btn" onClick={() => { build.markHere('entrance'); onNote({ kind: 'message', text: 'Entrance set here.' }); }}>I’m at the entrance</button>
-          <button className="btn" onClick={() => { build.markHere('checkout'); onNote({ kind: 'message', text: 'Checkout set here.' }); }}>I’m at checkout</button>
+          <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Entrance set here.', snapshot: build.markHere('entrance') })}>I’m at the entrance</button>
+          <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Checkout set here.', snapshot: build.markHere('checkout') })}>I’m at checkout</button>
           <button className="btn" onClick={() => {
             build.startBlankStore();
             onNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
@@ -909,8 +966,11 @@ function BuildPanel({ layout, position, target, setTarget, build, lastShelfId, o
 }
 
 /** Banner after a build-mode change: rename, turn, undo, or (for a conflict) keep / move here. */
-function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: {
+function BuildBanner({ note, skipped, onFill, layout, catalog, build, onUndo, onNote, onClose }: {
   note: BuildNote;
+  /** Shelves probably walked past to reach a just-made shelf (shown as green ghosts). */
+  skipped: Shelf[];
+  onFill: () => void;
   layout: StoreLayout;
   catalog: Catalog;
   build: BuildApi;
@@ -928,6 +988,7 @@ function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: 
     return (
       <div className="toast top" role="status">
         <span className="toast-text">{note.text}</span>
+        {note.snapshot && <button className="toast-btn" onClick={() => onUndo(note.snapshot!)}>Undo</button>}
         <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
       </div>
     );
@@ -988,12 +1049,16 @@ function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: 
   const label = place?.label || (place?.kind === 'area' ? 'this area' : 'this shelf');
   const text =
     note.kind === 'area' ? <>New open area added around you.</>
-      : note.action === 'create' ? <><b>{note.itemName}</b> is in your cart. New shelf <b>“{label}”</b>.</>
+      : note.kind === 'shelves' ? (note.filled
+        ? <>Added the <b>{note.count}</b> shelves you walked past.</>
+        : <>Added <b>“{label}”</b>. Tap the next <b>+</b> on the map for another.</>)
+      : note.action === 'create' ? <><b>{note.itemName}</b> is in your cart. New shelf <b>“{label}”</b>{note.matched ? <>, lined up with “{note.matched}”</> : null}.</>
         : note.action === 'extend' ? <><b>{note.itemName}</b> is in your cart. Extended <b>“{label}”</b> to here.</>
           : note.action === 'createArea' ? <><b>{note.itemName}</b> is in your cart. New area <b>“{label}”</b> — tap it on the map to resize.</>
             : note.action === 'extendArea' ? <><b>{note.itemName}</b> is in your cart. Stretched <b>“{label}”</b> to here.</>
           : <><b>{note.itemName}</b> is in your cart · saved on <b>“{label}”</b>.</>;
-  const isNewShelf = note.kind === 'built' && note.action === 'create' && place?.kind === 'shelf';
+  // A new shelf that didn't copy a neighbour may be the wrong way round: offer to turn it.
+  const isNewShelf = note.kind === 'built' && note.action === 'create' && place?.kind === 'shelf' && !note.matched;
 
   return (
     <div className="toast question" role="status">
@@ -1008,6 +1073,12 @@ function BuildBanner({ note, layout, catalog, build, onUndo, onNote, onClose }: 
         </form>
       ) : (
         <span className="toast-text">{text}</span>
+      )}
+      {skipped.length > 0 && (
+        <div className="toast-fill">
+          <span>Walked past {skipped.length === 1 ? 'a shelf' : `${skipped.length} shelves`} to get here? They’re shown in green.</span>
+          <button className="btn primary" onClick={onFill}>Add {skipped.length === 1 ? 'it' : `all ${skipped.length}`}</button>
+        </div>
       )}
       <div className="toast-actions">
         <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>
