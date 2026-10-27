@@ -1,5 +1,5 @@
 import type { Floor } from './floor';
-import { spotPoint } from './geometry';
+import { footprint, spotPoint } from './geometry';
 import type { Category, StoreLayout } from './types';
 
 /** Plain-language problems with a layout, for the editor to show. */
@@ -12,6 +12,16 @@ export function checkLayout(layout: StoreLayout, floor: Floor, categories: Categ
   for (const place of layout.places) {
     if (!floor.reachable(layout.entrance, spotPoint(place))) {
       problems.push(`${place.label || 'An unnamed place'} can’t be reached from the entrance – shelves are blocking it.`);
+    }
+  }
+
+  for (const place of layout.places) {
+    if (place.kind !== 'shelf') continue;
+    const f = footprint(place);
+    let boxed = 0;
+    for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) if (floor.boxedIn({ x, y })) boxed++;
+    if (boxed) {
+      problems.push(`${place.label || 'A shelf'} has shelves or a wall on both sides${boxed < place.length ? ' in places' : ''}, so its items can only be reached from the ends.`);
     }
   }
 

@@ -13,17 +13,23 @@ export class Floor {
   readonly width: number;
   readonly height: number;
   private blocked: Uint8Array;
+  /** For shelf squares, which way the shelf runs: 1 vertical, 2 horizontal. */
+  private dir: Uint8Array;
   private fields = new Map<number, Int32Array>();
 
   constructor(layout: StoreLayout) {
     this.width = layout.width;
     this.height = layout.height;
     this.blocked = new Uint8Array(this.width * this.height);
+    this.dir = new Uint8Array(this.width * this.height);
     for (const place of layout.places) {
+      const d = place.kind === 'shelf' ? (place.orientation === 'vertical' ? 1 : 2) : 0;
       for (const s of blocks(place)) {
         for (let y = s.y; y < s.y + s.h; y++) {
           for (let x = s.x; x < s.x + s.w; x++) {
-            if (this.inside({ x, y })) this.blocked[y * this.width + x] = 1;
+            if (!this.inside({ x, y })) continue;
+            this.blocked[y * this.width + x] = 1;
+            this.dir[y * this.width + x] = d;
           }
         }
       }
@@ -59,27 +65,58 @@ export class Floor {
   }
 
   /**
-   * Where you can stand to reach a square: the square itself if it's floor;
-   * for a shelf square, the floor squares beside it (either side); otherwise
-   * the nearest floor square.
+   * Where you can stand to reach a square, and how far you have to reach.
+   * Floor: the square itself. Shelf: the floor on either side of it. A shelf
+   * has a back wherever another shelf (or the wall) is on that side, so you
+   * can't reach through to it. A shelf boxed in on both sides is reached from
+   * its open ends, counting the squares in from the end.
    */
-  private standing(p: Point): Point[] {
+  private standing(p: Point): { at: Point; extra: number }[] {
     const c = { x: Math.round(p.x), y: Math.round(p.y) };
-    if (this.walkable(c)) return [c];
+    if (this.walkable(c)) return [{ at: c, extra: 0 }];
+    const d = this.inside(c) ? this.dir[c.y * this.width + c.x] : 0;
+    if (d) {
+      const vertical = d === 1;
+      const sides = (vertical
+        ? [{ x: c.x - 1, y: c.y }, { x: c.x + 1, y: c.y }]
+        : [{ x: c.x, y: c.y - 1 }, { x: c.x, y: c.y + 1 }]
+      ).filter((q) => this.walkable(q));
+      if (sides.length) return sides.map((at) => ({ at, extra: 0 }));
+      const ends: { at: Point; extra: number }[] = [];
+      for (const step of [-1, 1]) {
+        for (let k = 1; ; k++) {
+          const q = vertical ? { x: c.x, y: c.y + step * k } : { x: c.x + step * k, y: c.y };
+          if (!this.inside(q)) break;
+          if (this.walkable(q)) {
+            ends.push({ at: q, extra: k - 1 });
+            break;
+          }
+        }
+      }
+      if (ends.length) return ends;
+    }
     const beside = [
       { x: c.x - 1, y: c.y }, { x: c.x + 1, y: c.y }, { x: c.x, y: c.y - 1 }, { x: c.x, y: c.y + 1 },
     ].filter((q) => this.walkable(q));
-    return beside.length ? beside : [this.snap(c)];
+    return (beside.length ? beside : [this.snap(c)]).map((at) => ({ at, extra: 0 }));
   }
 
-  /** Walking distance in grid squares. Shelf spots can be reached from either side, whichever is shorter. */
+  /** A shelf square with shelves (or walls) on both sides: no way to reach it from the side. */
+  boxedIn(p: Point): boolean {
+    if (!this.inside(p) || !this.dir[p.y * this.width + p.x]) return false;
+    const vertical = this.dir[p.y * this.width + p.x] === 1;
+    const sides = vertical ? [{ x: p.x - 1, y: p.y }, { x: p.x + 1, y: p.y }] : [{ x: p.x, y: p.y - 1 }, { x: p.x, y: p.y + 1 }];
+    return !sides.some((q) => this.walkable(q));
+  }
+
+  /** Walking distance in grid squares. Shelf spots are reached from whichever open side is shorter. */
   distance = (a: Point, b: Point): number => {
     let best = UNREACHABLE;
     for (const from of this.standing(a)) {
-      const field = this.field(from);
+      const field = this.field(from.at);
       for (const to of this.standing(b)) {
-        const d = field[to.y * this.width + to.x];
-        if (d >= 0 && d < best) best = d;
+        const d = field[to.at.y * this.width + to.at.x];
+        if (d >= 0 && d + from.extra + to.extra < best) best = d + from.extra + to.extra;
       }
     }
     return best;

@@ -1,5 +1,5 @@
 import { forwardRef, type ReactNode, type SVGProps } from 'react';
-import { footprint, placeNear, sectionShapes } from '../core/geometry';
+import { footprint, placeNear, sectionShapes, shelfBacks, type Segment } from '../core/geometry';
 import type { SectionLook } from '../display';
 import type { Place, Point, Rect, StoreLayout } from '../core/types';
 
@@ -86,6 +86,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
         <PlaceShape
           key={place.id}
           place={place}
+          backs={place.kind === 'shelf' ? shelfBacks(layout, place) : []}
           highlighted={highlightId === place.id}
           selected={selectedId === place.id}
           look={look}
@@ -124,8 +125,10 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
   );
 });
 
-function PlaceShape({ place, highlighted, selected, look, onTap, onPointerDown }: {
+function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointerDown }: {
   place: Place;
+  /** Edges backed by another shelf (drawn just inside this shelf). */
+  backs: Segment[];
   highlighted: boolean;
   selected: boolean;
   look?: SectionLook;
@@ -166,6 +169,12 @@ function PlaceShape({ place, highlighted, selected, look, onTap, onPointerDown }
           <rect key={`c${i}`} className={isShelf ? 'section-shelf' : 'section-band'} x={r.x + inset} y={r.y + inset}
             width={Math.max(0, r.w - inset * 2)} height={Math.max(0, r.h - inset * 2)} rx={0.2} fill={color} />
         );
+      })}
+      {backs.map((b, i) => {
+        // Pull the line just inside this shelf, so back-to-back shelves each show their back.
+        const inX = b.x1 === b.x2 ? (b.x1 === f.x ? 0.12 : -0.12) : 0;
+        const inY = b.y1 === b.y2 ? (b.y1 === f.y ? 0.12 : -0.12) : 0;
+        return <line key={`b${i}`} className="shelf-back" x1={b.x1 + inX} y1={b.y1 + inY} x2={b.x2 + inX} y2={b.y2 + inY} />;
       })}
       {place.label && (
         <text

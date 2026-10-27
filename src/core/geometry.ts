@@ -163,3 +163,38 @@ export function sectionShapes(p: Place): SectionShape[] {
       : { x: r.x, y: r.y + (r.h * i) / n, w: r.w, h: r.h / n },
   }));
 }
+
+/** A straight line in grid units. */
+export interface Segment { x1: number; y1: number; x2: number; y2: number }
+
+/**
+ * The backs of a shelf: edges where another shelf is right behind it (back to
+ * back). Joined into long lines for drawing. A shelf on its own has no back.
+ */
+export function shelfBacks(layout: StoreLayout, shelf: Shelf): Segment[] {
+  const others = new Set<string>();
+  for (const p of layout.places) {
+    if (p.kind !== 'shelf' || p.id === shelf.id) continue;
+    const f = footprint(p);
+    for (let y = f.y; y < f.y + f.h; y++) for (let x = f.x; x < f.x + f.w; x++) others.add(`${x},${y}`);
+  }
+  const vertical = shelf.orientation === 'vertical';
+  const out: Segment[] = [];
+  for (const side of [-1, 1]) {
+    let runStart: number | undefined;
+    for (let i = 0; i <= shelf.length; i++) {
+      const sq = vertical ? { x: shelf.x, y: shelf.y + i } : { x: shelf.x + i, y: shelf.y };
+      const behind = i < shelf.length && others.has(vertical ? `${sq.x + side},${sq.y}` : `${sq.x},${sq.y + side}`);
+      if (behind && runStart === undefined) runStart = i;
+      if (!behind && runStart !== undefined) {
+        // The edge between the shelf and its neighbour.
+        const edge = side < 0 ? 0 : 1;
+        out.push(vertical
+          ? { x1: shelf.x + edge, y1: shelf.y + runStart, x2: shelf.x + edge, y2: shelf.y + i }
+          : { x1: shelf.x + runStart, y1: shelf.y + edge, x2: shelf.x + i, y2: shelf.y + edge });
+        runStart = undefined;
+      }
+    }
+  }
+  return out;
+}

@@ -8,6 +8,7 @@
   --accent-soft: #e3f3e8;
   --you: #2563eb;
   --shelf: #b9c0b3;
+  --shelf-back: #4b5249;
   --floor: #eef0eb;
   --walk: #f8f9f6;
   --area: #e6efe0;
@@ -26,6 +27,7 @@
     --accent-soft: #1d3324;
     --you: #60a5fa;
     --shelf: #4a5248;
+    --shelf-back: #a9b2a5;
     --floor: #181c18;
     --walk: #20251f;
     --area: #223024;
@@ -453,3 +455,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .cat-options li:hover, .cat-options li.active { background: var(--accent-soft); }
 .cat-options li.empty { cursor: default; background: none; }
 .cat-option-icon { display: inline-block; width: 1.6em; }
+
+/* Shelf backs: where two shelves stand back to back */
+.shelf-back { stroke: var(--shelf-back); stroke-width: 0.22; stroke-linecap: butt; pointer-events: none; }
