@@ -6,6 +6,7 @@ import { locateProduct, resolveSpot } from '../core/locate';
 import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './ShoppingView';
 import { SpotPicker } from './SpotPicker';
+import { CategoryPicker, byName } from './CategoryPicker';
 
 interface Props {
   catalog: Catalog;
@@ -50,7 +51,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
       const key = p.categoryId && catalog.categoryById.has(p.categoryId) ? p.categoryId : '';
       byCat.set(key, [...(byCat.get(key) ?? []), p]);
     }
-    return [...catalog.categories.map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
+    return [...byName(catalog.categories).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
       .map((c) => ({ ...c, products: byCat.get(c.id) ?? [] }))
       .filter((g) => g.products.length);
   }, [catalog, query]);
@@ -174,13 +175,17 @@ function ProductSheet({ product, isNew, catalog, layouts, onSave, onCancel, onDe
           <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Kombucha" autoFocus={isNew} />
           {duplicate && <span className="error">“{duplicate.name}” is already in the list.</span>}
         </label>
-        <label className="field">
+        <div className="field">
           <span>Category</span>
-          <select value={draft.categoryId ?? ''} onChange={(e) => setDraft({ ...draft, categoryId: e.target.value || undefined })}>
-            <option value="">No category</option>
-            {catalog.categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </label>
+          <CategoryPicker
+            value={draft.categoryId}
+            categories={catalog.categories}
+            onPick={(categoryId) => setDraft({ ...draft, categoryId })}
+            iconOf={(id) => { const i = catalog.categories.findIndex((c) => c.id === id); return i < 0 ? undefined : categoryLook(catalog.categories[i], i).icon; }}
+            noneLabel="No category"
+            label="Category"
+          />
+        </div>
 
         <div className="field">
           <span>Stores</span>
@@ -280,13 +285,16 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
     setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   const rename = (id: string, value: string) => update(id, { name: value });
 
-  const move = (index: number, delta: number) =>
-    setCategories((prev) => {
-      const next = [...prev];
-      const [c] = next.splice(index, 1);
-      next.splice(Math.max(0, Math.min(next.length, index + delta)), 0, c);
-      return next;
-    });
+  // Shown A–Z. Re-sorted when a rename is finished, so rows don't jump while typing.
+  const [sortTick, setSortTick] = useState(0);
+  const order = useMemo(
+    () => byName(catalog.categories).map((c) => c.id),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [catalog.categories.length, sortTick],
+  );
+  const shownCategories = order
+    .map((id) => ({ c: catalog.categories.find((x) => x.id === id), i: catalog.categories.findIndex((x) => x.id === id) }))
+    .filter((r): r is { c: Category; i: number } => !!r.c);
 
   function remove(cat: Category) {
     const n = counts.get(cat.id) ?? 0;
@@ -321,11 +329,11 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
         <button type="submit" disabled={!name.trim()}>Add</button>
       </form>
       <p className="muted small">
-        Tap a colour or icon to change it. Rename categories here; this order is used for the grocery item list.
+        Tap a colour or icon to change it. Rename categories here; they’re listed A–Z.
         To set where a category is in a store, open <b>Store layout</b> and tap an aisle or area.
       </p>
       <ul className="card cat-list">
-        {catalog.categories.map((c, i) => {
+        {shownCategories.map(({ c, i }) => {
           const look = categoryLook(c, i);
           return (
           <li key={c.id} className="cat-item">
@@ -336,12 +344,8 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
             <button className="icon-pick" onClick={() => setIconFor(iconFor === c.id ? null : c.id)} aria-label={`Icon for ${c.name}`} aria-expanded={iconFor === c.id}>
               {look.icon}
             </button>
-            <input value={c.name} onChange={(e) => rename(c.id, e.target.value)} aria-label={`Category name`} />
+            <input value={c.name} onChange={(e) => rename(c.id, e.target.value)} onBlur={() => setSortTick((t) => t + 1)} aria-label={`Category name`} />
             <span className="muted small count">{counts.get(c.id) ?? 0}</span>
-            <span className="updown">
-              <button onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${c.name} up`}>▲</button>
-              <button onClick={() => move(i, 1)} disabled={i === catalog.categories.length - 1} aria-label={`Move ${c.name} down`}>▼</button>
-            </span>
             <button className="icon" onClick={() => remove(c)} aria-label={`Delete ${c.name}`}>×</button>
            </div>
            {iconFor === c.id && (

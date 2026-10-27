@@ -361,9 +361,6 @@ button { cursor: pointer; }
 .cat-list .row { gap: 6px; }
 .cat-list .icon { width: 28px; }
 .cat-list input:not([type='color']) { padding: 8px 6px; }
-.updown { display: flex; flex-direction: column; flex: none; }
-.updown button { width: 28px; height: 20px; border: 0; background: none; color: var(--muted); font-size: 0.7rem; padding: 0; }
-.updown button:disabled { opacity: 0.25; }
 
 /* Tap a place or section in the list to move the marker there */
 button.goto { background: none; border: 0; padding: 0; text-align: left; color: inherit; cursor: pointer; }
@@ -443,3 +440,16 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .row.nearest .name { font-weight: 700; }
 .row.tinted { background: color-mix(in srgb, var(--cat) 13%, var(--surface)); border-radius: 8px; padding: 0 4px; margin: 3px 0; }
 .flat-list .items { margin-top: 2px; }
+
+/* Searchable category picker */
+.cat-picker { position: relative; }
+.cat-picker input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; color: var(--text); }
+.cat-picker.open input { border-color: var(--accent); }
+.cat-options {
+  list-style: none; margin: 4px 0 0; padding: 4px; max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text);
+}
+.cat-options li { padding: 10px; border-radius: 8px; cursor: pointer; font-size: 0.95rem; }
+.cat-options li:hover, .cat-options li.active { background: var(--accent-soft); }
+.cat-options li.empty { cursor: default; background: none; }
+.cat-option-icon { display: inline-block; width: 1.6em; }

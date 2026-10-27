@@ -7,6 +7,7 @@ import { checkLayout } from '../core/validate';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { StoreMap } from './StoreMap';
+import { CategoryPicker } from './CategoryPicker';
 
 interface Props {
   layouts: StoreLayout[];
@@ -393,13 +394,15 @@ function CategoryList({ ids, onChange, categories, looks, usedElsewhere, addLabe
         })}
         {ids.length === 0 && <li className="muted small">Nothing yet.</li>}
       </ol>
-      <select value="" onChange={(e) => onChange([...ids, e.target.value])} aria-label={addLabel}>
-        <option value="" disabled>{addLabel}</option>
-        {available.map((c) => {
-          const where = usedElsewhere(c.id);
-          return <option key={c.id} value={c.id}>{looks.get(c.id)?.icon} {c.name}{where ? ` (now on ${where})` : ''}</option>;
-        })}
-      </select>
+      <CategoryPicker
+        categories={available}
+        onPick={(id) => id && onChange([...ids, id])}
+        iconOf={(id) => looks.get(id)?.icon}
+        note={(id) => { const where = usedElsewhere(id); return where ? `now on ${where}` : undefined; }}
+        placeholder={addLabel}
+        label={addLabel}
+        clearOnPick
+      />
     </>
   );
 }

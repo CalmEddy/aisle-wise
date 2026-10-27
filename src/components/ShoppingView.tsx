@@ -12,6 +12,7 @@ import { DisplayToggles } from './DisplayToggles';
 import { PlacePanel } from './LayoutEditor';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot } from './StoreMap';
+import { CategoryPicker } from './CategoryPicker';
 
 interface Props {
   layout: StoreLayout;
@@ -813,13 +814,17 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
       <div className="sheet" role="dialog" aria-label={`Options for ${item.name}`} onClick={(e) => e.stopPropagation()}>
         <h2>{item.name}</h2>
         <p className="muted small">{where}</p>
-        <label className="field menu-category">
+        <div className="field menu-category">
           <span>Category</span>
-          <select value={categoryId ?? ''} onChange={(e) => onCategory(e.target.value || undefined)} aria-label={`Category of ${item.name}`}>
-            <option value="">No category</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{looks.get(c.id)?.icon} {c.name}</option>)}
-          </select>
-        </label>
+          <CategoryPicker
+            value={categoryId}
+            categories={categories}
+            onPick={onCategory}
+            iconOf={(id) => looks.get(id)?.icon}
+            noneLabel="No category"
+            label={`Category of ${item.name}`}
+          />
+        </div>
         <button className="pick" onClick={onChangePlace}>📍 Change place</button>
         <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
         <button className="pick danger" onClick={onRemove}>Remove from list</button>
