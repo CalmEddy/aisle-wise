@@ -566,6 +566,8 @@ export default function App() {
           setLayouts={setLayouts}
           onAddToList={addToList}
           onList={onList}
+          snapshot={snapshotNow}
+          undo={undo}
         />
       )}
       {householdOpen && (

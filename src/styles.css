@@ -490,3 +490,25 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .store-settings summary { cursor: pointer; padding: 2px 0; }
 .store-settings[open] summary { margin-bottom: 6px; }
 .store-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+
+/* Items tab: search-or-add bar, quick views, folding groups, inline editor */
+.items-top { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 8px 0 4px; margin: 0 -2px; }
+.items-view .items-top .add-row { margin-bottom: 4px; }
+.items-sub { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
+.also-list { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+.also-list input { width: 18px; height: 18px; accent-color: var(--accent); }
+.chips.filters, .chips.jump { padding: 4px 0; }
+.chips.filters .count { opacity: 0.7; font-weight: 400; }
+.chips.jump .chip { font-size: 0.8rem; padding: 5px 9px; white-space: nowrap; }
+.group-head { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; }
+.group-head:disabled { cursor: default; opacity: 1; }
+.group-head .chev { color: var(--muted); }
+.fold-all { display: flex; justify-content: flex-end; margin: 2px 0 4px; }
+.group.recent { border-color: var(--accent); }
+.item-entry.open > .row { font-weight: 600; }
+.item-editor { padding: 4px 0 10px; border-top: 1px dashed var(--line); }
+.item-editor .field { margin: 6px 0; }
+.item-editor .other-stores summary { cursor: pointer; padding: 4px 0; }
+.item-editor .editor-row { display: flex; gap: 8px; margin-top: 8px; }
+.items-view .group.folded { padding-top: 8px; padding-bottom: 8px; margin-bottom: 6px; }
+.items-view .group.folded h3 { margin: 0; }

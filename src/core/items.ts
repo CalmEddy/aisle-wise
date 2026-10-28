@@ -1,0 +1,49 @@
+import { normalize, type Catalog } from './catalog';
+import { locateProduct } from './locate';
+import type { Product, StoreLayout } from './types';
+
+const newId = () => Math.random().toString(36).slice(2, 10);
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * Typed names (comma-separated) for the master list: names already there are
+ * returned as `existing`; the rest become new items with the category of a
+ * similar item ("oat milk" → Milk's category), if there is one.
+ */
+export function quickAddItems(text: string, catalog: Catalog): { created: Product[]; existing: Product[] } {
+  const created: Product[] = [];
+  const existing: Product[] = [];
+  const seen = new Set<string>();
+  for (const raw of text.split(',')) {
+    const name = raw.trim().replace(/\s+/g, ' ');
+    const key = normalize(name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    const found = catalog.exact(name);
+    if (found) {
+      existing.push(found);
+      continue;
+    }
+    const guess = catalog.match(name)?.categoryId;
+    created.push({
+      id: `p-${newId()}`,
+      name: capitalize(name),
+      ...(guess && catalog.categoryById.has(guess) && { categoryId: guess }),
+    });
+  }
+  return { created, existing };
+}
+
+/** Quick views of the master list. */
+export type ItemFilter = 'all' | 'place' | 'nocat' | 'list' | 'notsold';
+
+/** Whether an item shows under a quick view, for the current store. */
+export function itemMatches(p: Product, filter: ItemFilter, layout: StoreLayout, catalog: Catalog, onList: Set<string>): boolean {
+  switch (filter) {
+    case 'all': return true;
+    case 'place': return locateProduct(p, layout, catalog).kind === 'unknown';
+    case 'nocat': return !p.categoryId || !catalog.categoryById.has(p.categoryId);
+    case 'list': return onList.has(p.id);
+    case 'notsold': return !!p.notAt?.includes(layout.id);
+  }
+}

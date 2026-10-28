@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Snapshot } from '../App';
+import { itemMatches, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
 import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
 import { parseExactKey } from '../core/geometry';
@@ -18,6 +20,9 @@ interface Props {
   onAddToList: (product: Product) => void;
   /** Ids of products already on the shopping list. */
   onList: Set<string>;
+  /** What Undo would put back right now, and putting it back. */
+  snapshot: () => Snapshot;
+  undo: (s: Snapshot) => void;
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -38,13 +43,55 @@ export function ItemsView(props: Props) {
 // ---------------------------------------------------------------------------
 // Master list of grocery items
 
-function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onList }: Props) {
+const FILTERS: { id: ItemFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'place', label: 'Needs a place' },
+  { id: 'nocat', label: 'No category' },
+  { id: 'list', label: 'On my list' },
+  { id: 'notsold', label: 'Not sold here' },
+];
+
+interface ItemsToast {
+  text: string;
+  snapshot: Snapshot;
+  /** Item to open with "Change". */
+  openId?: string;
+}
+
+function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onList, snapshot, undo }: Props) {
   const [query, setQuery] = useState('');
-  const [editing, setEditing] = useState<Product | null>(null);
+  const [filter, setFilter] = useState<ItemFilter>('all');
+  const [alsoList, setAlsoList] = useState(false);
+  // Open item (inline editor; "recent-" + id when opened under Just added) and expanded categories.
+  const [openKey, setOpenKey] = useState<string>();
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+  // Added this visit, shown at the top so a guessed category is easy to fix.
+  const [recent, setRecent] = useState<string[]>([]);
+  const [toast, setToast] = useState<ItemsToast | null>(null);
+  const topRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 7000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const lookOf = useMemo(() => {
+    const m = new Map(catalog.categories.map((c, i) => [c.id, categoryLook(c, i)]));
+    return (id?: string) => (id ? m.get(id) : undefined);
+  }, [catalog.categories]);
+
+  const q = query.trim();
+  const searching = q.length > 0 && !q.includes(',');
+  const counts = useMemo(() => {
+    const c = new Map<ItemFilter, number>();
+    for (const f of FILTERS) c.set(f.id, catalog.products.filter((p) => itemMatches(p, f.id, layout, catalog, onList)).length);
+    return c;
+  }, [catalog, layout, onList]);
 
   const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const shown = q ? catalog.suggest(q, 500) : catalog.products;
+    const shown = (searching ? catalog.suggest(q, 500) : catalog.products)
+      .filter((p) => itemMatches(p, filter, layout, catalog, onList));
     const sorted = [...shown].sort((a, b) => a.name.localeCompare(b.name));
     const byCat = new Map<string, Product[]>();
     for (const p of sorted) {
@@ -54,216 +101,345 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
     return [...byName(catalog.categories).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
       .map((c) => ({ ...c, products: byCat.get(c.id) ?? [] }))
       .filter((g) => g.products.length);
-  }, [catalog, query]);
+  }, [catalog, q, searching, filter, layout, onList]);
 
-  const startNew = () =>
-    setEditing({ id: `p-${newId()}`, name: query.trim() });
+  // Searching or filtering shows everything; otherwise categories fold up into an index.
+  const allOpen = searching || filter !== 'all';
+  const isOpen = (id: string) => allOpen || openGroups.has(id);
+  const recentProducts = recent.map((id) => catalog.productById.get(id)).filter((p): p is Product => !!p);
+
+  /** Changes one item, with Undo. */
+  function change(id: string, fn: (p: Product) => Product, text: string) {
+    const snap = snapshot();
+    setProducts((prev) => prev.map((p) => (p.id === id ? fn(p) : p)));
+    setToast({ text, snapshot: snap });
+  }
+
+  function remove(p: Product) {
+    const snap = snapshot();
+    setProducts((prev) => prev.filter((x) => x.id !== p.id));
+    setOpenKey(undefined);
+    setToast({ text: `Deleted ${p.name}.`, snapshot: snap });
+  }
+
+  /** Scrolls an element to just below the sticky search bar. */
+  function scrollTo(el: Element | null) {
+    if (!el) return;
+    const below = (topRef.current?.offsetHeight ?? 0) + 8;
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - below, behavior: 'smooth' });
+  }
+
+  /** Opens an item's editor: under Just added if it's there, else in its category. */
+  function openItem(p: Product, viaRecent = recent.includes(p.id)) {
+    const key = viaRecent ? `recent-${p.id}` : p.id;
+    if (!viaRecent) {
+      const g = p.categoryId && catalog.categoryById.has(p.categoryId) ? p.categoryId : '';
+      setOpenGroups((prev) => new Set(prev).add(g));
+    }
+    setOpenKey(key);
+    requestAnimationFrame(() => scrollTo(document.getElementById(`item-${key}`)));
+  }
+
+  function submit() {
+    if (!q) return;
+    // Exactly one name that's already there: open it.
+    const one = !q.includes(',') ? catalog.exact(q) : undefined;
+    if (one && !alsoList) {
+      setQuery('');
+      setFilter('all');
+      openItem(one, false);
+      return;
+    }
+    const snap = snapshot();
+    const { created, existing } = quickAddItems(q, catalog);
+    if (created.length) setProducts((prev) => [...prev, ...created]);
+    if (alsoList) for (const p of [...created, ...existing]) if (!onList.has(p.id)) onAddToList(p);
+    setRecent((prev) => [...created.map((p) => p.id), ...prev.filter((id) => !created.some((p) => p.id === id))].slice(0, 12));
+    setQuery('');
+    const names = (list: Product[]) => list.map((p) => p.name).join(', ');
+    const one1 = created.length === 1 ? created[0] : undefined;
+    const catName = one1?.categoryId ? catalog.categoryById.get(one1.categoryId)?.name : undefined;
+    const parts = [
+      created.length ? (one1 ? `Added ${one1.name} · ${catName ? `${catName} (guessed)` : 'no category'}.` : `Added ${names(created)}.`) : '',
+      existing.length ? `${names(existing)} ${existing.length === 1 ? 'was' : 'were'} already in your items.` : '',
+      alsoList ? 'On your list now.' : '',
+    ].filter(Boolean);
+    setToast({ text: parts.join(' '), snapshot: snap, openId: one1?.id });
+  }
+
+  const row = (p: Product, keyPrefix = '') => {
+    const key = keyPrefix + p.id;
+    const open = openKey === key;
+    return (
+    <li key={key} id={`item-${key}`} className={`item-entry${open ? ' open' : ''}`}>
+      <div className="row">
+        <button className="product-row" onClick={() => setOpenKey(open ? undefined : key)} aria-expanded={open}>
+          <span className="name">{keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}{p.name}</span>
+          <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>{whereText(p, layout, catalog)}</span>
+        </button>
+        <button
+          className="icon add-icon"
+          onClick={() => onAddToList(p)}
+          disabled={onList.has(p.id)}
+          aria-label={onList.has(p.id) ? `${p.name} is on your list` : `Add ${p.name} to list`}
+        >
+          {onList.has(p.id) ? '✓' : '+'}
+        </button>
+      </div>
+      {open && (
+        <ItemEditor
+          product={p}
+          catalog={catalog}
+          layouts={layouts}
+          layout={layout}
+          iconOf={(id) => lookOf(id)?.icon}
+          onChange={(fn, text) => change(p.id, fn, text)}
+          onDelete={() => remove(p)}
+          onClose={() => setOpenKey(undefined)}
+        />
+      )}
+    </li>
+    );
+  };
 
   return (
     <div className="items-view">
-      <div className="add-row">
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Search ${catalog.products.length} items`}
-          aria-label="Search grocery items"
-          type="search"
-        />
-        <button type="button" onClick={startNew}>+ New</button>
-      </div>
-      <p className="muted small">
-        Tap an item to change its name, category, which stores sell it, and where it is in each store.
-        Locations shown are for <b>{layout.name}</b>.
-      </p>
-
-      {groups.map((g) => (
-        <section className="card group" key={g.id || 'none'}>
-          <h3>
-            {g.id && (() => {
-              const i = catalog.categories.findIndex((c) => c.id === g.id);
-              const look = categoryLook(catalog.categories[i], i);
-              return <span className="cat-dot" style={{ background: look.color }} aria-hidden="true">{look.icon}</span>;
-            })()}
-            {g.name} <span className="muted small">{g.products.length}</span>
-          </h3>
-          <ul className="items">
-            {g.products.map((p) => (
-              <li key={p.id} className="row">
-                <button className="product-row" onClick={() => setEditing(p)}>
-                  <span className="name">{p.name}</span>
-                  <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>{whereText(p, layout, catalog)}</span>
-                </button>
-                <button
-                  className="icon add-icon"
-                  onClick={() => onAddToList(p)}
-                  disabled={onList.has(p.id)}
-                  aria-label={onList.has(p.id) ? `${p.name} is on your list` : `Add ${p.name} to list`}
-                >
-                  {onList.has(p.id) ? '✓' : '+'}
-                </button>
-              </li>
+      <div className="items-top" ref={topRef}>
+        <form className="add-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search or add · ${catalog.products.length} items`}
+            aria-label="Search or add grocery items"
+            type="search"
+            enterKeyHint="done"
+          />
+          <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : '+ Add'}</button>
+        </form>
+        <div className="items-sub">
+          <label className="also-list">
+            <input type="checkbox" checked={alsoList} onChange={(e) => setAlsoList(e.target.checked)} />
+            <span>Also add to my list</span>
+          </label>
+          <span className="muted small">
+            {q.includes(',') ? 'Enter adds each name.' : q ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`) : `Places shown for ${layout.name}.`}
+          </span>
+        </div>
+        <div className="chips filters" role="group" aria-label="Show">
+          {FILTERS.map((f) => (
+            <button key={f.id} className={filter === f.id ? 'chip active' : 'chip'} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
+              {f.label}{f.id !== 'all' && <span className="count"> {counts.get(f.id)}</span>}
+            </button>
+          ))}
+        </div>
+        {groups.length > 1 && (
+          <div className="chips jump" role="navigation" aria-label="Jump to category">
+            {groups.map((g) => (
+              <button key={g.id || 'none'} className="chip" onClick={() => {
+                setOpenGroups((prev) => new Set(prev).add(g.id));
+                requestAnimationFrame(() => scrollTo(document.getElementById(`grp-${g.id || 'none'}`)));
+              }}>
+                <span aria-hidden="true">{lookOf(g.id)?.icon ?? '·'}</span> {g.name}
+              </button>
             ))}
-          </ul>
-        </section>
-      ))}
+          </div>
+        )}
+      </div>
 
-      {groups.length === 0 && (
-        <div className="empty">
-          <p>No items match “{query}”.</p>
-          <button className="btn primary" onClick={startNew}>Add “{query.trim()}” as a new item</button>
+      {recentProducts.length > 0 && !searching && filter === 'all' && (
+        <section className="card group recent">
+          <h3>
+            Just added <span className="muted small">{recentProducts.length}</span>
+            <span style={{ flex: 1 }} />
+            <button className="link" onClick={() => setRecent([])}>Clear</button>
+          </h3>
+          <ul className="items">{recentProducts.map((p) => row(p, 'recent-'))}</ul>
+        </section>
+      )}
+
+      {!allOpen && groups.length > 0 && (
+        <div className="fold-all">
+          <button className="link" onClick={() => setOpenGroups(openGroups.size ? new Set() : new Set(groups.map((g) => g.id)))}>
+            {openGroups.size ? 'Fold all' : 'Show all items'}
+          </button>
         </div>
       )}
 
-      {editing && (
-        <ProductSheet
-          product={editing}
-          isNew={!catalog.productById.has(editing.id)}
-          catalog={catalog}
-          layouts={layouts}
-          onCancel={() => setEditing(null)}
-          onSave={(p) => {
-            const isNew = !catalog.productById.has(p.id);
-            setProducts((prev) => (prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [...prev, p]));
-            setEditing(null);
-            // Ready for the next one.
-            if (isNew) setQuery('');
-          }}
-          onDelete={() => {
-            setProducts((prev) => prev.filter((x) => x.id !== editing.id));
-            setEditing(null);
-          }}
-        />
+      {groups.map((g) => {
+        const look = lookOf(g.id);
+        const open = isOpen(g.id);
+        return (
+          <section className={`card group${open ? '' : ' folded'}`} key={g.id || 'none'} id={`grp-${g.id || 'none'}`}>
+            <h3>
+              <button className="group-head" aria-expanded={open} disabled={allOpen} onClick={() => setOpenGroups((prev) => {
+                const next = new Set(prev);
+                if (next.has(g.id)) next.delete(g.id);
+                else next.add(g.id);
+                return next;
+              })}>
+                {look ? <span className="cat-dot" style={{ background: look.color }} aria-hidden="true">{look.icon}</span> : null}
+                <span>{g.name}</span> <span className="muted small">{g.products.length}</span>
+                <span style={{ flex: 1 }} />
+                {!allOpen && <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>}
+              </button>
+            </h3>
+            {open && <ul className="items">{g.products.map((p) => row(p))}</ul>}
+          </section>
+        );
+      })}
+
+      {groups.length === 0 && (
+        <div className="empty">
+          {q ? (
+            <>
+              <p>No items match “{q}”.</p>
+              <button className="btn primary" onClick={submit}>Add “{q}”</button>
+            </>
+          ) : <p>Nothing here{filter !== 'all' ? ' – all sorted!' : ' yet.'}</p>}
+        </div>
+      )}
+
+      {toast && (
+        <div className="toast" role="status">
+          <span className="toast-text">{toast.text}</span>
+          <button className="toast-btn" onClick={() => { undo(toast.snapshot); setToast(null); }}>Undo</button>
+          {toast.openId && catalog.productById.has(toast.openId) && (
+            <button className="toast-btn" onClick={() => { openItem(catalog.productById.get(toast.openId!)!); setToast(null); }}>Change</button>
+          )}
+          <button className="icon" onClick={() => setToast(null)} aria-label="Dismiss">×</button>
+        </div>
       )}
     </div>
   );
 }
 
-function ProductSheet({ product, isNew, catalog, layouts, onSave, onCancel, onDelete }: {
+/**
+ * An item opened in place: every change saves straight away (with Undo).
+ * Name, category, and for each store whether it's sold there and where.
+ */
+function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDelete, onClose }: {
   product: Product;
-  isNew: boolean;
   catalog: Catalog;
   layouts: StoreLayout[];
-  onSave: (p: Product) => void;
-  onCancel: () => void;
+  /** The store being shopped; other stores are folded away. */
+  layout: StoreLayout;
+  iconOf: (categoryId: string) => string | undefined;
+  onChange: (fn: (p: Product) => Product, text: string) => void;
   onDelete: () => void;
+  onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<Product>(product);
+  const [name, setName] = useState(product.name);
+  useEffect(() => setName(product.name), [product.name]);
   const [mapFor, setMapFor] = useState<StoreLayout | null>(null);
-  const duplicate = catalog.products.find((p) => p.id !== draft.id && normalize(p.name) === normalize(draft.name));
-  const valid = draft.name.trim() && !duplicate;
+  const duplicate = catalog.products.find((p) => p.id !== product.id && normalize(p.name) === normalize(name));
 
-  const setSold = (layoutId: string, sold: boolean) =>
-    setDraft((d) => {
-      const notAt = (d.notAt ?? []).filter((id) => id !== layoutId);
-      return { ...d, notAt: sold ? notAt : [...notAt, layoutId] };
-    });
+  function commitName() {
+    const trimmed = name.trim();
+    if (!trimmed || duplicate || trimmed === product.name) {
+      if (!trimmed) setName(product.name);
+      return;
+    }
+    onChange((p) => ({ ...p, name: trimmed }), `Renamed to ${trimmed}.`);
+  }
 
-  const setLocation = (layoutId: string, key: string) =>
-    setDraft((d) => {
-      const locations = { ...d.locations };
-      if (key) locations[layoutId] = key;
-      else delete locations[layoutId];
-      return { ...d, locations };
-    });
+  const setSold = (l: StoreLayout, sold: boolean) => onChange((p) => {
+    const notAt = (p.notAt ?? []).filter((id) => id !== l.id);
+    return { ...p, notAt: sold ? notAt : [...notAt, l.id] };
+  }, sold ? `${product.name} is sold at ${l.name}.` : `${product.name} marked not sold at ${l.name}.`);
+
+  const setLocation = (l: StoreLayout, key: string) => onChange((p) => {
+    const locations = { ...p.locations };
+    if (key) locations[l.id] = key;
+    else delete locations[l.id];
+    return { ...p, locations };
+  }, key ? `${product.name}: ${resolveSpot(key, l, catalog)?.label ?? 'place saved'}.` : `${product.name}: automatic place.`);
+
+  const storeRow = (l: StoreLayout) => {
+    const sold = !product.notAt?.includes(l.id);
+    // What "automatic" resolves to: the place stocking this item's category.
+    const auto = locateProduct({ ...product, locations: {}, notAt: [] }, l, catalog);
+    const autoText = auto.kind === 'spot' ? auto.spot.label : 'nowhere yet – pick a place';
+    const key = product.locations?.[l.id];
+    const exactSpot = key && parseExactKey(key) ? resolveSpot(key, l, catalog) : undefined;
+    return (
+      <div className="store-row" key={l.id}>
+        <label className="check">
+          <input type="checkbox" checked={sold} onChange={(e) => setSold(l, e.target.checked)} />
+          <span>Sold at <b>{l.name}</b></span>
+        </label>
+        {sold && (
+          <div className="location-row">
+            <select value={key ?? ''} onChange={(e) => setLocation(l, e.target.value)} aria-label={`Location at ${l.name}`}>
+              <option value="">Automatic: {autoText}</option>
+              {exactSpot && <option value={key}>📍 {exactSpot.label}</option>}
+              {l.places.map((pl) => (
+                <optgroup key={pl.id} label={pl.label || 'Unnamed'}>
+                  <option value={pl.id}>{pl.label || 'Unnamed'}</option>
+                  {pl.categories.length > 1 && pl.categories.map((cid) => (
+                    <option key={cid} value={`${pl.id}:${cid}`}>
+                      {pl.label} · {catalog.categoryById.get(cid)?.name ?? cid}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            <button type="button" className="btn" onClick={() => setMapFor(l)}>📍 Map</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+  const others = layouts.filter((l) => l.id !== layout.id);
 
   return (
-    <div className="sheet-backdrop" onClick={onCancel}>
-      <div className="sheet" role="dialog" aria-label={isNew ? 'New item' : `Edit ${product.name}`} onClick={(e) => e.stopPropagation()}>
-        <h2>{isNew ? 'New grocery item' : 'Edit item'}</h2>
-        <label className="field">
-          <span>Name</span>
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Kombucha" autoFocus={isNew} />
-          {duplicate && <span className="error">“{duplicate.name}” is already in the list.</span>}
-        </label>
-        <div className="field">
-          <span>Category</span>
-          <CategoryPicker
-            value={draft.categoryId}
-            categories={catalog.categories}
-            onPick={(categoryId) => setDraft({ ...draft, categoryId })}
-            iconOf={(id) => { const i = catalog.categories.findIndex((c) => c.id === id); return i < 0 ? undefined : categoryLook(catalog.categories[i], i).icon; }}
-            noneLabel="No category"
-            label="Category"
-          />
-        </div>
+    <div className="item-editor">
+      <label className="field">
+        <span>Name</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} onBlur={commitName}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitName(); } }} aria-label="Item name" />
+        {duplicate && <span className="error">“{duplicate.name}” is already in the list.</span>}
+      </label>
+      <div className="field">
+        <span>Category</span>
+        <CategoryPicker
+          value={product.categoryId}
+          categories={catalog.categories}
+          onPick={(categoryId) => onChange((p) => ({ ...p, categoryId }),
+            `${product.name} → ${categoryId ? catalog.categoryById.get(categoryId)?.name : 'no category'}.`)}
+          iconOf={iconOf}
+          noneLabel="No category"
+          label="Category"
+        />
+      </div>
+      {storeRow(layout)}
+      {others.length > 0 && (
+        <details className="other-stores">
+          <summary className="muted small">Other stores ({others.length})</summary>
+          {others.map(storeRow)}
+        </details>
+      )}
 
-        <div className="field">
-          <span>Stores</span>
-          {layouts.map((l) => {
-            const sold = !draft.notAt?.includes(l.id);
-            // What "automatic" resolves to: the place stocking this item's category.
-            const auto = locateProduct({ ...draft, locations: {}, notAt: [] }, l, catalog);
-            const autoText = auto.kind === 'spot' ? auto.spot.label : 'nowhere yet – pick a place';
-            return (
-              <div className="store-row" key={l.id}>
-                <label className="check">
-                  <input type="checkbox" checked={sold} onChange={(e) => setSold(l.id, e.target.checked)} />
-                  <span>Available at <b>{l.name}</b></span>
-                </label>
-                {sold && (
-                  <div className="location-row">
-                  <select
-                    value={draft.locations?.[l.id] ?? ''}
-                    onChange={(e) => setLocation(l.id, e.target.value)}
-                    aria-label={`Location at ${l.name}`}
-                  >
-                    <option value="">Automatic: {autoText}</option>
-                    {(() => {
-                      const key = draft.locations?.[l.id];
-                      const spot = key && parseExactKey(key) ? resolveSpot(key, l, catalog) : undefined;
-                      return spot && <option value={key}>📍 {spot.label}</option>;
-                    })()}
-                    {l.places.map((p) => (
-                      <optgroup key={p.id} label={p.label || 'Unnamed'}>
-                        <option value={p.id}>{p.label || 'Unnamed'}</option>
-                        {p.categories.length > 1 && p.categories.map((cid) => (
-                          <option key={cid} value={`${p.id}:${cid}`}>
-                            {p.label} · {catalog.categoryById.get(cid)?.name ?? cid}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <button type="button" className="btn" onClick={() => setMapFor(l)}>Pick on map</button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+      {mapFor && (
+        <SpotPicker
+          title={`Where is ${product.name} at ${mapFor.name}?`}
+          layout={mapFor}
+          catalog={catalog}
+          current={(() => {
+            const loc = locateProduct(product, mapFor, catalog);
+            return loc.kind === 'spot' ? loc.spot.key : undefined;
+          })()}
+          onPick={(key) => {
+            setLocation(mapFor, key);
+            setMapFor(null);
+          }}
+          onCancel={() => setMapFor(null)}
+        />
+      )}
 
-        {mapFor && (
-          <SpotPicker
-            title={`Where is ${draft.name || 'this item'} at ${mapFor.name}?`}
-            layout={mapFor}
-            catalog={catalog}
-            current={(() => {
-              const loc = locateProduct(draft, mapFor, catalog);
-              return loc.kind === 'spot' ? loc.spot.key : undefined;
-            })()}
-            onPick={(key) => {
-              setLocation(mapFor.id, key);
-              setMapFor(null);
-            }}
-            onCancel={() => setMapFor(null)}
-          />
-        )}
-
-        <div className="sheet-actions">
-          {!isNew && (
-            <button
-              className="btn danger"
-              onClick={() => confirm(`Delete “${product.name}” from your grocery items?`) && onDelete()}
-            >
-              Delete
-            </button>
-          )}
-          <span style={{ flex: 1 }} />
-          <button className="btn" onClick={onCancel}>Cancel</button>
-          <button className="btn primary" disabled={!valid} onClick={() => onSave({ ...draft, name: draft.name.trim() })}>
-            Save
-          </button>
-        </div>
+      <div className="editor-row">
+        <button className="btn danger" onClick={onDelete}>Delete</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn" onClick={onClose}>Done</button>
       </div>
     </div>
   );
