@@ -17,6 +17,7 @@ import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
+import { AddItemsSheet } from './AddItemsSheet';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
 
@@ -102,7 +103,6 @@ interface Drag {
 
 export function ShoppingView(props: Props) {
   const { layout, floor, catalog, items, setItems, setLocation, setAvailable, position, setPosition, onEditLayout } = props;
-  const [draft, setDraft] = useState('');
   const [drag, setDrag] = useState<Drag | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [picking, setPicking] = useState<{ productId?: string; item?: ListItem; name: string } | null>(null);
@@ -362,15 +362,10 @@ export function ShoppingView(props: Props) {
       .sort((a, b) => a.d - b.d || a.order - b.order);
   }, [grouped, route, floor, position]);
 
-  // Suggestions for whatever is after the last comma.
-  const segment = draft.split(',').pop() ?? '';
   const onList = useMemo(
     () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
     [items, catalog],
   );
-  const suggestions = useMemo(() => catalog.suggest(segment, 5), [catalog, segment]);
-  const typed = segment.trim();
-  const typedIsNew = typed.length > 0 && !catalog.exact(typed);
 
   const done = items.filter((i) => i.done);
   const here = placeAt(layout, position);
@@ -378,19 +373,20 @@ export function ShoppingView(props: Props) {
   const hereKey = here ? exactKey(here.id, exactSpotAt(here, position.x + 0.5, position.y + 0.5)) : undefined;
   const hereLabel = hereKey ? resolveSpot(hereKey, layout, catalog)?.label : undefined;
 
-  /** Adds from the box: everything before the last comma plus `last`. */
-  function quick(last: string, mode: 'list' | 'cart') {
-    if (building && mode === 'cart' && last.trim()) {
-      // Build mode: into the cart where you're standing. Anything before a comma stays in the box.
-      setNote(props.build.pickUpHere(last.trim()));
-      setDraft(draft.split(',').slice(0, -1).join(',').trim());
-      return;
+  // The add window (opened with + on the toggle strip).
+  const [adding, setAdding] = useState(false);
+
+  /** Adds from the add window. Things put in the cart may ask where they are, so those show a toast. */
+  function addNames(names: string[], mode: 'list' | 'cart'): QuickAddResult | undefined {
+    if (building && mode === 'cart') {
+      // Build mode: into the cart where you're standing (one at a time: the map builds around it).
+      const outcome = props.build.pickUpHere(names[names.length - 1]);
+      setNote(outcome);
+      return { snapshot: outcome.snapshot, added: [] };
     }
-    const names = [...draft.split(',').slice(0, -1), last].map((n) => n.trim()).filter(Boolean);
-    if (!names.length) return;
     const result = props.quickAdd(names, mode, hereKey);
-    setDraft('');
-    setToast({ ...result, mode });
+    if (mode === 'cart') setToast({ ...result, mode });
+    return result;
   }
 
   function toggle(item: ListItem) {
@@ -460,6 +456,9 @@ export function ShoppingView(props: Props) {
 
   const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
   const [nextVisit, ...laterVisits] = visits;
+  const addButton = (
+    <button type="button" className="toggle add-toggle" onClick={() => setAdding(true)} aria-label="Add items" title="Add items">＋</button>
+  );
 
   return (
     <>
@@ -470,50 +469,22 @@ export function ShoppingView(props: Props) {
           onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
         />
       )}
-      <form
-        className="add"
-        onSubmit={(e) => {
-          e.preventDefault();
-          quick(segment, 'list');
-        }}
-      >
-        <div className="add-row">
-          <input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder={hereLabel ? `Add an item · you're at ${hereLabel}` : 'Add items, e.g. milk, apples, pasta'}
-            aria-label="Add items"
-            aria-autocomplete="list"
-            autoComplete="off"
-            enterKeyHint="done"
-          />
-          <button type="submit" disabled={!draft.trim()}>Add</button>
-        </div>
-        {typed && (
-          <ul className="suggestions" role="listbox" aria-label="Suggestions">
-            {suggestions.map((p) => (
-              <SuggestionRow
-                key={p.id}
-                name={p.name}
-                detail={onList.has(p.id) ? 'On your list' : whereText(p, layout, catalog)}
-                onList={onList.has(p.id)}
-                onAdd={(mode) => quick(p.name, mode)}
-              />
-            ))}
-            {typedIsNew && (
-              <SuggestionRow
-                name={<>Add “{typed}”</>}
-                detail={hereLabel ? `New item · at ${hereLabel}` : 'New item'}
-                onList={false}
-                onAdd={(mode) => quick(typed, mode)}
-              />
-            )}
-          </ul>
-        )}
-      </form>
+      {adding && (
+        <AddItemsSheet
+          listName={props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
+          catalog={catalog}
+          onList={onList}
+          hereLabel={hereLabel}
+          whereText={(p) => whereText(p, layout, catalog)}
+          iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
+          onAdd={addNames}
+          onUndo={props.undo}
+          onClose={() => setAdding(false)}
+        />
+      )}
 
       {!(items.length > 0 || building) && (
-        <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode']} />
+        <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode']} lead={addButton} />
       )}
       {(items.length > 0 || building) && (
         <>
@@ -559,6 +530,7 @@ export function ShoppingView(props: Props) {
             display={props.display}
             setDisplay={props.setDisplay}
             show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']}
+            lead={addButton}
           />
           {editing && (
             <div className="build-edit">
@@ -646,6 +618,7 @@ export function ShoppingView(props: Props) {
             <p className="muted">
               Add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
+            <button className="btn primary" onClick={() => setAdding(true)}>＋ Add items</button>
             <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
           </div>
         )}
@@ -679,16 +652,17 @@ export function ShoppingView(props: Props) {
         )}
 
         {grouped && nextVisit && (
+          <div className="card route-list">
           <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
             <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} big />
           )} />
-        )}
-
-        {grouped && laterVisits.map((v) => (
+        {laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
             <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} />
           )} />
         ))}
+          </div>
+        )}
 
         {(unplaced.length > 0 || notSold.length > 0) && (
           <section className="card off-route">
@@ -912,7 +886,7 @@ function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
   const tint = (c: string | undefined) => (c ? ({ '--cat': c } as React.CSSProperties) : undefined);
   return (
     <section
-      className={`card${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
+      className={`visit${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
       style={tint(oneColor)}
       data-drop={first.key}
     >
@@ -1008,25 +982,6 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
 
 type Toast = QuickAddResult & { mode: 'list' | 'cart'; /** Plain message instead of an add summary. */ note?: string };
 
-function SuggestionRow({ name, detail, onList, onAdd }: {
-  name: React.ReactNode;
-  detail: string;
-  onList: boolean;
-  onAdd: (mode: 'list' | 'cart') => void;
-}) {
-  return (
-    <li className="suggestion" role="option" aria-selected={false}>
-      <div className="s-text">
-        <span>{name}</span>
-        <span className="muted small">{detail}</span>
-      </div>
-      {!onList && (
-        <button type="button" className="s-btn" onClick={() => onAdd('list')}>+ List</button>
-      )}
-      <button type="button" className="s-btn cart" onClick={() => onAdd('cart')}>🛒 Cart</button>
-    </li>
-  );
-}
 
 function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClose }: {
   toast: Toast;
