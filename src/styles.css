@@ -142,14 +142,11 @@ button { cursor: pointer; }
 .empty p { margin: 4px 0; }
 
 /* Layout editor */
-.editor .map.editing { touch-action: none; user-select: none; -webkit-user-select: none; margin-bottom: 10px; }
-.map.editing .place { cursor: move; }
-.map.editing:is(.tool-aisle-v, .tool-aisle-h, .tool-area, .tool-entrance, .tool-checkout) { cursor: crosshair; }
 .marker-hit { fill: transparent; cursor: move; }
 .resize-handle { fill: var(--you); stroke: var(--surface); stroke-width: 0.3; cursor: nwse-resize; }
 .toolbar { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: none; }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 0.85rem; color: var(--muted); }
-.field input:not([type='number']), .field select, .editor select {
+.field input:not([type='number']), .field select {
   padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; color: var(--text);
 }
 .field-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -171,7 +168,6 @@ button { cursor: pointer; }
 .problems { border-color: #e0b84a; }
 .problems ul { margin: 4px 0 0; padding-left: 18px; font-size: 0.85rem; }
 .problems li { margin: 3px 0; }
-.editor-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 
 /* Suggestions */
 .add { flex-direction: column; align-items: stretch; }
@@ -484,3 +480,13 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .map-block-outline { fill: none; stroke: var(--accent); stroke-width: 0.12; stroke-dasharray: 0.3 0.3; pointer-events: none; }
 .double-toggle { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; margin: 6px 0; }
 .double-toggle input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* Unified build editor */
+.map.build-editing { touch-action: none; user-select: none; -webkit-user-select: none; }
+.map.build-editing .place.selected { cursor: move; }
+.build-toolbar { margin: 6px 0 4px; }
+.build-toolbar .toolbar { flex-wrap: wrap; overflow: visible; }
+.build-toolbar p { margin: 2px 0 6px; }
+.store-settings summary { cursor: pointer; padding: 2px 0; }
+.store-settings[open] summary { margin-bottom: 6px; }
+.store-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }

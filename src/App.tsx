@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
-import { LayoutEditor } from './components/LayoutEditor';
 import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
@@ -20,7 +19,7 @@ import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
-type View = 'list' | 'items' | 'layout';
+type View = 'list' | 'items';
 
 export interface QuickAddResult {
   snapshot: Snapshot;
@@ -37,6 +36,7 @@ export interface QuickAddResult {
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** What to put back for Undo. */
@@ -56,12 +56,19 @@ export type BuildOutcome =
 export default function App() {
   const [layouts, setLayouts] = usePersistentState<StoreLayout[]>('aw.layouts', [demoLayout]);
   const [activeId, setActiveId] = usePersistentState('aw.activeLayout', demoLayout.id);
-  const [view, setView] = usePersistentState<View>('aw.view', 'list');
+  const [savedView, setView] = usePersistentState<View | 'layout'>('aw.view', 'list');
+  // The old "Store layout" tab is now build mode on the Shop tab.
+  const view: View = savedView === 'layout' ? 'list' : savedView;
   const [items, setItems] = usePersistentState<ListItem[]>('aw.items', []);
   const [products, setProducts] = usePersistentState<Product[]>('aw.products', defaultProducts);
   const [categories, setCategories] = usePersistentState<Category[]>('aw.categories', defaultCategories);
   const [display, setDisplay] = usePersistentState<Display>('aw.display', defaultDisplay);
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
+  useEffect(() => {
+    if (savedView !== 'layout') return;
+    setView('list');
+    setDisplay((d) => ({ ...d, buildMode: true }));
+  }, [savedView, setView, setDisplay]);
 
   useMoveOldLocationsIntoProducts(setProducts);
 
@@ -299,6 +306,71 @@ export default function App() {
     replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? clampPlace({ ...p, ...patch } as Place, layout) : p)) });
   }
 
+  /** What Undo puts back for a change to the current store. */
+  const snapshotNow = (): Snapshot => ({ items, products, layouts });
+
+  /** Adds a shelf (10 squares) or open area (6 × 4) centred where the map was tapped. */
+  function addPlaceAt(kind: 'shelf-v' | 'shelf-h' | 'area', at: Point): { placeId: string; label: string; snapshot: Snapshot } {
+    const snapshot = snapshotNow();
+    const id = `${kind === 'area' ? 'a' : 's'}-${newId()}`;
+    const place: Place = kind === 'area'
+      ? { kind: 'area', id, label: nextLabel(layout, 'area'), x: at.x - 3, y: at.y - 2, w: 6, h: 4, categories: [] }
+      : {
+          kind: 'shelf', id, label: nextLabel(layout, 'shelf'),
+          orientation: kind === 'shelf-h' ? 'horizontal' : 'vertical',
+          x: kind === 'shelf-h' ? at.x - 5 : at.x,
+          y: kind === 'shelf-h' ? at.y : at.y - 5,
+          length: 10, categories: [],
+        };
+    replaceLayout({ ...layout, places: [...layout.places, clampPlace(place, layout)] });
+    return { placeId: id, label: place.label, snapshot };
+  }
+
+  /** Puts the entrance or checkout on a square of the map (the tapped one, or where it was dragged). */
+  function markAt(which: 'entrance' | 'checkout', at: Point) {
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id
+      ? { ...l, [which]: { x: clamp(at.x, 0, l.width - 1), y: clamp(at.y, 0, l.height - 1) } }
+      : l)));
+  }
+
+  // ---- Store settings (build mode) ----
+
+  function renameStore(name: string) {
+    replaceLayout({ ...layout, name });
+  }
+
+  /** Changes the store's size, keeping everything inside the walls. */
+  function resizeStore(width: number, height: number) {
+    const next = { ...layout, width: clamp(width, 10, 150), height: clamp(height, 10, 150) };
+    const inside = (p: Point) => ({ x: Math.min(p.x, next.width - 1), y: Math.min(p.y, next.height - 1) });
+    replaceLayout({ ...next, entrance: inside(layout.entrance), checkout: inside(layout.checkout), places: layout.places.map((p) => clampPlace(p, next)) });
+  }
+
+  /** A copy of the current store (with its item locations), and switches to it. */
+  function copyStore() {
+    const id = `l-${newId()}`;
+    const copy: StoreLayout = { ...structuredClone(layout), id, name: `${layout.name} copy` };
+    setLayouts((prev) => [...prev, copy]);
+    copyItemLocations(layout.id, id);
+    setActiveId(id);
+  }
+
+  /** Deletes the current store (not the last one). Returns false if it wasn't deleted. */
+  function deleteStore(): boolean {
+    if (layouts.length <= 1) return false;
+    if (!confirm(`Delete “${layout.name}”? This can’t be undone.`)) return false;
+    const rest = layouts.filter((l) => l.id !== layout.id);
+    setLayouts(() => rest);
+    setActiveId(rest[0].id);
+    return true;
+  }
+
+  function resetDemo(): Snapshot {
+    const snapshot = snapshotNow();
+    replaceLayout(structuredClone(demoLayout));
+    return snapshot;
+  }
+
   function deletePlace(placeId: string) {
     replaceLayout({ ...layout, places: layout.places.filter((p) => p.id !== placeId) });
   }
@@ -431,7 +503,7 @@ export default function App() {
       <header className="top">
         <div className="title">
           <h1>Aisle Wise</h1>
-          {view !== 'layout' && layouts.length > 1 ? (
+          {layouts.length > 1 ? (
             <select className="store-pick" value={layout.id} onChange={(e) => setActiveId(e.target.value)} aria-label="Store">
               {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
             </select>
@@ -455,7 +527,6 @@ export default function App() {
       <nav className="tabs" role="tablist">
         {tab('items', 'Items')}
         {tab('list', 'Shop')}
-        {tab('layout', 'Store layout')}
       </nav>
 
       {view === 'list' && (
@@ -467,14 +538,18 @@ export default function App() {
           setItems={setItems}
           setLocation={setLocation}
           quickAdd={quickAdd}
-          build={{ pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere, startBlankStore, updatePlace, deletePlace }}
+          build={{
+            pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
+            startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt,
+            store: { layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id },
+          }}
           setItemCategory={setItemCategory}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}
           position={position}
           setPosition={(point) => setPos({ layoutId: layout.id, point })}
-          onEditLayout={() => setView('layout')}
+          onEditLayout={() => setDisplay((d) => ({ ...d, buildMode: true }))}
           display={display}
           setDisplay={setDisplay}
           mapLook={mapLook}
@@ -491,22 +566,6 @@ export default function App() {
           setLayouts={setLayouts}
           onAddToList={addToList}
           onList={onList}
-        />
-      )}
-      {view === 'layout' && (
-        <LayoutEditor
-          layouts={layouts}
-          setLayouts={setLayouts}
-          activeId={layout.id}
-          setActiveId={setActiveId}
-          categories={categories}
-          onCopied={copyItemLocations}
-          onShare={shareStore}
-          display={display}
-          setDisplay={setDisplay}
-          mapLook={mapLook}
-          looks={looks}
-          onDone={() => setView('list')}
         />
       )}
       {householdOpen && (

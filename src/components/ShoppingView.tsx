@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
 import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type Direction } from '../core/build';
 import { addedRect, nextShelves, skippedShelves } from '../core/rows';
@@ -10,7 +10,9 @@ import { groupVisits, planGroupedRoute } from '../core/route';
 import type { ListItem, Place, Point, Product, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
-import { PlacePanel } from './LayoutEditor';
+import { BuildToolbar, StoreSettings, type BuildTool, type StoreApi } from './BuildTools';
+import { PlacePanel, clamp, handlePoint } from './PlacePanel';
+import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
@@ -55,7 +57,19 @@ export interface BuildApi {
   startBlankStore: () => void;
   updatePlace: (placeId: string, patch: Partial<Place>) => void;
   deletePlace: (placeId: string) => void;
+  /** What Undo would put back right now. */
+  snapshot: () => Snapshot;
+  /** Adds a shelf or open area where the map was tapped. */
+  addPlaceAt: (kind: 'shelf-v' | 'shelf-h' | 'area', at: Point) => { placeId: string; label: string; snapshot: Snapshot };
+  /** Moves the entrance or checkout to a square. */
+  markAt: (which: 'entrance' | 'checkout', at: Point) => void;
+  store: StoreApi;
 }
+
+/** Dragging something on the map in build mode's Walk tool. */
+type MapDrag =
+  | { mode: 'move' | 'resize'; id: string; start: Point; orig: Place; snapshot: Snapshot; moved: boolean }
+  | { mode: 'entrance' | 'checkout'; start: Point; snapshot: Snapshot; moved: boolean };
 
 /** The build-mode banner: what just changed, with follow-up buttons. */
 type BuildNote =
@@ -97,9 +111,87 @@ export function ShoppingView(props: Props) {
   const lane = props.display.blockLane ?? 2;
   const setDouble = (d: boolean) => props.setDisplay((x) => ({ ...x, buildDouble: d }));
   // Shelf block tool: drag out a rectangle to fill with shelves.
-  const [blockMode, setBlockMode] = useState(false);
+  const [tool, setToolState] = useState<BuildTool>('walk');
   const block = useShelfBlock(layout, double, lane);
-  const blocking = building && blockMode;
+  const blocking = building && tool === 'block';
+  function setTool(t: BuildTool) {
+    setToolState(t);
+    block.reset();
+    if (t === 'block') {
+      setEditingId(undefined);
+      setNote(null);
+    }
+  }
+  const problems = useMemo(() => (building ? checkLayout(layout, floor, catalog.categories) : []), [building, layout, floor, catalog.categories]);
+
+  // Walk tool: drag the selected shelf/area (or its resize handle), or the entrance/checkout markers.
+  const svgRef = useRef<SVGSVGElement>(null);
+  const mapDrag = useRef<MapDrag | null>(null);
+  const ignoreTap = useRef(false);
+  const cellOf = (e: React.PointerEvent): Point => {
+    const g = toGrid(svgRef.current!, e.clientX, e.clientY);
+    return { x: clamp(Math.floor(g.x), 0, layout.width - 1), y: clamp(Math.floor(g.y), 0, layout.height - 1) };
+  };
+  function beginMapDrag(d: MapDrag, e: React.PointerEvent) {
+    e.stopPropagation();
+    svgRef.current?.setPointerCapture(e.pointerId);
+    mapDrag.current = d;
+  }
+  function onMapDragMove(e: React.PointerEvent) {
+    const d = mapDrag.current;
+    if (!d) return;
+    const c = cellOf(e);
+    const dx = c.x - d.start.x;
+    const dy = c.y - d.start.y;
+    if (!d.moved && !dx && !dy) return;
+    d.moved = true;
+    if (!('orig' in d)) {
+      props.build.markAt(d.mode, c);
+    } else if (d.mode === 'move') {
+      props.build.updatePlace(d.id, { x: d.orig.x + dx, y: d.orig.y + dy });
+    } else if (d.orig.kind === 'shelf') {
+      const o = d.orig;
+      const max = o.orientation === 'vertical' ? layout.height - o.y : layout.width - o.x;
+      props.build.updatePlace(d.id, { length: clamp(o.length + (o.orientation === 'vertical' ? dy : dx), 2, max) } as Partial<Place>);
+    } else {
+      const o = d.orig;
+      props.build.updatePlace(d.id, { w: clamp(o.w + dx, 1, layout.width - o.x), h: clamp(o.h + dy, 1, layout.height - o.y) } as Partial<Place>);
+    }
+  }
+  function endMapDrag() {
+    const d = mapDrag.current;
+    mapDrag.current = null;
+    if (!d?.moved) return;
+    // The click that the drag's release fires straight away shouldn't also move you.
+    ignoreTap.current = true;
+    setTimeout(() => { ignoreTap.current = false; }, 0);
+    const what = !('orig' in d) ? (d.mode === 'entrance' ? 'Entrance moved.' : 'Checkout moved.')
+      : d.mode === 'move' ? `Moved “${d.orig.label || d.orig.kind}”.` : `Resized “${d.orig.label || d.orig.kind}”.`;
+    setNote({ kind: 'message', text: what, snapshot: d.snapshot });
+  }
+
+  /** A tap on the map in build mode, by tool. */
+  function buildTap(x: number, y: number, place: Place | undefined) {
+    if (ignoreTap.current) return;
+    const cell = { x: clamp(Math.floor(x), 0, layout.width - 1), y: clamp(Math.floor(y), 0, layout.height - 1) };
+    if (tool === 'shelf-v' || tool === 'shelf-h' || tool === 'area') {
+      const r = props.build.addPlaceAt(tool, cell);
+      setEditingId(r.placeId);
+      setToolState('walk');
+      setNote({ kind: 'message', text: `Added “${r.label}”. Drag it to move it, or change it below.`, snapshot: r.snapshot });
+      return;
+    }
+    if (tool === 'entrance' || tool === 'checkout') {
+      const snapshot = props.build.snapshot();
+      props.build.markAt(tool, cell);
+      setToolState('walk');
+      setNote({ kind: 'message', text: tool === 'entrance' ? 'Entrance set here.' : 'Checkout set here.', snapshot });
+      return;
+    }
+    // Walk: tapping a shelf or area opens it for editing (and puts you there).
+    setEditingId(place?.id);
+    setPosition(floor.snap(cell));
+  }
   const buildPreview = building ? planBuild(layout, position, undefined, 'vertical', props.display.buildArea ? 'area' : 'shelf', double) : undefined;
   const findShelf = (id?: string) => layout.places.find((p): p is Shelf => p.id === id && p.kind === 'shelf');
   const baseShelf = findShelf(editing?.id) ?? findShelf(buildPreview?.action === 'onShelf' ? buildPreview.placeId : undefined) ?? findShelf(lastShelfId);
@@ -371,17 +463,34 @@ export function ShoppingView(props: Props) {
             showGrid={building}
             highlightId={here?.id}
             selectedId={editing?.id}
-            onMapTap={blocking ? undefined : (x, y, place) => {
-              // Build mode: tapping a shelf or area opens it for editing (and puts you there).
-              if (building) setEditingId(place?.id);
-              setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }));
-            }}
-            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : undefined}
+            ref={svgRef}
+            onMapTap={blocking ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+            onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
+              if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
+            } : undefined}
+            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : building ? {
+              className: `map tappable${tool !== 'walk' || editing ? ' build-editing' : ''}`,
+              onPointerMove: onMapDragMove,
+              onPointerUp: endMapDrag,
+              onPointerCancel: endMapDrag,
+            } : undefined}
           >
             {blocking && block.drag.rect && (
               <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
             )}
+            {building && tool === 'walk' && (['entrance', 'checkout'] as const).map((which) => (
+              <rect key={which} className="marker-hit" x={layout[which].x - 0.5} y={layout[which].y - 0.5} width={2} height={2}
+                onPointerDown={(e) => beginMapDrag({ mode: which, start: cellOf(e), snapshot: props.build.snapshot(), moved: false }, e)} />
+            ))}
+            {building && tool === 'walk' && editing && (() => {
+              const h = handlePoint(editing);
+              return (
+                <circle className="resize-handle" cx={h.x} cy={h.y} r={1.2} aria-label="Resize"
+                  onPointerDown={(e) => beginMapDrag({ mode: 'resize', id: editing.id, start: cellOf(e), orig: editing, snapshot: props.build.snapshot(), moved: false }, e)} />
+              );
+            })()}
           </StoreMap>
+          {building && <BuildToolbar tool={tool} setTool={setTool} />}
           <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']} />
           {editing && (
             <div className="build-edit">
@@ -413,8 +522,8 @@ export function ShoppingView(props: Props) {
               setDouble={setDouble}
               lane={lane}
               setLane={(n) => props.setDisplay((x) => ({ ...x, blockLane: n }))}
-              onAdd={() => { stampShelves(block.shelves, false); block.reset(); setBlockMode(false); }}
-              onCancel={() => { block.reset(); setBlockMode(false); }}
+              onAdd={() => { stampShelves(block.shelves, false); setTool('walk'); }}
+              onCancel={() => setTool('walk')}
             />
           )}
           {building && !blocking && (
@@ -430,8 +539,21 @@ export function ShoppingView(props: Props) {
               onNext={(shelves) => stampShelves(shelves, false)}
               double={double}
               setDouble={setDouble}
-              onBlock={() => { setEditingId(undefined); setNote(null); block.reset(); setBlockMode(true); }}
               onNote={setNote}
+            />
+          )}
+          {building && (
+            <StoreSettings
+              layout={layout}
+              store={props.build.store}
+              problems={problems}
+              onNewStore={() => {
+                props.build.startBlankStore();
+                setEditingId(undefined);
+                setNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
+              }}
+              onPickPlace={(id) => { setToolState('walk'); setEditingId(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onUndoable={(text, snapshot) => setNote({ kind: 'message', text, snapshot })}
             />
           )}
         </>
@@ -931,7 +1053,7 @@ const ACTION_TEXT: Record<string, (label: string) => string> = {
 };
 
 /** Build mode controls: what checking off here will do, walk arrows and tools. */
-function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, double, setDouble, onBlock, onNote }: {
+function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, double, setDouble, onNote }: {
   layout: StoreLayout;
   position: Point;
   target: BuildTarget;
@@ -946,8 +1068,6 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
   onNext: (shelves: Shelf[]) => void;
   double: boolean;
   setDouble: (d: boolean) => void;
-  /** Start the shelf block tool. */
-  onBlock: () => void;
   onNote: (n: BuildNote) => void;
 }) {
   const options = preview.action === 'create' || preview.action === 'createArea' ? extendCandidates(layout, position) : [];
@@ -977,7 +1097,7 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
             : <>{preview.pairId ? 'creates a new double shelf here' : ACTION_TEXT[preview.action](preview.label)}{preview.action === 'create' || preview.action === 'extend' ? ' (shown in blue)' : ''}.</>}
       </p>
       <p className="muted small">
-        Tap the map or use the arrows to say where you are, then check items off or tap 🛒 Cart.
+        Use the arrows to step a square at a time; check items off or tap 🛒 Cart to build around you.
         {nextOptions.length > 0 && <> Tap a grey <b>+</b> shelf on the map to add the next one in the row.</>}
       </p>
       <div className="build-row">
@@ -996,7 +1116,6 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
               </button>
             );
           })}
-          <button className="btn" onClick={onBlock}>▤ Shelf block</button>
           <button className="btn" onClick={() => {
             const r = build.addAreaHere();
             onNote(r ? { kind: 'area', ...r } : { kind: 'message', text: 'There’s no free floor here for an area.' });
@@ -1007,10 +1126,6 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
           }}>⟳ Turn shelf</button>
           <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Entrance set here.', snapshot: build.markHere('entrance') })}>I’m at the entrance</button>
           <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Checkout set here.', snapshot: build.markHere('checkout') })}>I’m at checkout</button>
-          <button className="btn" onClick={() => {
-            build.startBlankStore();
-            onNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
-          }}>New store</button>
         </div>
       </div>
     </section>
@@ -1038,7 +1153,7 @@ function BuildBanner({ note, skipped, onFill, layout, catalog, build, onUndo, on
 
   if (note.kind === 'message') {
     return (
-      <div className="toast top" role="status">
+      <div className="toast" role="status">
         <span className="toast-text">{note.text}</span>
         {note.snapshot && <button className="toast-btn" onClick={() => onUndo(note.snapshot!)}>Undo</button>}
         <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
