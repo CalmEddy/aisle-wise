@@ -646,7 +646,7 @@ export function ShoppingView(props: Props) {
                     : 'Drag it onto the map, or pick a place. The app remembers for this store.'}
                 </p>
                 {unplaced.map((item) => (
-                  <div className="row" key={item.id}>
+                  <div className="row off-row" key={item.id}>
                     <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
                     <label>
                       <input type="checkbox" checked={false} onChange={() => toggle(item)} aria-label={building ? `Got ${item.name} here` : `Got ${item.name}`} />
@@ -659,8 +659,10 @@ export function ShoppingView(props: Props) {
                         <option key={p.id} value={p.id}>{p.label || 'Unnamed'}</option>
                       ))}
                     </select>
-                    <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
-                    <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
+                    <span className="row-actions">
+                      <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+                      <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
+                    </span>
                   </div>
                 ))}
               </>
@@ -924,6 +926,7 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
               {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
             </span>
           </label>
+          <span className="row-actions">
           {onPin && !item.done && (
             <button
               className="icon pin"
@@ -937,6 +940,7 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
             <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
           )}
           <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>
+          </span>
         </li>
       ))}
     </ul>
