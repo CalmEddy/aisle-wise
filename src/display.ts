@@ -16,7 +16,7 @@ export interface Display {
   /** Walkway width (squares) between shelves in a shelf block. */
   blockLane?: number;
   /** The aisle brush's sides and walkway width. */
-  brush?: { left: 'shelf' | 'wall' | 'gap'; right: 'shelf' | 'wall' | 'gap'; width: number };
+  brush?: { left: 'shelf' | 'wall' | 'gap'; right: 'shelf' | 'wall' | 'gap'; width: number; leftCategory?: string; rightCategory?: string; aisleLabel?: string };
 }
 
 export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listColors: true, listIcons: true, buildMode: false };

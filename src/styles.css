@@ -651,7 +651,8 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 
 /* Add button on the toggle strip, and the add window */
 .toggle.add-toggle { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 800; font-size: 1.15rem; min-width: 38px; padding: 2px 10px; }
-.toast { z-index: 45; }
+/* A question about something just added (e.g. from the add window) shows above windows. */
+.toast.over-windows { z-index: 45; }
 .add-sheet { height: 88vh; display: flex; flex-direction: column; }
 .add-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .add-sheet-head h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -669,3 +670,19 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .add-cats.one-line { flex-wrap: nowrap; overflow-x: auto; }
 .route-list { margin-top: 6px; }
 .route-list .visit.next-card { border: 0; border-left: 4px solid var(--accent); }
+.brush-side .cat-picker input { padding: 6px 8px; font-size: 14px; margin-top: 4px; }
+.brush-side .cat-options { max-height: 180px; }
+
+/* Aisle labels: names written along the walkway between shelves */
+.aisle-label { pointer-events: none; }
+.aisle-label.tappable { pointer-events: auto; cursor: pointer; }
+.aisle-label .aisle-area { fill: transparent; }
+.aisle-label.tappable .aisle-area { fill: color-mix(in srgb, var(--muted) 6%, transparent); }
+.aisle-label.selected .aisle-area { stroke: var(--you); stroke-width: 0.15; stroke-dasharray: 0.4 0.3; }
+.aisle-label text { fill: var(--muted); font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.85; }
+.aisle-label.tappable { pointer-events: none; }
+.aisle-label.tappable text { pointer-events: auto; cursor: pointer; }
+.aisle-name-field { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.aisle-name-field input { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); font-size: 16px; color: var(--text); }
+.aisle-name-field .btn { padding: 6px 10px; font-size: 0.8rem; white-space: nowrap; }
+.brush-side .cat-picker input { font-size: 16px; }

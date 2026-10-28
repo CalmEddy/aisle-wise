@@ -12,6 +12,8 @@ import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, type BuildTool, type StoreApi } from './BuildTools';
 import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
+import { nextAisleLabel, walkwayAt } from '../core/aisles';
+import { contains } from '../core/geometry';
 import { PlacePanel, clamp, handlePoint } from './PlacePanel';
 import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
@@ -76,6 +78,12 @@ export interface BuildApi {
   /** Aisle brush: paint and step; back up one step. */
   brushStep: (dir: Direction, avoid: Rect[]) => { snapshot: Snapshot; from: Point; painted: number; blocked: number; lane: Rect; shift: Point };
   brushBack: (step: { snapshot: Snapshot; from: Point }, original: Point) => void;
+  /** Aisle labels: add over a walkway, rename, remove. */
+  aisles: {
+    add: (rect: Rect, label: string) => { id: string; snapshot: Snapshot };
+    rename: (id: string, label: string) => void;
+    remove: (id: string) => Snapshot;
+  };
   store: StoreApi;
 }
 
@@ -112,6 +120,11 @@ export function ShoppingView(props: Props) {
   // Build mode: the shelf or area being edited.
   const [editingId, setEditingId] = useState<string>();
   const editing = building ? layout.places.find((p) => p.id === editingId) : undefined;
+  // Build mode: the aisle label being edited.
+  const [editingAisleId, setEditingAisleId] = useState<string>();
+  const editingAisle = building ? layout.aisles?.find((a) => a.id === editingAisleId) : undefined;
+  // A tap on an aisle label also lands on the map (moving you there); this says which label it was.
+  const aisleTapped = useRef<string>();
 
   // Build mode: the shelf "next shelf" copies – the one being edited, the one
   // you're beside, or the last one built.
@@ -229,10 +242,25 @@ export function ShoppingView(props: Props) {
       setNote({ kind: 'message', text: tool === 'entrance' ? 'Entrance set here.' : 'Checkout set here.', snapshot });
       return;
     }
-    // Walk: tapping a shelf or area opens it for editing (and puts you there).
+    // Walk: tapping a shelf, area or aisle label opens it for editing (and puts you there).
     setEditingId(place?.id);
+    setEditingAisleId(place ? undefined : aisleTapped.current);
+    aisleTapped.current = undefined;
     setPosition(floor.snap(cell));
   }
+  // Standing in a walkway between shelves: label it, or edit the label that's already there.
+  const aisleHere = building ? layout.aisles?.find((a) => contains(a, position)) : undefined;
+  const walkwayHere = building && !aisleHere ? walkwayAt(layout, position) : undefined;
+  const aisleAction = aisleHere
+    ? { text: `🏷 “${aisleHere.label}”`, run: () => { setEditingId(undefined); setEditingAisleId(aisleHere.id); } }
+    : walkwayHere
+      ? { text: '🏷 Label aisle', run: () => {
+          const r = props.build.aisles.add(walkwayHere, nextAisleLabel(layout));
+          setEditingId(undefined);
+          setEditingAisleId(r.id);
+          setNote({ kind: 'message', text: 'Aisle labelled – rename it below.', snapshot: r.snapshot });
+        } }
+      : undefined;
   const buildPreview = building ? planBuild(layout, position, undefined, 'vertical', props.display.buildArea ? 'area' : 'shelf', double) : undefined;
   const findShelf = (id?: string) => layout.places.find((p): p is Shelf => p.id === id && p.kind === 'shelf');
   const baseShelf = findShelf(editing?.id) ?? findShelf(buildPreview?.action === 'onShelf' ? buildPreview.placeId : undefined) ?? findShelf(lastShelfId);
@@ -283,13 +311,18 @@ export function ShoppingView(props: Props) {
     });
   }
 
-  // The banner fades after a while, unless the place picker is open or it's asking a question.
+  // The add window (opened with + on the toggle strip).
+  const [adding, setAdding] = useState(false);
+
+  // The banner fades after a while, unless it's asking a question or a window is open over it
+  // (place picker, lists, add items): then its Undo is still there when you come back.
   const asking = toast?.added.some((a) => a.conflict);
+  const covered = !!picking || props.listsOpen || adding;
   useEffect(() => {
-    if (!toast || picking || asking) return;
+    if (!toast || covered || asking) return;
     const t = setTimeout(() => setToast(null), 7000);
     return () => clearTimeout(t);
-  }, [toast, picking, asking]);
+  }, [toast, covered, asking]);
 
   const locate = (item: ListItem) => locateItem(item, layout, catalog);
   /** Category icon for a list row, when list icons are on. */
@@ -373,8 +406,6 @@ export function ShoppingView(props: Props) {
   const hereKey = here ? exactKey(here.id, exactSpotAt(here, position.x + 0.5, position.y + 0.5)) : undefined;
   const hereLabel = hereKey ? resolveSpot(hereKey, layout, catalog)?.label : undefined;
 
-  // The add window (opened with + on the toggle strip).
-  const [adding, setAdding] = useState(false);
 
   /** Adds from the add window. Things put in the cart may ask where they are, so those show a toast. */
   function addNames(names: string[], mode: 'list' | 'cart'): QuickAddResult | undefined {
@@ -498,6 +529,8 @@ export function ShoppingView(props: Props) {
             showGrid={building}
             highlightId={here?.id}
             selectedId={editing?.id}
+            selectedAisleId={editingAisle?.id}
+            onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
             onMapTap={blocking ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
@@ -532,6 +565,25 @@ export function ShoppingView(props: Props) {
             show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']}
             lead={addButton}
           />
+          {editingAisle && (
+            <div className="build-edit aisle-edit">
+              <div className="build-edit-head">
+                <h3>Aisle label</h3>
+                <button className="btn primary" onClick={() => setEditingAisleId(undefined)}>Done</button>
+              </div>
+              <div className="card panel">
+                <label className="field">
+                  <span>Name (shown along the walkway)</span>
+                  <input value={editingAisle.label} onChange={(e) => props.build.aisles.rename(editingAisle.id, e.target.value)} placeholder="e.g. Aisle 5" autoFocus />
+                </label>
+                <button className="btn danger" onClick={() => {
+                  const snapshot = props.build.aisles.remove(editingAisle.id);
+                  setEditingAisleId(undefined);
+                  setNote({ kind: 'message', text: `Removed “${editingAisle.label}”.`, snapshot });
+                }}>Remove label</button>
+              </div>
+            </div>
+          )}
           {editing && (
             <div className="build-edit">
               <div className="build-edit-head">
@@ -569,6 +621,9 @@ export function ShoppingView(props: Props) {
           {building && tool === 'brush' && (
             <BrushPanel
               brush={brush}
+              categories={catalog.categories}
+              iconOf={(id) => props.looks.get(id)?.icon}
+              nextAisle={nextAisleLabel(layout)}
               setBrush={setBrush}
               dir={brushDir}
               onStep={brushStepTo}
@@ -589,6 +644,7 @@ export function ShoppingView(props: Props) {
               turnId={baseShelf?.id}
               nextOptions={nextOptions}
               onNext={(shelves) => stampShelves(shelves, false)}
+              aisleAction={aisleAction}
               double={double}
               setDouble={setDouble}
               onNote={setNote}
@@ -1011,7 +1067,7 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
     const saved = label(clash.conflict.savedKey);
     const here = label(clash.conflict.hereKey);
     return (
-      <div className="toast question" role="alertdialog" aria-label={`Move ${clash.name}?`}>
+      <div className="toast question over-windows" role="alertdialog" aria-label={`Move ${clash.name}?`}>
         <span className="toast-text">
           <b>{clash.name}</b> is in your cart. It’s saved at <b>{saved}</b> — is it here at <b>{here}</b>?
         </span>
@@ -1099,7 +1155,7 @@ const ACTION_TEXT: Record<string, (label: string) => string> = {
 };
 
 /** Build mode controls: what checking off here will do, walk arrows and tools. */
-function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, double, setDouble, onNote }: {
+function BuildPanel({ layout, position, target, setTarget, build, preview, turnId, nextOptions, onNext, aisleAction, double, setDouble, onNote }: {
   layout: StoreLayout;
   position: Point;
   target: BuildTarget;
@@ -1112,6 +1168,8 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
   /** Where "next shelf" (or pair) can go, either side of the current shelf. */
   nextOptions: { side: -1 | 1; shelves: Shelf[] }[];
   onNext: (shelves: Shelf[]) => void;
+  /** Label the aisle you're standing in (or edit its label). */
+  aisleAction?: { text: string; run: () => void };
   double: boolean;
   setDouble: (d: boolean) => void;
   onNote: (n: BuildNote) => void;
@@ -1160,6 +1218,7 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
               </button>
             );
           })}
+          {aisleAction && <button className="btn" onClick={aisleAction.run}>{aisleAction.text}</button>}
           <button className="btn" onClick={() => {
             const r = build.addAreaHere();
             onNote(r ? { kind: 'area', ...r } : { kind: 'message', text: 'There’s no free floor here for an area.' });

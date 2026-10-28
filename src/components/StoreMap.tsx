@@ -33,6 +33,9 @@ interface Props {
   preview?: { x: number; y: number };
   /** Shelves that could be built, drawn faint and dashed. */
   ghosts?: MapGhost[];
+  /** Tapping an aisle label (build mode); without it labels can't be tapped. */
+  onAisleTap?: (id: string) => void;
+  selectedAisleId?: string;
   /** Zoom in on this rectangle (grid units). */
   focus?: Rect;
   /** Colours and icons for category sections. */
@@ -69,7 +72,7 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -108,6 +111,23 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           onPointerDown={onPlacePointerDown}
         />
       ))}
+
+      {(layout.aisles ?? []).map((a) => {
+        const vertical = a.h > a.w;
+        const thick = vertical ? a.w : a.h;
+        const run = vertical ? a.h : a.w;
+        const size = Math.max(0.45, Math.min(1, thick * 0.6, (run / Math.max(4, a.label.length)) * 1.4));
+        const cx = a.x + a.w / 2;
+        const cy = a.y + a.h / 2;
+        return (
+          <g key={a.id} className={`aisle-label${a.id === selectedAisleId ? ' selected' : ''}${onAisleTap ? ' tappable' : ''}`}
+            onClick={onAisleTap ? () => onAisleTap(a.id) : undefined}>
+            <rect className="aisle-area" x={a.x + 0.1} y={a.y + 0.1} width={a.w - 0.2} height={a.h - 0.2} rx={0.35} />
+            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={size}
+              transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}>{a.label}</text>
+          </g>
+        );
+      })}
 
       {ghosts.map((g, i) => {
         const r = g.rect;

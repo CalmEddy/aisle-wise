@@ -55,6 +55,18 @@ export interface StoreLayout {
   places: Place[];
   entrance: Point;
   checkout: Point;
+  /** Named walkways ("Aisle 5"), drawn along the space between shelves. */
+  aisles?: AisleLabel[];
+}
+
+/** A label for a walkway: the rectangle of floor it names. */
+export interface AisleLabel {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface ListItem {

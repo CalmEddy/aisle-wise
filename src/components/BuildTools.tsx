@@ -3,6 +3,8 @@ import type { Direction } from '../core/build';
 import { BRUSH_LENGTH, BRUSH_PRESETS, MAX_AISLE, MIN_AISLE, type Brush, type SideKind } from '../core/brush';
 import type { StoreLayout } from '../core/types';
 import { NumberField } from './PlacePanel';
+import { CategoryPicker } from './CategoryPicker';
+import type { Category } from '../core/types';
 
 /** What tapping or dragging on the map does in build mode. */
 export type BuildTool = 'walk' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'area' | 'entrance' | 'checkout';
@@ -109,8 +111,13 @@ const ARROW: Record<Direction, string> = { up: '↑', down: '↓', left: '←', 
  * that paint and step BRUSH_LENGTH squares. Sides are relative to the way
  * you're walking.
  */
-export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onBack, lastResult }: {
+export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onBack, lastResult, categories, iconOf, nextAisle }: {
   brush: Brush;
+  /** Suggested name for a new aisle label ("Aisle 3"). */
+  nextAisle: string;
+  /** For "stocks" on each side. */
+  categories: Category[];
+  iconOf: (id: string) => string | undefined;
   setBrush: (b: Brush) => void;
   /** The way you're facing (the preview shows the next step this way). */
   dir: Direction;
@@ -131,6 +138,17 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
           </button>
         ))}
       </div>
+      {brush[which] !== 'gap' && (
+        <CategoryPicker
+          value={which === 'left' ? brush.leftCategory : brush.rightCategory}
+          categories={categories}
+          onPick={(id) => setBrush({ ...brush, [which === 'left' ? 'leftCategory' : 'rightCategory']: id })}
+          iconOf={iconOf}
+          noneLabel="Stocks: nothing yet"
+          placeholder="Stocks: nothing yet"
+          label={`Category the ${which} side stocks`}
+        />
+      )}
     </div>
   );
   const arrow = (d: Direction) => (
@@ -152,6 +170,13 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
       <div className="brush-sides">
         {side('left')}
         {side('right')}
+      </div>
+      <div className="aisle-name-field">
+        <span>🏷</span>
+        <input value={brush.aisleLabel ?? ''} onChange={(e) => setBrush({ ...brush, aisleLabel: e.target.value })}
+          placeholder="Aisle name (optional)" aria-label="Aisle name to paint along the walkway" />
+        <button className="btn" onClick={() => setBrush({ ...brush, aisleLabel: nextAisle })} title="Next aisle number">{nextAisle}</button>
+        {brush.aisleLabel && <button className="icon" onClick={() => setBrush({ ...brush, aisleLabel: '' })} aria-label="Stop naming">×</button>}
       </div>
       <label className="lane-field">
         <span>Aisle width</span>

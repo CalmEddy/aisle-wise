@@ -12,6 +12,7 @@ import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
+import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -383,6 +384,24 @@ export default function App() {
       : l)));
   }
 
+  // ---- Aisle labels ----
+  const aisleApi = {
+    add(rect: Rect, label: string): { id: string; snapshot: Snapshot } {
+      const snapshot = snapshotNow();
+      const r = addAisle(layout, rect, label);
+      replaceLayout(r.layout);
+      return { id: r.aisle.id, snapshot };
+    },
+    rename(id: string, label: string) {
+      replaceLayout(renameAisle(layout, id, label));
+    },
+    remove(id: string): Snapshot {
+      const snapshot = snapshotNow();
+      replaceLayout(removeAisle(layout, id));
+      return snapshot;
+    },
+  };
+
   // ---- Store settings (build mode) ----
 
   function renameStore(name: string) {
@@ -393,7 +412,7 @@ export default function App() {
   function resizeStore(width: number, height: number) {
     const next = { ...layout, width: clamp(width, 10, 150), height: clamp(height, 10, 150) };
     const inside = (p: Point) => ({ x: Math.min(p.x, next.width - 1), y: Math.min(p.y, next.height - 1) });
-    replaceLayout({ ...next, entrance: inside(layout.entrance), checkout: inside(layout.checkout), places: layout.places.map((p) => clampPlace(p, next)) });
+    replaceLayout(clipAisles({ ...next, entrance: inside(layout.entrance), checkout: inside(layout.checkout), places: layout.places.map((p) => clampPlace(p, next)) }));
   }
 
   /** A copy of the current store (with its item locations), and switches to it. */
@@ -647,7 +666,7 @@ export default function App() {
           quickAdd={quickAdd}
           build={{
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
-            startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack,
+            startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
             store: { layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id },
           }}
           setItemCategory={setItemCategory}

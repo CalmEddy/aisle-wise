@@ -421,6 +421,7 @@ export function growStore(l: StoreLayout, dir: Direction, by = 5): { layout: Sto
       entrance: move(l.entrance),
       checkout: move(l.checkout),
       places: l.places.map((p) => ({ ...p, ...move(p) })),
+      ...(l.aisles && { aisles: l.aisles.map((a) => ({ ...a, ...move(a) })) }),
     },
   };
 }

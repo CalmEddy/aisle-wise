@@ -1,3 +1,4 @@
+import { paintAisle } from './aisles';
 import { growStore, nextLabel, type Direction } from './build';
 import { contains, exactKey, footprint, parseExactKey } from './geometry';
 import type { Orientation, Point, Rect, Shelf, StoreLayout } from './types';
@@ -15,6 +16,11 @@ export type SideKind = 'shelf' | 'wall' | 'gap';
 export interface Brush {
   left: SideKind;
   right: SideKind;
+  /** Category each side stocks as it's painted (optional). */
+  leftCategory?: string;
+  rightCategory?: string;
+  /** Name the walkway as you paint it ("Aisle 5"). */
+  aisleLabel?: string;
   /** Walkway width between the two sides, in squares. */
   width: number;
 }
@@ -45,6 +51,8 @@ export interface SideSegment {
   length: number;
   /** Wall shelves: the closed side, facing away from the walkway. */
   back?: -1 | 1;
+  /** Category the painted squares stock. */
+  categoryId?: string;
 }
 
 /** Where a brush step from `p` heading `dir` reaches: the walkway, the two sides, and where you end up. */
@@ -79,9 +87,11 @@ export function brushSegments(p: Point, dir: Direction, brush: Brush): SideSegme
     const kind = brush[side];
     if (kind === 'gap') continue;
     const across = side === 'left' ? a.leftAcross : a.rightAcross;
+    const categoryId = side === 'left' ? brush.leftCategory : brush.rightCategory;
     out.push({
       side, kind, orientation: a.orientation, across, start: a.start, length: BRUSH_LENGTH,
       ...(kind === 'wall' && { back: across < a.lo ? -1 : 1 }),
+      ...(categoryId && { categoryId }),
     });
   }
   return out;
@@ -148,7 +158,7 @@ function paintSegment(l: StoreLayout, seg: SideSegment, avoid: Rect[]): { layout
     if (!touching.length) {
       const shelf: Shelf = {
         kind: 'shelf', id: `s-${newId()}`, label: nextLabel(layout, 'shelf'), orientation: seg.orientation,
-        length: r1 - r0 + 1, x: v ? seg.across : r0, y: v ? r0 : seg.across, categories: [],
+        length: r1 - r0 + 1, x: v ? seg.across : r0, y: v ? r0 : seg.across, categories: seg.categoryId ? [seg.categoryId] : [],
         ...(seg.back && { back: seg.back }),
       };
       layout = { ...layout, places: [...layout.places, shelf] };
@@ -158,11 +168,18 @@ function paintSegment(l: StoreLayout, seg: SideSegment, avoid: Rect[]): { layout
     const keep = touching[0];
     const s0 = Math.min(r0, ...touching.map(startOf));
     const s1 = Math.max(r1, ...touching.map((s) => startOf(s) + s.length - 1));
+    // Categories in order along the shelf; a painted category goes at the end it was painted on.
+    const ordered = [...touching].sort((x, y) => startOf(x) - startOf(y));
+    let categories = [...new Set(ordered.flatMap((s) => s.categories))];
+    if (seg.categoryId && !categories.includes(seg.categoryId)) {
+      const atStart = r0 < Math.min(...touching.map(startOf));
+      categories = atStart ? [seg.categoryId, ...categories] : [...categories, seg.categoryId];
+    }
     const merged: Shelf = {
       ...keep,
       length: s1 - s0 + 1,
       ...(v ? { y: s0 } : { x: s0 }),
-      categories: [...new Set(touching.flatMap((s) => s.categories))],
+      categories,
     };
     for (const s of touching) rekeys.push(rekeyInto(s, merged));
     const gone = new Set(touching.map((s) => s.id));
@@ -232,6 +249,8 @@ export function paintStep(l: StoreLayout, p: Point, dir: Direction, brush: Brush
     painted += r.painted;
     blocked += r.blocked;
   }
+  const stepLane = walkway(here, dir, brush.width);
+  if (brush.aisleLabel?.trim()) layout = paintAisle(layout, stepLane, brush.aisleLabel.trim());
   const next = brushArea(here, dir, brush.width).next;
   return {
     layout,
@@ -240,7 +259,7 @@ export function paintStep(l: StoreLayout, p: Point, dir: Direction, brush: Brush
     rekey: (key) => rekeys.reduce((k, f) => f(k), key),
     painted,
     blocked,
-    lane: walkway(here, dir, brush.width),
+    lane: stepLane,
   };
 }
 
