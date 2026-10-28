@@ -13,9 +13,14 @@ const STATUS_TEXT = {
 export function HouseholdButton({ api, onClick }: { api: HouseholdApi; onClick: () => void }) {
   const live = !!api.household && api.status !== 'off';
   return (
-    <button className={`household-pill status-${live ? api.status : 'off'}`} onClick={onClick}>
+    <button
+      className={`household-pill status-${live ? api.status : 'off'}`}
+      onClick={onClick}
+      title={live ? `${api.household!.name} · ${STATUS_TEXT[api.status]}` : 'Share with household'}
+      aria-label={live ? `Household ${api.household!.name}: ${STATUS_TEXT[api.status]}` : 'Share with household'}
+    >
       <span className="dot" aria-hidden="true" />
-      {live ? `${api.household!.name} · ${STATUS_TEXT[api.status]}` : 'Share with household'}
+      <span aria-hidden="true">👥</span>
     </button>
   );
 }

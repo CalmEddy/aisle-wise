@@ -3,6 +3,7 @@ import { ItemsView } from './components/ItemsView';
 import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
+import { ListBar } from './components/ListsSheet';
 import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
 import { defaultDisplay, type Display, type SectionLook } from './display';
@@ -109,6 +110,8 @@ export default function App() {
     setLayouts(() => (d.layouts.length ? d.layouts : [demoLayout]));
   });
   const [householdOpen, setHouseholdOpen] = useState(false);
+  const [listsOpen, setListsOpen] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const [joinCode, setJoinCode] = useState<string>();
 
   // Sharing: what we're sending, and anything that arrived in a link.
@@ -587,15 +590,25 @@ export default function App() {
     <div className="app">
       <header className="top">
         <div className="title">
-          <h1>Aisle Wise</h1>
-          {layouts.length > 1 ? (
-            <select className="store-pick" value={layout.id} onChange={(e) => setActiveId(e.target.value)} aria-label="Store">
-              {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          ) : (
-            <p className="muted">{layout.name}</p>
-          )}
-          <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
+          <div className="title-line">
+            <h1>Aisle Wise</h1>
+            <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
+            {view === 'list' && (
+              <button className="info-btn" aria-pressed={showHint} aria-label="How this works" title="How this works" onClick={() => setShowHint((v) => !v)}>ⓘ</button>
+            )}
+          </div>
+          <div className="title-sub">
+            {layouts.length > 1 ? (
+              <select className="store-pick" value={layout.id} onChange={(e) => setActiveId(e.target.value)} aria-label="Store">
+                {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            ) : (
+              <span className="muted store-name">{layout.name}</span>
+            )}
+            {view === 'list' && (
+              <ListBar name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'} count={lists.length} onOpen={() => setListsOpen(true)} />
+            )}
+          </div>
         </div>
         {view === 'list' && (
           <div className="top-right">
@@ -617,6 +630,9 @@ export default function App() {
       {view === 'list' && (
         <ShoppingView
           key={listId}
+          listsOpen={listsOpen}
+          showHint={showHint}
+          onListsClose={() => setListsOpen(false)}
           lists={{
             all: lists, current: listId, counts: listCounts, switchTo: setActiveListId,
             create: createList, rename: renameList, remove: deleteList, combine: combineInto,

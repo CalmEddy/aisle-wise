@@ -17,12 +17,17 @@ import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
-import { ListBar, ListsSheet, type ListsApi } from './ListsSheet';
+import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
 
 interface Props {
   /** The household's lists; this view shows the current one. */
   lists: ListsApi;
+  /** The lists sheet (opened from the list picker in the header). */
+  listsOpen: boolean;
+  onListsClose: () => void;
+  /** Show the how-it-works hint (toggled by ⓘ in the header). */
+  showHint: boolean;
   layout: StoreLayout;
   floor: Floor;
   catalog: Catalog;
@@ -412,7 +417,6 @@ export function ShoppingView(props: Props) {
     setItems((prev) => prev.filter((i) => !ids.has(i.id)));
     setToast({ snapshot, added: [], mode: 'list', note: gone.length === 1 ? `Removed ${gone[0].name} from the list.` : `Removed ${gone.length} items from the list.` });
   }
-  const [listsOpen, setListsOpen] = useState(false);
 
   function newTrip() {
     setItems((prev) => prev.filter((i) => !i.done));
@@ -459,11 +463,10 @@ export function ShoppingView(props: Props) {
 
   return (
     <>
-      <ListBar lists={props.lists} onOpen={() => setListsOpen(true)} />
-      {listsOpen && (
+      {props.listsOpen && (
         <ListsSheet
           lists={props.lists}
-          onClose={() => setListsOpen(false)}
+          onClose={props.onListsClose}
           onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
         />
       )}
@@ -552,7 +555,11 @@ export function ShoppingView(props: Props) {
             })()}
           </StoreMap>
           {building && <BuildToolbar tool={tool} setTool={setTool} />}
-          <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']} />
+          <DisplayToggles
+            display={props.display}
+            setDisplay={props.setDisplay}
+            show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']}
+          />
           {editing && (
             <div className="build-edit">
               <div className="build-edit-head">
@@ -643,8 +650,8 @@ export function ShoppingView(props: Props) {
           </div>
         )}
 
-        {route.length > 0 && (
-          <p className="hint muted small">Tap a place or section name to say you’re there. Drag ⠿ onto the map or another item to move an item.</p>
+        {route.length > 0 && props.showHint && (
+          <p className="hint muted small">Tap a place or section name to say you’re there. Drag ⠿ onto the map or another item to move an item. Tap 📍 to find an item on the map.</p>
         )}
 
         {!grouped && nearestFirst.length > 0 && (
@@ -1160,18 +1167,20 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
   );
   return (
     <section className="card build-panel">
-      <div className="segmented build-target" role="group" aria-label="What to build on open floor">
-        <span className="muted small">Build:</span>
-        {(['shelf', 'area'] as const).map((t) => (
-          <button key={t} className={target === t ? 'active' : ''} aria-pressed={target === t} onClick={() => setTarget(t)}>
-            {t === 'shelf' ? '▮ Shelves' : '▦ Areas'}
-          </button>
-        ))}
+      <div className="build-top">
+        <div className="segmented build-target" role="group" aria-label="What to build on open floor">
+          <span className="muted small">Build:</span>
+          {(['shelf', 'area'] as const).map((t) => (
+            <button key={t} className={target === t ? 'active' : ''} aria-pressed={target === t} onClick={() => setTarget(t)}>
+              {t === 'shelf' ? '▮ Shelves' : '▦ Areas'}
+            </button>
+          ))}
+        </div>
+        <label className="double-toggle" title="Double shelves (back to back)">
+          <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} aria-label="Double shelves (back to back)" />
+          <span>Double</span>
+        </label>
       </div>
-      <label className="double-toggle">
-        <input type="checkbox" checked={double} onChange={(e) => setDouble(e.target.checked)} />
-        <span>Double shelves <span className="muted small">(back to back)</span></span>
-      </label>
       <p className="build-preview">
         <b>Picking up here</b>{' '}
         {options.length
@@ -1179,10 +1188,6 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
           : preview.action === 'create' && preview.matched
             ? <>creates a new {preview.pairId ? 'pair of shelves' : 'shelf'} lined up with “{preview.matched}” (shown in blue).</>
             : <>{preview.pairId ? 'creates a new double shelf here' : ACTION_TEXT[preview.action](preview.label)}{preview.action === 'create' || preview.action === 'extend' ? ' (shown in blue)' : ''}.</>}
-      </p>
-      <p className="muted small">
-        Use the arrows to step a square at a time; check items off or tap 🛒 Cart to build around you.
-        {nextOptions.length > 0 && <> Tap a grey <b>+</b> shelf on the map to add the next one in the row.</>}
       </p>
       <div className="build-row">
         <div className="arrows" role="group" aria-label="Move one square">
@@ -1208,8 +1213,8 @@ function BuildPanel({ layout, position, target, setTarget, build, preview, turnI
             const snapshot = turnId ? build.turnShelfHere(turnId) : undefined;
             onNote(snapshot ? { kind: 'message', text: 'Shelf turned.', snapshot } : { kind: 'message', text: 'That shelf can’t turn here – something’s in the way.' });
           }}>⟳ Turn shelf</button>
-          <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Entrance set here.', snapshot: build.markHere('entrance') })}>I’m at the entrance</button>
-          <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Checkout set here.', snapshot: build.markHere('checkout') })}>I’m at checkout</button>
+          <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Entrance set here.', snapshot: build.markHere('entrance') })} aria-label="I’m at the entrance">Here = IN</button>
+          <button className="btn" onClick={() => onNote({ kind: 'message', text: 'Checkout set here.', snapshot: build.markHere('checkout') })} aria-label="I’m at checkout">Here = $</button>
         </div>
       </div>
     </section>

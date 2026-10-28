@@ -19,16 +19,13 @@ export interface ListsApi {
   preview: (sources: string[]) => { added: number; skipped: number };
 }
 
-/** The list switcher at the top of the Shop tab. */
-export function ListBar({ lists, onOpen }: { lists: ListsApi; onOpen: () => void }) {
-  const current = lists.all.find((l) => l.id === lists.current);
+/** The list switcher (in the header): the list being shopped; opens the lists sheet. */
+export function ListBar({ name, count, onOpen }: { name: string; count: number; onOpen: () => void }) {
   return (
-    <button className="list-bar" onClick={onOpen} aria-label={`List: ${current?.name}. Change list`}>
+    <button className="list-bar" onClick={onOpen} aria-label={`List: ${name}${count > 1 ? ` (${count} lists)` : ''}. Change list`}>
       <span aria-hidden="true">📝</span>
-      <b>{current?.name}</b>
-      {lists.all.length > 1 && <span className="muted small">· {lists.all.length} lists</span>}
-      <span style={{ flex: 1 }} />
-      <span className="list-bar-more">Lists ▾</span>
+      <span className="list-bar-name">{name}</span>
+      <span aria-hidden="true" className="list-bar-more">▾</span>
     </button>
   );
 }

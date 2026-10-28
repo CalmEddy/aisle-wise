@@ -7,29 +7,31 @@ import { NumberField } from './PlacePanel';
 /** What tapping or dragging on the map does in build mode. */
 export type BuildTool = 'walk' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'area' | 'entrance' | 'checkout';
 
-const TOOLS: { id: BuildTool; label: string; hint: string }[] = [
-  { id: 'walk', label: '📍 Walk', hint: 'Tap the map to say where you are, then check items off to build around you. Tap a shelf or area to edit it; once it’s selected, drag it to move it or drag the round handle to resize it.' },
-  { id: 'brush', label: '🖌 Aisle brush', hint: 'Walk an aisle 4 squares at a time with the arrows; each step paints what’s on your left and right. The dashed outline shows the next step.' },
-  { id: 'shelf-v', label: '+ Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
-  { id: 'shelf-h', label: '+ Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
-  { id: 'block', label: '▤ Shelf block', hint: 'Drag across the map to fill that space with shelves.' },
-  { id: 'area', label: '+ Open area', hint: 'Tap the map to add an open area, like Produce or the Deli.' },
-  { id: 'entrance', label: 'Entrance', hint: 'Tap the map where shoppers come in. (In Walk mode you can also drag the IN marker.)' },
-  { id: 'checkout', label: 'Checkout', hint: 'Tap the map where shoppers pay. (In Walk mode you can also drag the $ marker.)' },
+const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
+  { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
+  { id: 'brush', icon: '🖌', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
+  { id: 'shelf-v', icon: '▮↕', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
+  { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
+  { id: 'block', icon: '▤', label: 'Shelf block', hint: 'Drag across the map to fill it with shelves.' },
+  { id: 'area', icon: '▦', label: 'Open area', hint: 'Tap the map to add an open area, like Produce.' },
+  { id: 'entrance', icon: 'IN', label: 'Entrance', hint: 'Tap where shoppers come in (or drag IN in Walk).' },
+  { id: 'checkout', icon: '$', label: 'Checkout', hint: 'Tap where shoppers pay (or drag $ in Walk).' },
 ];
 
-/** The build-mode tool chips under the map, with a hint for the chosen one. */
+/** The build-mode tools under the map: one row of icons, with the chosen tool's name and a short hint. */
 export function BuildToolbar({ tool, setTool }: { tool: BuildTool; setTool: (t: BuildTool) => void }) {
+  const current = TOOLS.find((t) => t.id === tool)!;
   return (
     <div className="build-toolbar">
-      <div className="toolbar" role="toolbar" aria-label="Build tools">
+      <div className="toolbar tool-icons" role="toolbar" aria-label="Build tools">
         {TOOLS.map((t) => (
-          <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} aria-pressed={tool === t.id} onClick={() => setTool(t.id)}>
-            {t.label}
+          <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} aria-pressed={tool === t.id}
+            aria-label={t.label} title={t.label} onClick={() => setTool(t.id)}>
+            {t.icon}
           </button>
         ))}
       </div>
-      <p className="muted small">{TOOLS.find((t) => t.id === tool)!.hint}</p>
+      <p className="muted small tool-hint"><b>{current.label}:</b> {current.hint}</p>
     </div>
   );
 }
