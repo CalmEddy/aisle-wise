@@ -1,4 +1,4 @@
-import type { Category, ListItem, Product, StoreLayout } from '../core/types';
+import type { Category, ListItem, Product, ShoppingList, StoreLayout } from '../core/types';
 
 /**
  * Keeps a phone's data in step with its household.
@@ -11,7 +11,7 @@ import type { Category, ListItem, Product, StoreLayout } from '../core/types';
  * shadow. The last write to a document wins.
  */
 
-export type Kind = 'item' | 'product' | 'layout' | 'categories';
+export type Kind = 'item' | 'product' | 'layout' | 'categories' | 'list';
 
 export interface Doc {
   kind: Kind;
@@ -24,6 +24,8 @@ export interface Doc {
 
 export interface SyncData {
   items: ListItem[];
+  /** Named shopping lists. */
+  lists: ShoppingList[];
   products: Product[];
   categories: Category[];
   layouts: StoreLayout[];
@@ -32,7 +34,12 @@ export interface SyncData {
 /** Where documents are stored and how changes arrive. Supabase in the app; memory in tests. */
 export interface Remote {
   fetchAll(): Promise<Doc[]>;
-  push(docs: Doc[]): Promise<void>;
+  /**
+   * Saves documents. If the server can't store some kinds yet (its setup is
+   * older than this app), it saves the rest and says which it refused; those
+   * are tried again on the next save.
+   */
+  push(docs: Doc[]): Promise<void | { refused: Kind[] }>;
   /** Calls `onChange` for every change, including this phone's own. `onReconnect` after a dropped connection. */
   subscribe(onChange: (doc: Doc) => void, onReconnect: () => void): () => void;
 }
@@ -57,6 +64,7 @@ export function toDocs(d: SyncData): Map<string, Doc> {
   const docs = new Map<string, Doc>();
   const add = (kind: Kind, id: string, data: unknown) => docs.set(key(kind, id), { kind, id, data, deleted: false });
   d.items.forEach((x) => add('item', x.id, x));
+  d.lists.forEach((x) => add('list', x.id, x));
   d.products.forEach((x) => add('product', x.id, x));
   d.layouts.forEach((x) => add('layout', x.id, x));
   add('categories', 'all', d.categories);
@@ -65,7 +73,7 @@ export function toDocs(d: SyncData): Map<string, Doc> {
 
 /** Applies server documents to local data. */
 export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
-  let { items, products, categories, layouts } = d;
+  let { items, lists, products, categories, layouts } = d;
   const put = <T extends { id: string }>(list: T[], doc: Doc): T[] => {
     const without = list.filter((x) => x.id !== doc.id);
     if (doc.deleted || !doc.data) return without.length === list.length ? list : without;
@@ -77,11 +85,12 @@ export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
   };
   for (const doc of docs) {
     if (doc.kind === 'item') items = put(items, doc);
+    else if (doc.kind === 'list') lists = put(lists, doc);
     else if (doc.kind === 'product') products = put(products, doc);
     else if (doc.kind === 'layout') layouts = put(layouts, doc);
-    else if (doc.kind === 'categories' && !doc.deleted && Array.isArray(doc.data)) categories = doc.data as Category[];
+    else if (doc.kind === 'categories' && doc.id === 'all' && !doc.deleted && Array.isArray(doc.data)) categories = doc.data as Category[];
   }
-  return { items, products, categories, layouts };
+  return { items, lists, products, categories, layouts };
 }
 
 export class SyncEngine {
@@ -104,6 +113,8 @@ export class SyncEngine {
       /** Saved shadow from an earlier session, so offline edits survive a restart. */
       shadow?: Record<string, string>;
       saveShadow?: (s: Record<string, string>) => void;
+      /** The server refused some kinds of document (its setup needs updating). Empty once all are accepted. */
+      onRefused?: (kinds: Kind[]) => void;
     } = {},
   ) {
     this.shadow = new Map(Object.entries(opts.shadow ?? {}));
@@ -167,8 +178,11 @@ export class SyncEngine {
     }
     this.setStatus('saving');
     try {
-      await this.remote.push(out);
-      for (const [k, json] of sent) this.shadow.set(k, json);
+      const result = await this.remote.push(out);
+      const refused = new Set(result?.refused ?? []);
+      // Refused documents stay "unsent" so they go again next time.
+      for (const [k, json] of sent) if (!refused.has(k.split(':')[0] as Kind)) this.shadow.set(k, json);
+      this.opts.onRefused?.([...refused]);
       this.saveShadow();
       this.setStatus('synced');
     } catch {

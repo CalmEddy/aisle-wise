@@ -114,7 +114,7 @@ describe('household access rules', () => {
 describe('running the setup again', () => {
   it('reports everything as set up', async () => {
     const rows = (await db.query<{ part: string; status: string }>(CHECK)).rows;
-    expect(rows.map((r) => r.status)).toEqual(Array(7).fill('OK'));
+    expect(rows.map((r) => r.status)).toEqual(Array(8).fill('OK'));
   });
 
   it('can be run a second time without errors or losing data', async () => {
@@ -122,7 +122,31 @@ describe('running the setup again', () => {
     await db.exec(MIGRATION);
     expect((await db.query('select count(*)::int as n from docs')).rows).toEqual(before);
     const rows = (await db.query<{ status: string }>(CHECK)).rows;
-    expect(rows.map((r) => r.status)).toEqual(Array(7).fill('OK'));
+    expect(rows.map((r) => r.status)).toEqual(Array(8).fill('OK'));
+  });
+
+  it('upgrades an older setup so named lists can sync, keeping data', async () => {
+    const old = new PGlite();
+    await old.exec(SUPABASE_STUBS);
+    // The setup as it was before lists: only four kinds allowed.
+    await old.exec(MIGRATION.replace(/alter table public\.docs drop constraint[\s\S]*?'list'\)\);/, '')
+      .replace("'categories', 'list')", "'categories')"));
+    await old.exec(`insert into auth.users values ('${ANA}');`);
+    await old.exec(`reset role; select set_config('test.uid', '${ANA}', false); set role authenticated;`);
+    const [h] = (await old.query<{ id: string }>(`select * from create_household('Home')`)).rows;
+    await old.query(`insert into docs (household_id, kind, id, data) values ($1, 'item', 'i1', '{}')`, [h.id]);
+    await expect(old.query(`insert into docs (household_id, kind, id, data) values ($1, 'list', 'l1', '{}')`, [h.id])).rejects.toThrow(/docs_kind_check/);
+    await old.exec('reset role;');
+    let rows = (await old.query<{ part: string; status: string }>(CHECK)).rows;
+    expect(rows.find((r) => r.part.startsWith('8'))?.status).toMatch(/MISSING/);
+
+    await old.exec(MIGRATION);
+    rows = (await old.query<{ part: string; status: string }>(CHECK)).rows;
+    expect(rows.map((r) => r.status)).toEqual(Array(8).fill('OK'));
+    await old.exec(`select set_config('test.uid', '${ANA}', false); set role authenticated;`);
+    await old.query(`insert into docs (household_id, kind, id, data) values ($1, 'list', 'l1', '{"name":"Party"}')`, [h.id]);
+    expect((await old.query('select kind, id from docs order by kind')).rows).toEqual([{ kind: 'item', id: 'i1' }, { kind: 'list', id: 'l1' }]);
+    await old.exec('reset role;');
   });
 
   it('reports a fresh database as not set up', async () => {

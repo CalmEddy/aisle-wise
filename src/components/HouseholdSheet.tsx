@@ -206,7 +206,14 @@ function InHousehold({ api }: { api: HouseholdApi }) {
     <>
       <h2>{h.name}</h2>
       <p className={`small status-text status-${api.status}`}><span className="dot" aria-hidden="true" /> {STATUS_TEXT[api.status]}</p>
-      <p className="muted small">Your list, grocery items and stores are shared with everyone here and update live.</p>
+      <p className="muted small">Your lists, grocery items and stores are shared with everyone here and update live.</p>
+      {api.needsDbUpdate && (
+        <p className="card inset problems small">
+          <b>List names aren’t syncing yet.</b> Your household’s database needs the latest setup: open Supabase → SQL Editor,
+          paste in the setup script (<code>supabase/migrations/20261024000000_households.sql</code>) and run it. It’s safe to run again
+          and keeps your data. Everything else is syncing normally.
+        </p>
+      )}
 
       <div className="card inset">
         <h3>Invite someone</h3>

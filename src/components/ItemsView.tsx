@@ -21,6 +21,8 @@ interface Props {
   onAddToList: (product: Product) => void;
   /** Ids of products already on the shopping list. */
   onList: Set<string>;
+  /** Name of the list being shopped (where adds go). */
+  listName: string;
   /** What Undo would put back right now, and putting it back. */
   snapshot: () => Snapshot;
   undo: (s: Snapshot) => void;
@@ -59,7 +61,7 @@ interface ItemsToast {
   openId?: string;
 }
 
-function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onList, snapshot, undo }: Props) {
+function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onList, snapshot, undo, listName }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ItemFilter>('all');
   const [alsoList, setAlsoList] = useState(false);
@@ -298,7 +300,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
         <div className="items-sub">
           <label className="also-list">
             <input type="checkbox" checked={alsoList} onChange={(e) => setAlsoList(e.target.checked)} />
-            <span>Also add to my list</span>
+            <span>Also add to “{listName}”</span>
           </label>
           <span className="muted small hint">
             {q.includes(',') ? 'Enter adds each name.' : q ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`) : selecting ? 'Tap items to select.' : 'Swipe an item for shortcuts.'}

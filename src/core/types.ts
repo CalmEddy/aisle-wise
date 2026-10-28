@@ -57,7 +57,18 @@ export interface ListItem {
   done: boolean;
   /** The master-list item this was added from, if any. */
   productId?: string;
+  /** Which shopping list it's on. Missing means the main list (MAIN_LIST). */
+  listId?: string;
 }
+
+/** A named shopping list, e.g. "Weekly staples" or "Taco night". */
+export interface ShoppingList {
+  id: string;
+  name: string;
+}
+
+/** The first list everyone has. Items saved before there were several lists belong to it. */
+export const MAIN_LIST = 'main';
 
 /** A kind of product, e.g. Dairy. Places in a layout list the categories they stock. */
 export interface Category {

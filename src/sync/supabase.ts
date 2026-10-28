@@ -49,12 +49,27 @@ export function supabaseRemote(client: SupabaseClient, householdId: string): Rem
     },
 
     async push(docs) {
-      for (let i = 0; i < docs.length; i += 200) {
-        const rows = docs.slice(i, i + 200).map((d) => ({
-          household_id: householdId, kind: d.kind, id: d.id, data: d.data, deleted: d.deleted, device: d.device ?? null,
-        }));
-        const { error } = await client.from('docs').upsert(rows, { onConflict: 'household_id,kind,id' });
-        if (error) throw error;
+      const send = async (batch: typeof docs) => {
+        for (let i = 0; i < batch.length; i += 200) {
+          const rows = batch.slice(i, i + 200).map((d) => ({
+            household_id: householdId, kind: d.kind, id: d.id, data: d.data, deleted: d.deleted, device: d.device ?? null,
+          }));
+          const { error } = await client.from('docs').upsert(rows, { onConflict: 'household_id,kind,id' });
+          if (error) throw error;
+        }
+      };
+      // Kinds added after the first database setup go separately, so an
+      // older setup that doesn't accept them can't hold up everything else.
+      const newer = (d: (typeof docs)[number]) => d.kind === 'list';
+      await send(docs.filter((d) => !newer(d)));
+      const later = docs.filter(newer);
+      if (!later.length) return;
+      try {
+        await send(later);
+      } catch (e) {
+        // 23514: the database's list of allowed kinds is older than this app.
+        if ((e as { code?: string }).code === '23514') return { refused: ['list'] };
+        throw e;
       }
     },
 

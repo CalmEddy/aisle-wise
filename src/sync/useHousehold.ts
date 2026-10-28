@@ -32,6 +32,8 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
   const [session, setSession] = useState<Session | null>(null);
   const [household, setHousehold] = usePersistentState<Household | null>('aw.household', null);
   const [status, setStatus] = useState<HouseholdStatus>('off');
+  // The database setup is older than this app: list names can't sync until it's re-run.
+  const [needsDbUpdate, setNeedsDbUpdate] = useState(false);
   const engine = useRef<SyncEngine | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -73,6 +75,7 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
       },
       {
         onStatus: setStatus,
+        onRefused: (kinds) => setNeedsDbUpdate(kinds.length > 0),
         shadow: loadShadow(householdId),
         saveShadow: (s) => {
           try {
@@ -164,6 +167,7 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     signedIn: !!session,
     household,
     status,
+    needsDbUpdate,
     signIn,
     signUp,
     signOut,

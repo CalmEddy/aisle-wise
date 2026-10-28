@@ -15,6 +15,9 @@ from (values
       where oid in (to_regclass('public.households'), to_regclass('public.household_members'), to_regclass('public.docs'))), false)
     and (select count(*) from pg_policies where schemaname = 'public' and tablename in ('households', 'household_members', 'docs')) >= 7),
   ('7. live updates for docs',
-    exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'docs'))
+    exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'docs')),
+  ('8. named lists can sync',
+    exists (select 1 from pg_constraint where conrelid = to_regclass('public.docs') and conname = 'docs_kind_check'
+      and pg_get_constraintdef(oid) like '%''list''%'))
 ) as t(part, ok)
 order by part;

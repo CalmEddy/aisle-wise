@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
 import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
@@ -14,7 +14,8 @@ import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Category, ListItem, Place, Point, Product, Shelf, StoreLayout } from './core/types';
+import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
+import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
 import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
@@ -59,7 +60,22 @@ export default function App() {
   const [savedView, setView] = usePersistentState<View | 'layout'>('aw.view', 'list');
   // The old "Store layout" tab is now build mode on the Shop tab.
   const view: View = savedView === 'layout' ? 'list' : savedView;
-  const [items, setItems] = usePersistentState<ListItem[]>('aw.items', []);
+  // Every list's items; the app works on the list being shopped (`items`).
+  const [allItems, setAllItems] = usePersistentState<ListItem[]>('aw.items', []);
+  const [savedLists, setLists] = usePersistentState<ShoppingList[]>('aw.lists', defaultLists);
+  // The main list always exists (items from before there were several lists are on it).
+  const lists = useMemo(
+    () => (savedLists.some((l) => l.id === MAIN_LIST) ? savedLists : [...defaultLists, ...savedLists]),
+    [savedLists],
+  );
+  const [savedListId, setActiveListId] = usePersistentState('aw.activeList', MAIN_LIST);
+  const listId = lists.some((l) => l.id === savedListId) ? savedListId : MAIN_LIST;
+  const items = useMemo(() => itemsOn(allItems, listId), [allItems, listId]);
+  /** Changes the current list's items (other lists are left alone). */
+  const setItems = useCallback(
+    (fn: (prev: ListItem[]) => ListItem[]) => setAllItems((all) => updateList(all, listId, fn)),
+    [listId, setAllItems],
+  );
   const [products, setProducts] = usePersistentState<Product[]>('aw.products', defaultProducts);
   const [categories, setCategories] = usePersistentState<Category[]>('aw.categories', defaultCategories);
   const [display, setDisplay] = usePersistentState<Display>('aw.display', defaultDisplay);
@@ -81,9 +97,10 @@ export default function App() {
   }, [layouts, products, setLayouts, setProducts]);
 
   // Live sharing with a household (Supabase). Off unless configured and joined.
-  const syncData = useMemo(() => ({ items, products, categories, layouts }), [items, products, categories, layouts]);
+  const syncData = useMemo(() => ({ items: allItems, lists, products, categories, layouts }), [allItems, lists, products, categories, layouts]);
   const household = useHousehold(syncData, (d) => {
-    setItems(() => d.items);
+    setAllItems(() => d.items);
+    setLists(() => d.lists);
     setProducts(() => d.products);
     setCategories(() => d.categories);
     setLayouts(() => (d.layouts.length ? d.layouts : [demoLayout]));
@@ -447,6 +464,44 @@ export default function App() {
     })));
   }
 
+  // ---- Several lists ----
+
+  /** How many things are still to buy on each list. */
+  const listCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of allItems) if (!i.done) m.set(listOf(i), (m.get(listOf(i)) ?? 0) + 1);
+    return m;
+  }, [allItems]);
+
+  function createList(name: string) {
+    const id = `l-${newId()}`;
+    setLists((prev) => [...(prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev]), { id, name }]);
+    setActiveListId(id);
+  }
+
+  function renameList(id: string, name: string) {
+    setLists((prev) => {
+      const base = prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev];
+      return base.map((l) => (l.id === id ? { ...l, name } : l));
+    });
+  }
+
+  /** Deletes a list and its items (not the main list). */
+  function deleteList(id: string) {
+    if (id === MAIN_LIST) return;
+    setLists((prev) => prev.filter((l) => l.id !== id));
+    setAllItems((all) => removeList(all, id));
+    if (listId === id) setActiveListId(MAIN_LIST);
+  }
+
+  /** Copies what's still to buy on other lists onto this one. Returns what Undo restores and the counts. */
+  function combineInto(sources: string[]): { added: number; skipped: number; snapshot: Snapshot } {
+    const snapshot: Snapshot = { items, products, layouts };
+    const r = combineLists(allItems, listId, sources, catalog);
+    setAllItems(() => r.items);
+    return { added: r.added, skipped: r.skipped, snapshot };
+  }
+
   function addToList(product: Product) {
     setItems((prev) => [...prev, { id: newId(), name: product.name, done: false, productId: product.id }]);
   }
@@ -531,6 +586,12 @@ export default function App() {
 
       {view === 'list' && (
         <ShoppingView
+          key={listId}
+          lists={{
+            all: lists, current: listId, counts: listCounts, switchTo: setActiveListId,
+            create: createList, rename: renameList, remove: deleteList, combine: combineInto,
+            preview: (sources) => combineLists(allItems, listId, sources, catalog),
+          }}
           layout={layout}
           floor={floor}
           catalog={catalog}
@@ -566,6 +627,7 @@ export default function App() {
           setLayouts={setLayouts}
           onAddToList={addToList}
           onList={onList}
+          listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
           undo={undo}
         />

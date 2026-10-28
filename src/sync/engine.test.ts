@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { defaultCategories } from '../core/categories';
 import { demoLayout } from '../core/demoLayout';
 import type { ListItem } from '../core/types';
-import { SyncEngine, stable, type Doc, type Remote, type SyncData } from './engine';
+import { SyncEngine, stable, type Doc, type Kind, type Remote, type SyncData } from './engine';
 
 /** A pretend server shared by several phones. Like Supabase, it reorders JSON keys and echoes changes to everyone. */
 class MemoryServer {
   docs = new Map<string, Doc>();
   listeners = new Set<{ onChange: (d: Doc) => void; onReconnect: () => void }>();
   down = false;
+  /** Kinds an older database setup won't store. */
+  refuse = new Set<Kind>();
 
   remote(): Remote {
     return {
@@ -18,7 +20,12 @@ class MemoryServer {
       },
       push: async (docs) => {
         if (this.down) throw new Error('offline');
+        const refused = new Set<Kind>();
         for (const d of docs) {
+          if (this.refuse.has(d.kind)) {
+            refused.add(d.kind);
+            continue;
+          }
           const stored = { ...d, data: d.data === null ? null : JSON.parse(stable(d.data)) };
           // Postgres jsonb sorts keys; reverse them to make sure order never matters.
           if (stored.data && typeof stored.data === 'object' && !Array.isArray(stored.data)) {
@@ -27,6 +34,7 @@ class MemoryServer {
           this.docs.set(`${d.kind}:${d.id}`, stored);
           for (const l of this.listeners) l.onChange(structuredClone(stored));
         }
+        return refused.size ? { refused: [...refused] } : undefined;
       },
       subscribe: (onChange, onReconnect) => {
         const l = { onChange, onReconnect };
@@ -46,7 +54,7 @@ class Phone {
   engine: SyncEngine;
   sets = 0;
   constructor(server: MemoryServer, name: string, data: Partial<SyncData> = {}, shadow?: Record<string, string>) {
-    this.data = { items: [], products: [], categories: defaultCategories, layouts: [demoLayout], ...data };
+    this.data = { items: [], lists: [], products: [], categories: defaultCategories, layouts: [demoLayout], ...data };
     this.engine = new SyncEngine(server.remote(), name, () => this.data, (d) => { this.data = d; this.sets++; }, { delay: 0, shadow, saveShadow: (s) => (this.savedShadow = s) });
   }
   savedShadow: Record<string, string> = {};
@@ -171,5 +179,36 @@ describe('household sync', () => {
     const benAgain = new Phone(server, 'ben', { items: ben.data.items }, ben.savedShadow);
     await benAgain.engine.start();
     expect(benAgain.names()).toEqual([]);
+  });
+});
+
+describe('named lists', () => {
+  it('sync, and items keep their list', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [{ id: 'main', name: 'Shopping list' }, { id: 'party', name: 'Party' }] });
+    await ana.engine.start();
+    await ana.edit(addItem({ ...item('1', 'Chips'), listId: 'party' }));
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    expect(ben.data.lists.map((l) => l.name).sort()).toEqual(['Party', 'Shopping list']);
+    expect(ben.data.items[0].listId).toBe('party');
+  });
+
+  it('an older database setup refuses lists but everything else still syncs; lists go once it is updated', async () => {
+    const server = new MemoryServer();
+    server.refuse.add('list');
+    const refusedSeen: Kind[][] = [];
+    const ana = new Phone(server, 'ana', { lists: [{ id: 'party', name: 'Party' }], items: [item('1', 'Milk')] });
+    ana.engine = new SyncEngine(server.remote(), 'ana', () => ana.data, (d) => { ana.data = d; }, { delay: 0, onRefused: (k) => refusedSeen.push(k) });
+    await ana.engine.start();
+    expect(server.docs.has('item:1')).toBe(true);
+    expect(server.docs.has('list:party')).toBe(false);
+    expect(refusedSeen[refusedSeen.length - 1]).toEqual(['list']);
+
+    // The setup SQL is re-run: the next save sends the list.
+    server.refuse.clear();
+    await ana.edit(addItem(item('2', 'Eggs')));
+    expect(server.docs.has('list:party')).toBe(true);
+    expect(refusedSeen[refusedSeen.length - 1]).toEqual([]);
   });
 });

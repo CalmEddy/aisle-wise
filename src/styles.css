@@ -548,3 +548,22 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .bulk-head .link { padding: 4px 0; }
 .bulk-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
 .bulk-actions .btn { padding: 9px 4px; font-size: 0.82rem; }
+
+/* Several lists */
+.list-bar {
+  display: flex; align-items: center; gap: 8px; width: 100%; margin: 0 0 8px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); text-align: left;
+}
+.list-bar-more { color: var(--accent); font-weight: 600; font-size: 0.9rem; }
+.lists-sheet .lists { list-style: none; padding: 0; margin: 0 0 10px; }
+.lists-sheet .lists li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+.lists-sheet .list-pick { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 4px; background: none; border: 0; text-align: left; color: var(--text); }
+.lists-sheet .list-pick .name { flex: 1; font-weight: 600; }
+.lists-sheet li.current .radio { color: var(--accent); }
+.lists-sheet .rename-list { display: flex; gap: 6px; flex: 1; padding: 6px 0; }
+.lists-sheet .rename-list input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 16px; }
+.lists-sheet .combine { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.lists-sheet .combine h3 { margin: 0 0 4px; font-size: 1rem; }
+.lists-sheet .combine .check { padding: 6px 0; }
+.off-head { display: flex; align-items: baseline; gap: 10px; }
+.off-head .link { padding: 0; font-size: 0.85rem; margin-left: auto; }

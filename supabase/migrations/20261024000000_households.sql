@@ -49,7 +49,7 @@ create table if not exists public.household_members (
 -- Deletes are soft (deleted = true) so other phones hear about them.
 create table if not exists public.docs (
   household_id uuid not null references public.households (id) on delete cascade,
-  kind text not null check (kind in ('item', 'product', 'layout', 'categories')),
+  kind text not null check (kind in ('item', 'product', 'layout', 'categories', 'list')),
   id text not null,
   data jsonb,
   deleted boolean not null default false,
@@ -61,6 +61,12 @@ create table if not exists public.docs (
 );
 
 create index if not exists docs_household_updated on public.docs (household_id, updated_at);
+
+-- Named shopping lists ('list') came later. Older setups only allowed the
+-- first four kinds, so bring the allowed kinds up to date (keeps all data).
+alter table public.docs drop constraint if exists docs_kind_check;
+alter table public.docs add constraint docs_kind_check
+  check (kind in ('item', 'product', 'layout', 'categories', 'list'));
 
 create or replace function public.docs_touch() returns trigger
 language plpgsql as $$

@@ -16,9 +16,12 @@ import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
+import { ListBar, ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
 
 interface Props {
+  /** The household's lists; this view shows the current one. */
+  lists: ListsApi;
   layout: StoreLayout;
   floor: Floor;
   catalog: Catalog;
@@ -361,6 +364,16 @@ export function ShoppingView(props: Props) {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
   }
 
+  /** Takes items off the list, with Undo. */
+  function removeWithUndo(gone: ListItem[]) {
+    if (!gone.length) return;
+    const snapshot = { items, products: catalog.products };
+    const ids = new Set(gone.map((i) => i.id));
+    setItems((prev) => prev.filter((i) => !ids.has(i.id)));
+    setToast({ snapshot, added: [], mode: 'list', note: gone.length === 1 ? `Removed ${gone[0].name} from the list.` : `Removed ${gone.length} items from the list.` });
+  }
+  const [listsOpen, setListsOpen] = useState(false);
+
   function newTrip() {
     setItems((prev) => prev.filter((i) => !i.done));
     setPosition(layout.entrance);
@@ -406,6 +419,14 @@ export function ShoppingView(props: Props) {
 
   return (
     <>
+      <ListBar lists={props.lists} onOpen={() => setListsOpen(true)} />
+      {listsOpen && (
+        <ListsSheet
+          lists={props.lists}
+          onClose={() => setListsOpen(false)}
+          onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+        />
+      )}
       <form
         className="add"
         onSubmit={(e) => {
@@ -615,7 +636,10 @@ export function ShoppingView(props: Props) {
             <h3>Not on the route</h3>
             {unplaced.length > 0 && (
               <>
-                <h4>No location yet</h4>
+                <h4 className="off-head">
+                  No location yet
+                  {unplaced.length > 1 && <button className="link" onClick={() => removeWithUndo(unplaced)}>Remove all</button>}
+                </h4>
                 <p className="muted small">
                   {building
                     ? 'Check it off where you find it and the map builds around you – or drag it onto the map, or pick a place.'
@@ -636,19 +660,23 @@ export function ShoppingView(props: Props) {
                       ))}
                     </select>
                     <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+                    <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
                   </div>
                 ))}
               </>
             )}
             {notSold.length > 0 && (
               <>
-                <h4>Not available at {layout.name}</h4>
+                <h4 className="off-head">
+                  Not available at {layout.name}
+                  {notSold.length > 1 && <button className="link" onClick={() => removeWithUndo(notSold)}>Remove all</button>}
+                </h4>
                 <p className="muted small">Get these somewhere else.</p>
                 {notSold.map((item) => (
                   <div className="row unavailable" key={item.id}>
                     <span className="name">{item.name}</span>
                     <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
-                    <button className="icon" onClick={() => remove(item)} aria-label={`Remove ${item.name}`}>×</button>
+                    <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
                   </div>
                 ))}
               </>
