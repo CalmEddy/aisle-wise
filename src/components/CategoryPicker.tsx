@@ -10,7 +10,7 @@ export function byName<T extends { name: string }>(list: readonly T[]): T[] {
  * Type to search, tap to choose. Shows categories A–Z; typing narrows the list,
  * and Enter picks the first match.
  */
-export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick }: {
+export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick, autoFocus }: {
   /** Chosen category id; undefined for none. */
   value?: string;
   categories: readonly Category[];
@@ -25,6 +25,8 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
   note?: (id: string) => string | undefined;
   /** Empty the box after choosing (for "add" pickers). */
   clearOnPick?: boolean;
+  /** Focus (and open) straight away. */
+  autoFocus?: boolean;
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +64,7 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
         aria-controls={listId}
         aria-label={label}
         autoComplete="off"
+        autoFocus={autoFocus}
         value={shown}
         placeholder={open ? 'Type to search…' : current ? current.name : placeholder ?? noneLabel ?? 'Choose a category'}
         onFocus={() => { setOpen(true); setQuery(''); }}

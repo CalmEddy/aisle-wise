@@ -9,6 +9,7 @@ import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './ShoppingView';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker, byName } from './CategoryPicker';
+import { SwipeRow } from './SwipeRow';
 
 interface Props {
   catalog: Catalog;
@@ -69,6 +70,10 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
   const [recent, setRecent] = useState<string[]>([]);
   const [toast, setToast] = useState<ItemsToast | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
+  // Multi-select: pick several items, then act on them all.
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCategory, setBulkCategory] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -110,16 +115,73 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
 
   /** Changes one item, with Undo. */
   function change(id: string, fn: (p: Product) => Product, text: string) {
+    changeMany([id], fn, text);
+  }
+
+  /** Changes several items at once, with one Undo. */
+  function changeMany(ids: string[], fn: (p: Product) => Product, text: string) {
     const snap = snapshot();
-    setProducts((prev) => prev.map((p) => (p.id === id ? fn(p) : p)));
+    const set = new Set(ids);
+    setProducts((prev) => prev.map((p) => (set.has(p.id) ? fn(p) : p)));
     setToast({ text, snapshot: snap });
   }
 
-  function remove(p: Product) {
+  const nameList = (list: Product[]) => (list.length === 1 ? list[0].name : `${list.length} items`);
+
+  function removeMany(list: Product[]) {
+    if (!list.length) return;
     const snap = snapshot();
-    setProducts((prev) => prev.filter((x) => x.id !== p.id));
+    const set = new Set(list.map((p) => p.id));
+    setProducts((prev) => prev.filter((x) => !set.has(x.id)));
     setOpenKey(undefined);
-    setToast({ text: `Deleted ${p.name}.`, snapshot: snap });
+    setSelected((prev) => new Set([...prev].filter((id) => !set.has(id))));
+    setToast({ text: `Deleted ${nameList(list)}.`, snapshot: snap });
+  }
+  const remove = (p: Product) => removeMany([p]);
+
+  /** Puts items on the shopping list (skipping ones already there), with Undo. */
+  function addManyToList(list: Product[]) {
+    const fresh = list.filter((p) => !onList.has(p.id));
+    if (!fresh.length) {
+      setToast({ text: `${list.length === 1 ? `${list[0].name} is` : 'They’re all'} already on your list.`, snapshot: snapshot() });
+      return;
+    }
+    const snap = snapshot();
+    for (const p of fresh) onAddToList(p);
+    setToast({ text: `Added ${nameList(fresh)} to your list.`, snapshot: snap });
+  }
+
+  /** Marks items (not) sold at the current store. */
+  function setSoldHere(list: Product[], sold: boolean) {
+    changeMany(list.map((p) => p.id), (p) => {
+      const notAt = (p.notAt ?? []).filter((id) => id !== layout.id);
+      return { ...p, notAt: sold ? notAt : [...notAt, layout.id] };
+    }, sold ? `${nameList(list)} sold at ${layout.name}.` : `${nameList(list)} marked not sold at ${layout.name}.`);
+  }
+  const notSoldHere = (p: Product) => !!p.notAt?.includes(layout.id);
+
+  const shown = groups.flatMap((g) => g.products);
+  const chosen = catalog.products.filter((p) => selected.has(p.id));
+  const toggleSelect = (id: string) => setSelected((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
+  /** Selects every item in `list`, or clears them if they're all selected already. */
+  const selectAll = (list: Product[]) => setSelected((prev) => {
+    const all = list.every((p) => prev.has(p.id));
+    const next = new Set(prev);
+    for (const p of list) {
+      if (all) next.delete(p.id);
+      else next.add(p.id);
+    }
+    return next;
+  });
+  function startSelecting(on: boolean) {
+    setSelecting(on);
+    setSelected(new Set());
+    setOpenKey(undefined);
   }
 
   /** Scrolls an element to just below the sticky search bar. */
@@ -171,9 +233,25 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
     const key = keyPrefix + p.id;
     const open = openKey === key;
     return (
-    <li key={key} id={`item-${key}`} className={`item-entry${open ? ' open' : ''}`}>
+    <li key={key} id={`item-${key}`} className={`item-entry${open ? ' open' : ''}${selecting && selected.has(p.id) ? ' chosen' : ''}`}>
+      <SwipeRow
+        disabled={selecting || open}
+        onSwipeRight={onList.has(p.id) ? undefined : () => addManyToList([p])}
+        rightLabel={<>＋ Add to list</>}
+        leftActions={(close) => (
+          <>
+            <button className="swipe-btn sold" onClick={() => { close(); setSoldHere([p], notSoldHere(p)); }}>
+              {notSoldHere(p) ? '✓ Sold here' : '🚫 Not sold here'}
+            </button>
+            <button className="swipe-btn delete" onClick={() => { close(); remove(p); }}>Delete</button>
+          </>
+        )}
+      >
       <div className="row">
-        <button className="product-row" onClick={() => setOpenKey(open ? undefined : key)} aria-expanded={open}>
+        {selecting && (
+          <input type="checkbox" className="select-box" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} aria-label={`Select ${p.name}`} />
+        )}
+        <button className="product-row" onClick={() => (selecting ? toggleSelect(p.id) : setOpenKey(open ? undefined : key))} aria-expanded={selecting ? undefined : open}>
           <span className="name">{keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}{p.name}</span>
           <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>{whereText(p, layout, catalog)}</span>
         </button>
@@ -186,6 +264,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
           {onList.has(p.id) ? '✓' : '+'}
         </button>
       </div>
+      </SwipeRow>
       {open && (
         <ItemEditor
           product={p}
@@ -203,7 +282,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
   };
 
   return (
-    <div className="items-view">
+    <div className={`items-view${selecting ? ' selecting' : ''}`}>
       <div className="items-top" ref={topRef}>
         <form className="add-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           <input
@@ -221,9 +300,12 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
             <input type="checkbox" checked={alsoList} onChange={(e) => setAlsoList(e.target.checked)} />
             <span>Also add to my list</span>
           </label>
-          <span className="muted small">
-            {q.includes(',') ? 'Enter adds each name.' : q ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`) : `Places shown for ${layout.name}.`}
+          <span className="muted small hint">
+            {q.includes(',') ? 'Enter adds each name.' : q ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`) : selecting ? 'Tap items to select.' : 'Swipe an item for shortcuts.'}
           </span>
+          <button className={`chip select-toggle${selecting ? ' active' : ''}`} aria-pressed={selecting} onClick={() => startSelecting(!selecting)}>
+            {selecting ? 'Done' : '☑ Select'}
+          </button>
         </div>
         <div className="chips filters" role="group" aria-label="Show">
           {FILTERS.map((f) => (
@@ -282,6 +364,11 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
                 <span style={{ flex: 1 }} />
                 {!allOpen && <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>}
               </button>
+              {selecting && (
+                <button className="link group-select" onClick={() => selectAll(g.products)}>
+                  {g.products.every((p) => selected.has(p.id)) ? 'None' : 'All'}
+                </button>
+              )}
             </h3>
             {open && <ul className="items">{g.products.map((p) => row(p))}</ul>}
           </section>
@@ -296,6 +383,52 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
               <button className="btn primary" onClick={submit}>Add “{q}”</button>
             </>
           ) : <p>Nothing here{filter !== 'all' ? ' – all sorted!' : ' yet.'}</p>}
+        </div>
+      )}
+
+      {selecting && (
+        <div className="bulk-bar" role="toolbar" aria-label="Selected items">
+          <div className="bulk-head">
+            <b>{chosen.length} selected</b>
+            <button className="link" onClick={() => selectAll(shown)}>
+              {shown.length && shown.every((p) => selected.has(p.id)) ? 'Select none' : `Select all ${shown.length}`}
+            </button>
+            <span style={{ flex: 1 }} />
+            <button className="icon" onClick={() => startSelecting(false)} aria-label="Stop selecting">×</button>
+          </div>
+          <div className="bulk-actions">
+            <button className="btn" disabled={!chosen.length} onClick={() => setBulkCategory(true)}>Category…</button>
+            <button className="btn" disabled={!chosen.length} onClick={() => addManyToList(chosen)}>＋ List</button>
+            <button className="btn" disabled={!chosen.length} onClick={() => setSoldHere(chosen, chosen.every(notSoldHere))}>
+              {chosen.length && chosen.every(notSoldHere) ? 'Sold here' : 'Not sold here'}
+            </button>
+            <button className="btn danger" disabled={!chosen.length} onClick={() => removeMany(chosen)}>Delete</button>
+          </div>
+        </div>
+      )}
+
+      {bulkCategory && (
+        <div className="sheet-backdrop" onClick={() => setBulkCategory(false)}>
+          <div className="sheet" role="dialog" aria-label="Category for selected items" onClick={(e) => e.stopPropagation()}>
+            <h2>Category for {nameList(chosen)}</h2>
+            <CategoryPicker
+              categories={catalog.categories}
+              onPick={(categoryId) => {
+                changeMany(chosen.map((p) => p.id), (p) => ({ ...p, categoryId }),
+                  `${nameList(chosen)} → ${categoryId ? catalog.categoryById.get(categoryId)?.name : 'no category'}.`);
+                setBulkCategory(false);
+              }}
+              iconOf={(id) => lookOf(id)?.icon}
+              noneLabel="No category"
+              label="Category"
+              placeholder="Type to search categories"
+              autoFocus
+            />
+            <div className="sheet-actions">
+              <span style={{ flex: 1 }} />
+              <button className="btn" onClick={() => setBulkCategory(false)}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 

@@ -47,3 +47,24 @@ export function itemMatches(p: Product, filter: ItemFilter, layout: StoreLayout,
     case 'notsold': return !!p.notAt?.includes(layout.id);
   }
 }
+
+/** How far (px) a row must be swiped before letting go triggers its action. */
+export const SWIPE_TRIGGER = 72;
+/** How wide the buttons revealed by a left swipe are (px). */
+export const SWIPE_REVEAL = 168;
+
+/**
+ * Whether a finger movement is a sideways swipe (decided once it has moved
+ * 10px): only if it went more sideways than up/down, so scrolling still works.
+ */
+export function swipeDirection(dx: number, dy: number): 'swipe' | 'scroll' | 'undecided' {
+  if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return 'undecided';
+  return Math.abs(dx) > Math.abs(dy) * 1.2 ? 'swipe' : 'scroll';
+}
+
+/** What letting go of a swipe does: right → add to list; left → show the buttons; short → nothing. */
+export function swipeRelease(offset: number): 'right' | 'reveal' | 'none' {
+  if (offset >= SWIPE_TRIGGER) return 'right';
+  if (offset <= -SWIPE_TRIGGER / 2) return 'reveal';
+  return 'none';
+}

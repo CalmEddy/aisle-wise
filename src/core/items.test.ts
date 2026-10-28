@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
-import { itemMatches, quickAddItems } from './items';
+import { itemMatches, quickAddItems, swipeDirection, swipeRelease } from './items';
 import type { Category, Product, StoreLayout } from './types';
 
 const cats: Category[] = [{ id: 'dairy', name: 'Dairy' }, { id: 'bakery', name: 'Bakery' }];
@@ -28,5 +28,21 @@ describe('quick add on the Items tab', () => {
     expect(ids('nocat')).toEqual(['odd']);
     expect(ids('notsold')).toEqual(['bread']);
     expect(ids('list', new Set(['bread']))).toEqual(['bread']);
+  });
+});
+
+describe('swipes', () => {
+  it('tells swipes from scrolling', () => {
+    expect(swipeDirection(4, 3)).toBe('undecided');
+    expect(swipeDirection(20, 4)).toBe('swipe');
+    expect(swipeDirection(-20, 6)).toBe('swipe');
+    expect(swipeDirection(8, 30)).toBe('scroll');
+    expect(swipeDirection(15, 15)).toBe('scroll');
+  });
+  it('decides what letting go does', () => {
+    expect(swipeRelease(90)).toBe('right');
+    expect(swipeRelease(30)).toBe('none');
+    expect(swipeRelease(-20)).toBe('none');
+    expect(swipeRelease(-50)).toBe('reveal');
   });
 });
