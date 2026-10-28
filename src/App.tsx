@@ -9,11 +9,13 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate } from './core/build';
+import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
+import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
+import type { Rect } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
 import { clampPlace } from './core/geometry';
@@ -52,6 +54,7 @@ export type BuildOutcome =
   | { kind: 'built'; action: BuildAction; placeId: string; label: string; itemName: string; snapshot: Snapshot; /** A new shelf copied this neighbour. */ matched?: string; /** Its back-to-back partner (double shelves). */ pairId?: string }
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string; snapshot: Snapshot }
   | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[]; snapshot: Snapshot }
+  | { kind: 'chooseSide'; productId: string; itemName: string; at: Point; options: SideOption[]; snapshot: Snapshot }
   | { kind: 'blocked'; itemName: string; snapshot: Snapshot };
 
 export default function App() {
@@ -242,14 +245,14 @@ export default function App() {
    */
   function pickUpHere(name: string, itemId?: string): BuildOutcome {
     const snapshot: Snapshot = { items, products, layouts };
-    const r = pickUp({ items, products, layout, catalog }, name, itemId, position, display.buildArea ? 'area' : 'shelf', !!display.buildDouble);
+    const r = pickUp({ items, products, layout, catalog }, name, itemId, position, display.buildArea ? 'area' : 'shelf', !!display.buildDouble, brush.width);
     if (r.layout !== layout) replaceLayout(r.layout);
     setProducts(() => r.products);
     setItems(() => r.items);
     const o = r.outcome;
     if (o.kind === 'conflict') return { kind: 'conflict', productId: o.productId, itemName: o.itemName, savedKey: o.savedKey, snapshot };
     if (o.kind === 'blocked') return { kind: 'blocked', itemName: o.itemName, snapshot };
-    if (o.kind === 'choose') return { ...o, snapshot };
+    if (o.kind === 'choose' || o.kind === 'chooseSide') return { ...o, snapshot };
     return { kind: 'built', action: o.action, placeId: o.placeId, label: o.label, itemName: o.itemName, snapshot, matched: o.matched, pairId: o.pairId };
   }
 
@@ -289,6 +292,33 @@ export default function App() {
     }
     replaceLayout(next);
     return { placeIds, snapshot };
+  }
+
+  // ---- Aisle brush ----
+  const brush: Brush = { ...DEFAULT_BRUSH, ...display.brush };
+
+  /**
+   * One brush step: paints the sides along the next squares in `dir` and
+   * moves you there. Returns what Back up restores (the store and saved spots).
+   */
+  function brushStep(dir: Direction, avoid: Rect[]): { snapshot: Snapshot; from: Point; painted: number; blocked: number; lane: Rect; shift: Point } {
+    const snapshot: Snapshot = { items, products, layouts };
+    const r = paintStep(layout, position, dir, brush, avoid);
+    replaceLayout(r.layout);
+    setProducts((prev) => prev.map((p) => {
+      const k = p.locations?.[layout.id];
+      const nk = k ? r.rekey(k) : k;
+      return nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk! } } : p;
+    }));
+    setPos({ layoutId: layout.id, point: r.position });
+    return { snapshot, from: position, painted: r.painted, blocked: r.blocked, lane: r.lane, shift: r.shift };
+  }
+
+  /** Back up one brush step: the store and saved spots as they were, and you where you were. Items you ticked stay ticked. */
+  function brushBack(step: { snapshot: Snapshot; from: Point }, original: Point) {
+    if (step.snapshot.layouts) setLayouts(() => step.snapshot.layouts!);
+    setProducts(() => step.snapshot.products);
+    setPos({ layoutId: layout.id, point: original });
   }
 
   /** Turns a shelf the other way round where the shopper stands. Returns what Undo restores, or nothing if it can't turn. */
@@ -601,7 +631,7 @@ export default function App() {
           quickAdd={quickAdd}
           build={{
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
-            startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt,
+            startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack,
             store: { layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id },
           }}
           setItemCategory={setItemCategory}

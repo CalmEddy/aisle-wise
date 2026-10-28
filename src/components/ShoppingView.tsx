@@ -7,10 +7,11 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { ListItem, Place, Point, Product, Shelf, Stop, StoreLayout } from '../core/types';
+import type { ListItem, Place, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
-import { BuildToolbar, StoreSettings, type BuildTool, type StoreApi } from './BuildTools';
+import { BrushPanel, BuildToolbar, StoreSettings, type BuildTool, type StoreApi } from './BuildTools';
+import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
 import { PlacePanel, clamp, handlePoint } from './PlacePanel';
 import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
@@ -66,6 +67,9 @@ export interface BuildApi {
   addPlaceAt: (kind: 'shelf-v' | 'shelf-h' | 'area', at: Point) => { placeId: string; label: string; snapshot: Snapshot };
   /** Moves the entrance or checkout to a square. */
   markAt: (which: 'entrance' | 'checkout', at: Point) => void;
+  /** Aisle brush: paint and step; back up one step. */
+  brushStep: (dir: Direction, avoid: Rect[]) => { snapshot: Snapshot; from: Point; painted: number; blocked: number; lane: Rect; shift: Point };
+  brushBack: (step: { snapshot: Snapshot; from: Point }, original: Point) => void;
   store: StoreApi;
 }
 
@@ -117,9 +121,38 @@ export function ShoppingView(props: Props) {
   const [tool, setToolState] = useState<BuildTool>('walk');
   const block = useShelfBlock(layout, double, lane);
   const blocking = building && tool === 'block';
+  // Aisle brush: the way you're facing, and steps you can back up.
+  const brush: Brush = { ...DEFAULT_BRUSH, ...props.display.brush };
+  const setBrush = (b: Brush) => props.setDisplay((d) => ({ ...d, brush: b }));
+  const [brushDir, setBrushDir] = useState<Direction>('up');
+  // Each step: what Back up restores, where you were, its walkway, and how far the store shifted (growing left/up).
+  const [brushSteps, setBrushSteps] = useState<{ snapshot: Snapshot; from: Point; lane: Rect; shift: Point }[]>([]);
+  const [brushResult, setBrushResult] = useState<string>();
+  // Once an item is placed, backing up would undo its saved place too: start the back-up trail afresh.
+  useEffect(() => {
+    if (note && note.kind !== 'message') setBrushSteps([]);
+  }, [note]);
+  function brushStepTo(d: Direction) {
+    setBrushDir(d);
+    const before = position;
+    const r = props.build.brushStep(d, brushSteps.slice(-6).map((s) => s.lane));
+    const shifted = (rect: Rect): Rect => ({ ...rect, x: rect.x + r.shift.x, y: rect.y + r.shift.y });
+    setBrushSteps((prev) => [...prev.slice(-30).map((s) => ({ ...s, lane: shifted(s.lane) })), { snapshot: r.snapshot, from: before, lane: r.lane, shift: r.shift }]);
+    setBrushResult(r.blocked ? `Painted ${r.painted} squares; skipped ${r.blocked} where something’s already there.` : undefined);
+  }
+  function brushBackUp() {
+    const last = brushSteps[brushSteps.length - 1];
+    if (!last) return;
+    props.build.brushBack(last, last.from);
+    // Undo that step's shift on the earlier walkways.
+    setBrushSteps((prev) => prev.slice(0, -1).map((s) => ({ ...s, lane: { ...s.lane, x: s.lane.x - last.shift.x, y: s.lane.y - last.shift.y } })));
+    setBrushResult(undefined);
+  }
+
   function setTool(t: BuildTool) {
     setToolState(t);
     block.reset();
+    setBrushSteps([]);
     if (t === 'block') {
       setEditingId(undefined);
       setNote(null);
@@ -216,7 +249,14 @@ export function ShoppingView(props: Props) {
   }
 
   const ghosts: MapGhost[] = [];
-  if (blocking) {
+  if (building && tool === 'brush') {
+    // The next step's walkway and what it will paint.
+    const a = brushArea(position, brushDir, brush.width);
+    ghosts.push({ rect: a.orientation === 'vertical'
+      ? { x: a.lo, y: a.start, w: a.hi - a.lo + 1, h: a.end - a.start + 1 }
+      : { x: a.start, y: a.lo, w: a.end - a.start + 1, h: a.hi - a.lo + 1 }, kind: 'lane' });
+    for (const seg of brushSegments(position, brushDir, brush)) ghosts.push({ rect: segmentRect(seg), kind: seg.kind === 'wall' ? 'wall' : 'preview' });
+  } else if (blocking) {
     for (const sh of block.shelves) ghosts.push({ rect: footprint(sh), kind: 'block' });
   } else if (building) {
     const added = buildPreview && buildPreview.action !== 'onShelf' && buildPreview.action !== 'inArea'
@@ -547,7 +587,19 @@ export function ShoppingView(props: Props) {
               onCancel={() => setTool('walk')}
             />
           )}
-          {building && !blocking && (
+          {building && tool === 'brush' && (
+            <BrushPanel
+              brush={brush}
+              setBrush={setBrush}
+              dir={brushDir}
+              onStep={brushStepTo}
+              onNudge={(d) => { setBrushDir(d); props.build.stepTo(d); }}
+              canBack={brushSteps.length > 0}
+              onBack={brushBackUp}
+              lastResult={brushResult}
+            />
+          )}
+          {building && !blocking && tool !== 'brush' && (
             <BuildPanel
               layout={layout}
               position={position}
@@ -1207,6 +1259,28 @@ function BuildBanner({ note, skipped, onFill, layout, catalog, build, onUndo, on
           ))}
           <button className="btn" onClick={() => choose('shelf')}>+ New shelf</button>
           <button className="btn" onClick={() => choose('area')}>+ New area</button>
+        </div>
+        <div className="toast-actions">
+          <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn" onClick={onClose}>Decide later</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (note.kind === 'chooseSide') {
+    const arrow = { left: '←', right: '→', up: '↑', down: '↓' } as const;
+    const choose = (shelfId: string) => onNote(build.placeChosen(note.productId, note.at, { onShelf: shelfId }, note.snapshot));
+    return (
+      <div className="toast question" role="alertdialog" aria-label={`Which side is ${note.itemName} on?`}>
+        <span className="toast-text"><b>{note.itemName}</b> is in your cart. Which side was it on?</span>
+        <div className="side-choices">
+          {note.options.map((o) => (
+            <button key={o.shelfId} className="btn primary big-side" onClick={() => choose(o.shelfId)}>
+              {o.side === 'left' || o.side === 'up' ? <>{arrow[o.side]} {o.label || 'This shelf'}</> : <>{o.label || 'This shelf'} {arrow[o.side]}</>}
+            </button>
+          ))}
         </div>
         <div className="toast-actions">
           <button className="toast-btn subtle" onClick={() => onUndo(note.snapshot)}>Undo</button>

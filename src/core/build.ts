@@ -270,11 +270,68 @@ function extendTo(l: StoreLayout, c: ExtendCandidate, p: Point, cat?: string): B
   };
 }
 
-/** What the shopper chose when picking up on open floor. */
-export type BuildChoice = { extend: string } | 'shelf' | 'area';
+/** What the shopper chose when picking up on open floor, or between two shelves. */
+export type BuildChoice = { extend: string } | { onShelf: string } | 'shelf' | 'area';
+
+/** A shelf on one side of a walkway, for "which side is it on?". */
+export interface SideOption {
+  shelfId: string;
+  label: string;
+  /** Map direction of the shelf from you. */
+  side: 'left' | 'right' | 'up' | 'down';
+}
+
+/**
+ * The nearest shelf on each side of you across a walkway up to `reach`
+ * squares wide, if it's stocked from your side and nothing stands between.
+ * Only returned when there's a shelf on both sides (that's when it's worth
+ * asking which one).
+ */
+export function shelvesAcross(l: StoreLayout, p: Point, reach: number): SideOption[] {
+  for (const orientation of ['vertical', 'horizontal'] as const) {
+    const v = orientation === 'vertical';
+    const near = new Map<number, { shelf: Shelf; d: number }>();
+    for (const pl of l.places) {
+      if (pl.kind !== 'shelf' || pl.orientation !== orientation) continue;
+      const along = v ? p.y : p.x;
+      const start = v ? pl.y : pl.x;
+      if (along < start || along >= start + pl.length) continue;
+      const delta = (v ? pl.x : pl.y) - (v ? p.x : p.y);
+      const side = Math.sign(delta) as -1 | 1;
+      const d = Math.abs(delta);
+      if (!d || d > reach) continue;
+      if (pl.back === -side) continue; // its back faces you
+      // Nothing in between.
+      let clear = true;
+      for (let k = 1; k < d && clear; k++) {
+        const q = v ? { x: p.x + side * k, y: p.y } : { x: p.x, y: p.y + side * k };
+        clear = !l.places.some((o) => o.kind === 'shelf' && contains(footprint(o), q));
+      }
+      if (!clear) continue;
+      const prev = near.get(side);
+      if (!prev || d < prev.d) near.set(side, { shelf: pl, d });
+    }
+    const a = near.get(-1);
+    const b = near.get(1);
+    if (a && b) {
+      return [
+        { shelfId: a.shelf.id, label: a.shelf.label, side: v ? 'left' : 'up' },
+        { shelfId: b.shelf.id, label: b.shelf.label, side: v ? 'right' : 'down' },
+      ];
+    }
+  }
+  return [];
+}
 
 /** The plan for a chosen way of placing an item picked up at `p`. */
 export function planChoice(l: StoreLayout, p: Point, category: Category | undefined, choice: BuildChoice, double = false): BuildPlan {
+  if (typeof choice === 'object' && 'onShelf' in choice) {
+    const shelf = l.places.find((pl): pl is Shelf => pl.id === choice.onShelf && pl.kind === 'shelf');
+    if (!shelf) return { action: 'blocked', layout: l, label: '' };
+    const u = alongShelf(shelf, p);
+    const updated = withCategory(shelf, category?.id, u);
+    return { action: 'onShelf', layout: replacePlace(l, updated), spotKey: exactKey(shelf.id, { u, v: 0.5 }), placeId: shelf.id, label: shelf.label };
+  }
   if (typeof choice === 'object') {
     const c = extendCandidates(l, p).find((x) => x.shelfId === choice.extend);
     return c ? extendTo(l, c, p, category?.id) : { action: 'blocked', layout: l, label: '' };
@@ -471,6 +528,8 @@ export type PickUpOutcome =
   | { kind: 'conflict'; productId: string; itemName: string; savedKey: string }
   /** Picked up on open floor with shelves that could be extended: ask which (or new shelf/area). */
   | { kind: 'choose'; productId: string; itemName: string; at: Point; options: ExtendCandidate[] }
+  /** Picked up in a walkway with shelves on both sides: ask which side. */
+  | { kind: 'chooseSide'; productId: string; itemName: string; at: Point; options: SideOption[] }
   | { kind: 'blocked'; itemName: string; productId: string };
 
 export interface PickUpResult {
@@ -505,6 +564,8 @@ function rekeyAll(products: Product[], layoutId: string, rekey?: (k: string) => 
 export function pickUp(
   state: { items: ListItem[]; products: Product[]; layout: StoreLayout; catalog: Catalog },
   name: string, itemId: string | undefined, at: Point, target: BuildTarget = 'shelf', double = false,
+  /** Walkway width: with shelves on both sides within this, ask which side. 0 to never ask. */
+  reach = 0,
 ): PickUpResult {
   const { items, catalog, layout } = state;
   let products = state.products;
@@ -525,10 +586,12 @@ export function pickUp(
   const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
   const conflict = !!saved && saved.placeId !== plan.placeId;
   // On open floor with shelves lined up further away: let the shopper choose.
-  const options = !conflict && (plan.action === 'create' || plan.action === 'createArea') ? extendCandidates(layout, at) : [];
+  // Standing between two shelves (and the item has no saved place here): ask which side.
+  const sides = !conflict && !saved && reach > 0 && plan.action !== 'inArea' ? shelvesAcross(layout, at, reach) : [];
+  const options = !conflict && !sides.length && (plan.action === 'create' || plan.action === 'createArea') ? extendCandidates(layout, at) : [];
 
   let next = layout;
-  if (!conflict && !options.length && plan.action !== 'blocked') {
+  if (!conflict && !options.length && !sides.length && plan.action !== 'blocked') {
     next = plan.layout;
     products = rekeyAll(products, layout.id, plan.rekey).map((p) => (p.id === pid
       ? { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
@@ -542,6 +605,8 @@ export function pickUp(
 
   const outcome: PickUpOutcome = conflict
     ? { kind: 'conflict', productId: pid, itemName, savedKey: savedKey! }
+    : sides.length
+      ? { kind: 'chooseSide', productId: pid, itemName, at, options: sides }
     : options.length
       ? { kind: 'choose', productId: pid, itemName, at, options }
     : plan.action === 'blocked'

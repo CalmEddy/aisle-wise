@@ -15,6 +15,8 @@ export class Floor {
   private blocked: Uint8Array;
   /** For shelf squares, which way the shelf runs: 1 vertical, 2 horizontal. */
   private dir: Uint8Array;
+  /** For wall-shelf squares, the closed side: -1 or 1 (0: open both sides). */
+  private back: Int8Array;
   private fields = new Map<number, Int32Array>();
 
   constructor(layout: StoreLayout) {
@@ -22,14 +24,17 @@ export class Floor {
     this.height = layout.height;
     this.blocked = new Uint8Array(this.width * this.height);
     this.dir = new Uint8Array(this.width * this.height);
+    this.back = new Int8Array(this.width * this.height);
     for (const place of layout.places) {
       const d = place.kind === 'shelf' ? (place.orientation === 'vertical' ? 1 : 2) : 0;
+      const b = place.kind === 'shelf' ? place.back ?? 0 : 0;
       for (const s of blocks(place)) {
         for (let y = s.y; y < s.y + s.h; y++) {
           for (let x = s.x; x < s.x + s.w; x++) {
             if (!this.inside({ x, y })) continue;
             this.blocked[y * this.width + x] = 1;
             this.dir[y * this.width + x] = d;
+            this.back[y * this.width + x] = b;
           }
         }
       }
@@ -77,10 +82,7 @@ export class Floor {
     const d = this.inside(c) ? this.dir[c.y * this.width + c.x] : 0;
     if (d) {
       const vertical = d === 1;
-      const sides = (vertical
-        ? [{ x: c.x - 1, y: c.y }, { x: c.x + 1, y: c.y }]
-        : [{ x: c.x, y: c.y - 1 }, { x: c.x, y: c.y + 1 }]
-      ).filter((q) => this.walkable(q));
+      const sides = this.openSides(c).filter((q) => this.walkable(q));
       if (sides.length) return sides.map((at) => ({ at, extra: 0 }));
       const ends: { at: Point; extra: number }[] = [];
       for (const step of [-1, 1]) {
@@ -101,12 +103,20 @@ export class Floor {
     return (beside.length ? beside : [this.snap(c)]).map((at) => ({ at, extra: 0 }));
   }
 
-  /** A shelf square with shelves (or walls) on both sides: no way to reach it from the side. */
+  /** The squares beside a shelf square that it's stocked from: both sides, or just the front of a wall shelf. */
+  private openSides(p: Point): Point[] {
+    const i = p.y * this.width + p.x;
+    const vertical = this.dir[i] === 1;
+    const back = this.back[i];
+    return ([-1, 1] as const)
+      .filter((side) => side !== back)
+      .map((side) => (vertical ? { x: p.x + side, y: p.y } : { x: p.x, y: p.y + side }));
+  }
+
+  /** A shelf square with no open side to stand at (shelves, walls or its own back in the way). */
   boxedIn(p: Point): boolean {
     if (!this.inside(p) || !this.dir[p.y * this.width + p.x]) return false;
-    const vertical = this.dir[p.y * this.width + p.x] === 1;
-    const sides = vertical ? [{ x: p.x - 1, y: p.y }, { x: p.x + 1, y: p.y }] : [{ x: p.x, y: p.y - 1 }, { x: p.x, y: p.y + 1 }];
-    return !sides.some((q) => this.walkable(q));
+    return !this.openSides(p).some((q) => this.walkable(q));
   }
 
   /** Walking distance in grid squares. Shelf spots are reached from whichever open side is shorter. */

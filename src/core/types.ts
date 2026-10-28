@@ -30,6 +30,12 @@ export interface Shelf extends PlaceBase {
   orientation: Orientation;
   /** Length in grid squares. */
   length: number;
+  /**
+   * A wall shelf: stocked from one side only. This is the closed side (its
+   * back): -1 = left (vertical) or top (horizontal), 1 = right or bottom.
+   * Missing: open on both sides.
+   */
+  back?: -1 | 1;
 }
 
 /** An open, walkable rectangle such as Produce or the Deli counter. */

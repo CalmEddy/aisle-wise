@@ -15,6 +15,8 @@ export interface Display {
   buildDouble?: boolean;
   /** Walkway width (squares) between shelves in a shelf block. */
   blockLane?: number;
+  /** The aisle brush's sides and walkway width. */
+  brush?: { left: 'shelf' | 'wall' | 'gap'; right: 'shelf' | 'wall' | 'gap'; width: number };
 }
 
 export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listColors: true, listIcons: true, buildMode: false };

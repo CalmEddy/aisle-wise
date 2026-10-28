@@ -49,6 +49,22 @@ export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categorie
           <div className="field-row">
             <NumberField label="Length" value={place.length} min={2} onChange={(length) => onChange({ length })} />
           </div>
+          <div className="field">
+            <span>Stocked from</span>
+            <div className="segmented" role="group" aria-label="Stocked from">
+              {([undefined, 1, -1] as const).map((back) => {
+                const v = place.orientation === 'vertical';
+                const label = back === undefined ? 'Both sides'
+                  : back === 1 ? (v ? '◧ Left only (wall on right)' : '⬒ Top only (wall below)')
+                    : (v ? '◨ Right only (wall on left)' : '⬓ Bottom only (wall above)');
+                return (
+                  <button key={String(back)} className={place.back === back ? 'active' : ''} onClick={() => onChange({ back } as Partial<Shelf>)}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </>
       ) : (
         <div className="field-row">

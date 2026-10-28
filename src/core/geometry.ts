@@ -180,7 +180,15 @@ export function shelfBacks(layout: StoreLayout, shelf: Shelf): Segment[] {
   }
   const vertical = shelf.orientation === 'vertical';
   const out: Segment[] = [];
+  // A wall shelf's closed side is all back.
+  if (shelf.back) {
+    const edge = shelf.back < 0 ? 0 : 1;
+    out.push(vertical
+      ? { x1: shelf.x + edge, y1: shelf.y, x2: shelf.x + edge, y2: shelf.y + shelf.length }
+      : { x1: shelf.x, y1: shelf.y + edge, x2: shelf.x + shelf.length, y2: shelf.y + edge });
+  }
   for (const side of [-1, 1]) {
+    if (side === shelf.back) continue;
     let runStart: number | undefined;
     for (let i = 0; i <= shelf.length; i++) {
       const sq = vertical ? { x: shelf.x, y: shelf.y + i } : { x: shelf.x + i, y: shelf.y };

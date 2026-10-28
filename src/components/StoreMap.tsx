@@ -10,7 +10,7 @@ import type { Place, Point, Rect, StoreLayout } from '../core/types';
  */
 export interface MapGhost {
   rect: Rect;
-  kind: 'preview' | 'next' | 'fill' | 'block';
+  kind: 'preview' | 'next' | 'fill' | 'block' | 'wall' | 'lane';
   onTap?: () => void;
   label?: string;
 }
@@ -177,7 +177,7 @@ function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointe
   const size = isShelf
     ? Math.min(0.78, (run / chars) * 1.6)
     : Math.min(1.5, Math.max(0.8, thick * 0.4), (run / chars) * 1.7);
-  const cls = ['place', place.kind, highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
+  const cls = ['place', place.kind, isShelf && place.back && 'wall', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
   const pad = 0.6; // easier to tap a thin shelf
 

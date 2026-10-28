@@ -580,3 +580,25 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .row.off-row select { order: 5; flex: 1 0 100%; max-width: none; margin: 0 0 6px 30px; }
 .row.unavailable { flex-wrap: wrap; row-gap: 4px; }
 .row.unavailable .name { flex: 1 1 8em; min-width: 0; }
+
+/* Wall shelves (stocked from one side) */
+.place.shelf.wall .place-bg { fill: var(--shelf-back); }
+.place.shelf.wall .shelf-label { fill: var(--surface); }
+.place.shelf.wall .shelf-back { stroke-width: 0.34; }
+
+/* Aisle brush */
+.map-ghost.wall { --ghost: var(--you); --ghost-fill: color-mix(in srgb, var(--you) 45%, transparent); }
+.map-ghost.lane rect:not(.hit) { fill: color-mix(in srgb, var(--you) 6%, transparent); stroke: var(--you); stroke-dasharray: 0.25 0.35; stroke-width: 0.08; }
+.brush-panel .brush-presets { padding-top: 0; }
+.brush-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 6px 0; }
+.brush-side { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brush-side .segmented { margin: 0; }
+.brush-side .segmented button { padding: 8px 2px; font-size: 0.8rem; }
+.brush-row { margin-top: 8px; }
+.btn.arrow.facing { border-color: var(--you); box-shadow: 0 0 0 2px color-mix(in srgb, var(--you) 35%, transparent); }
+.brush-tools { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.nudges { display: flex; gap: 4px; }
+.btn.nudge { padding: 4px 10px; }
+.brush-result { margin: 6px 0 0; }
+.side-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.side-choices .big-side { padding: 14px 8px; font-size: 1rem; }
