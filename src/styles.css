@@ -753,3 +753,15 @@ button.store-pick { border: 0; background: none; padding: 0; color: var(--muted)
 .store-row-btn .name { flex: 1; font-weight: 600; }
 .store-row-btn.current .radio { color: var(--accent); }
 .new-store { margin-top: 4px; }
+
+/* Quick "Where was it?" bar: at the bottom, doesn't block the list */
+.where-bar {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 10px); z-index: 36;
+  width: calc(100% - 20px); max-width: 540px; padding: 10px 12px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--accent); box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
+}
+.where-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.where-bar-head .link { padding: 0 4px; }
+.where-bar-choices { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.where-bar-choices .btn { flex: none; padding: 9px 12px; white-space: nowrap; }
+main { padding-bottom: 110px; }

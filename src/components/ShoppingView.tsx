@@ -21,6 +21,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { CategoryPicker } from './CategoryPicker';
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
+import { WhereBar } from './WhereBar';
 import { SwipeRow } from './SwipeRow';
 import { DEPTS, aislesUsed, describeClue, guessDept } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
@@ -449,11 +450,17 @@ export function ShoppingView(props: Props) {
     const loc = locate(item);
     if (!item.done && loc.kind === 'spot') setPosition(loc.spot.point);
     // Nothing saved about where it is in this store yet: ask.
-    if (!item.done && props.where.ask && isUnknownHere(item)) setWhereFor(item);
+    if (!item.done && props.where.ask && isUnknownHere(item)) {
+      // Not answered the last one? It waits for later; this one takes the bar.
+      if (whereBarFor && whereBarFor.id !== item.id) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
+      setWhereBarFor(item);
+    }
   }
 
   // ---- "Where was it?" ----
   const [whereFor, setWhereFor] = useState<ListItem | null>(null);
+  /** The item the quick "Where was it?" bar is asking about (at check-off). */
+  const [whereBarFor, setWhereBarFor] = useState<ListItem | null>(null);
   // Items to ask about later (per store), and the last answer (for "Same as last").
   const [askLater, setAskLater] = usePersistentState<Record<string, string[]>>('aw.askLater', {});
   const [lastClue, setLastClue] = useState<Clue>();
@@ -476,6 +483,7 @@ export function ShoppingView(props: Props) {
   }
   const [reviewing, setReviewing] = useState(false);
   function saveWhere(item: ListItem, clue: Clue) {
+    if (whereBarFor?.id === item.id) setWhereBarFor(null);
     const snapshot = props.where.setClue(item, clue);
     setLastClue(clue);
     setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
@@ -590,6 +598,7 @@ export function ShoppingView(props: Props) {
       )}
       {(items.length > 0 || building) && (
         <>
+          {(building || layout.places.length > 0) && (
           <StoreMap
             layout={layout}
             you={position}
@@ -630,6 +639,7 @@ export function ShoppingView(props: Props) {
               );
             })()}
           </StoreMap>
+          )}
           {building && <BuildToolbar tool={tool} setTool={setTool} />}
           <DisplayToggles
             display={props.display}
@@ -918,7 +928,19 @@ export function ShoppingView(props: Props) {
         />
       )}
 
-      {toast && !drag && !note && (
+      {whereBarFor && !whereFor && !drag && !note && (
+        <WhereBar
+          key={whereBarFor.id}
+          itemName={whereBarFor.name}
+          categoryId={productFor(whereBarFor, catalog)?.categoryId}
+          recentAisles={aislesUsed(catalog.products, layout.id)}
+          lastClue={lastClue}
+          onSave={(clue) => saveWhere(whereBarFor, clue)}
+          onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
+          onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
+        />
+      )}
+      {toast && !drag && !note && !whereBarFor && (
         <ToastBar
           toast={toast}
           layout={layout}
