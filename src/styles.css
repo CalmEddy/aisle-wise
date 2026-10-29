@@ -796,3 +796,9 @@ main { padding-bottom: 110px; }
 .buy-again h3 { margin: 0.25rem 0 0.35rem; font-weight: 600; }
 .buy-again .chips { margin-bottom: 0.5rem; flex-wrap: wrap; overflow: visible; }
 .chip.again { border-style: dashed; }
+
+/* ---- Trip done ---- */
+.trip-done-card { display: flex; flex-direction: column; gap: 0.5rem; border: 2px solid var(--accent); }
+.trip-done-card h3 { margin: 0; color: var(--accent); }
+.trip-done-card p { margin: 0; }
+.trip-done-card .layout-question { margin: 0; max-width: none; }

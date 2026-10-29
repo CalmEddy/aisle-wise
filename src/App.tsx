@@ -385,6 +385,14 @@ export default function App() {
   const [trips, setTrips] = usePersistentState<Trip[]>('aw.trips', []);
 
   // ---- Learning how the store is arranged from the trips ----
+  /** This store's trip in progress (first and last check-off), for the trip-done summary. */
+  const currentTrip = useMemo(() => {
+    const mine = trips.filter((t) => t.layoutId === layout.id);
+    const t = mine[mine.length - 1];
+    if (!t?.picks.length) return undefined;
+    const last = t.picks[t.picks.length - 1].at;
+    return Date.now() - last > TRIP_GAP ? undefined : { first: t.picks[0].at, last };
+  }, [trips, layout.id]);
   /** Things bought before, for "Buy again" in the add window. */
   const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
@@ -857,7 +865,7 @@ export default function App() {
             },
           }}
           setItemCategory={setItemCategory}
-          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout }}
+          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

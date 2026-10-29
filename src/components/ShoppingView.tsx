@@ -65,6 +65,8 @@ interface Props {
     /** A question about how the store is laid out, when the trips can't tell. */
     question?: LayoutQuestion;
     answer: (q: LayoutQuestion, option: number | undefined) => void;
+    /** The trip in progress here: first and last check-off (ms). */
+    trip?: { first: number; last: number };
   };
   position: Point;
   setPosition: (p: Point) => void;
@@ -436,6 +438,9 @@ export function ShoppingView(props: Props) {
   }, [props.usuals, catalog]);
 
   const done = items.filter((i) => i.done);
+  // Everything's in the cart (apart from things this store doesn't sell).
+  const tripDone = done.length > 0 && items.every((i) => i.done || notSold.includes(i));
+  const tripMinutes = props.where.trip ? Math.round((props.where.trip.last - props.where.trip.first) / 60000) : undefined;
   const here = placeAt(layout, position);
   // Where the shopper is standing, as an exact spot (side = the lane they're in).
   const hereKey = here ? exactKey(here.id, exactSpotAt(here, position.x + 0.5, position.y + 0.5)) : undefined;
@@ -523,9 +528,13 @@ export function ShoppingView(props: Props) {
   }
 
   function newTrip() {
+    const snapshot = { items, products: catalog.products };
+    const n = items.filter((i) => i.done).length;
     props.where.newTrip();
+    setWhereBarFor(null); // its item is leaving with the cart
     setItems((prev) => prev.filter((i) => !i.done));
     setPosition(layout.entrance);
+    setToast({ snapshot, added: [], mode: 'list', note: `Cart cleared (${n} item${n === 1 ? '' : 's'}). Ready for next time.` });
   }
 
   // --- Drag an item onto a new location (map or stop card) ---
@@ -784,7 +793,7 @@ export function ShoppingView(props: Props) {
       )}
 
       <main>
-        {laterHere.length > 0 && (
+        {laterHere.length > 0 && !tripDone && (
           <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => { setReviewing(true); setWhereFor(laterHere[0]); }}>
             📍 {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>
           </button>
@@ -917,13 +926,27 @@ export function ShoppingView(props: Props) {
           </section>
         )}
 
-        {items.length > 0 && items.length === done.length && (
-          <div className="empty">
-            <p>All done! Head to checkout.</p>
-            {props.where.question && (
-              <LayoutQuestionCard question={props.where.question} onAnswer={(o) => props.where.answer(props.where.question!, o)} />
+        {tripDone && (
+          <section className="card trip-done-card" aria-label="Trip done">
+            <h3>✓ All done – head to checkout</h3>
+            <p className="muted small">
+              {done.length} item{done.length === 1 ? '' : 's'} in your cart
+              {tripMinutes !== undefined && tripMinutes >= 1 ? ` · shopped in ${tripMinutes} min` : ''}
+            </p>
+            {notSold.length > 0 && (
+              <p className="small">Get elsewhere: {notSold.map((i) => i.name).join(', ')}</p>
             )}
-          </div>
+            {laterHere.length > 0 && (
+              <button className="btn wide" onClick={() => { setReviewing(true); setWhereFor(laterHere[0]); }}>
+                📍 Say where {laterHere.length === 1 ? laterHere[0].name : `${laterHere.length} things`} {laterHere.length === 1 ? 'was' : 'were'} – it helps next time
+              </button>
+            )}
+            {props.where.question && (
+              <LayoutQuestionCard compact question={props.where.question} onAnswer={(o) => props.where.answer(props.where.question!, o)} />
+            )}
+            <button className="btn primary wide" onClick={newTrip}>Clear cart · start next trip</button>
+            {notSold.length > 0 && <p className="muted small">Things to get elsewhere stay on your list.</p>}
+          </section>
         )}
 
         {done.length > 0 && (
