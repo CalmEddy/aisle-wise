@@ -3,6 +3,7 @@ import { ItemsView } from './components/ItemsView';
 import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
+import { IntroSheet } from './components/IntroSheet';
 import { ListBar } from './components/ListsSheet';
 import { StoreSheet } from './components/StoreSheet';
 import { storeHere } from './core/stores';
@@ -120,7 +121,18 @@ export default function App() {
   });
   const [householdOpen, setHouseholdOpen] = useState(false);
   const [listsOpen, setListsOpen] = useState(false);
-  const [showHint, setShowHint] = useState(false);
+  // The intro: on the very first visit (nothing saved yet), and from ⓘ.
+  const [introOpen, setIntroOpen] = useState(() => {
+    try {
+      return !localStorage.getItem('aw.welcomed') && !['aw.items', 'aw.products', 'aw.layouts'].some((k) => localStorage.getItem(k));
+    } catch {
+      return false;
+    }
+  });
+  const closeIntro = () => {
+    setIntroOpen(false);
+    try { localStorage.setItem('aw.welcomed', '1'); } catch { /* private mode: it'll show again, that's fine */ }
+  };
   const [joinCode, setJoinCode] = useState<string>();
 
   // Sharing: what we're sending, and anything that arrived in a link.
@@ -839,7 +851,7 @@ export default function App() {
             <h1>Aisle Wise</h1>
             <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
             {view === 'list' && (
-              <button className="info-btn" aria-pressed={showHint} aria-label="How this works" title="How this works" onClick={() => setShowHint((v) => !v)}>ⓘ</button>
+              <button className="info-btn" aria-label="How this works" title="How this works" onClick={() => setIntroOpen(true)}>ⓘ</button>
             )}
           </div>
           <div className="title-sub">
@@ -872,7 +884,6 @@ export default function App() {
         <ShoppingView
           key={listId}
           listsOpen={listsOpen}
-          showHint={showHint}
           usuals={buyAgain}
           onListsClose={() => setListsOpen(false)}
           lists={{
@@ -922,6 +933,13 @@ export default function App() {
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
           undo={undo}
+        />
+      )}
+      {introOpen && (
+        <IntroSheet
+          onStart={() => { closeIntro(); setView('list'); }}
+          onAtStore={() => { closeIntro(); setView('list'); openStores(); }}
+          onClose={closeIntro}
         />
       )}
       {storesOpen && (

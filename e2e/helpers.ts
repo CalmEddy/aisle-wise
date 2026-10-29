@@ -6,6 +6,7 @@ export async function fresh(page: Page, data: Record<string, unknown> = {}) {
   await page.evaluate((d) => {
     localStorage.clear();
     localStorage.setItem('aw.view', JSON.stringify('list'));
+    localStorage.setItem('aw.welcomed', '1');
     for (const [k, v] of Object.entries(d)) localStorage.setItem(`aw.${k}`, JSON.stringify(v));
   }, data);
   await page.reload();

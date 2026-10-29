@@ -45,7 +45,6 @@ interface Props {
   listsOpen: boolean;
   onListsClose: () => void;
   /** Show the how-it-works hint (toggled by ⓘ in the header). */
-  showHint: boolean;
   /** Things bought before, most likely wanted again first. */
   usuals: Usual[];
   layout: StoreLayout;
@@ -827,10 +826,6 @@ export function ShoppingView(props: Props) {
             <button className="btn primary" onClick={() => setAdding(true)}>＋ Add items</button>
             <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
           </div>
-        )}
-
-        {route.length > 0 && props.showHint && (
-          <p className="hint muted small">Tap a place or section name to say you’re there. Drag ⠿ onto the map or another item to move an item. Tap 📍 to find an item on the map.</p>
         )}
 
         {!grouped && nearestFirst.length > 0 && (

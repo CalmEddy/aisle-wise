@@ -824,3 +824,12 @@ main { padding-bottom: 110px; }
 .map-ghost.cut rect:not(.hit) { fill: var(--danger); fill-opacity: 0.55; stroke: none; }
 .place.shelf.wall.chilled .shelf-label, .place.shelf.wall.frozen .shelf-label { fill: var(--text); stroke: var(--surface); }
 .aisle-group-outline { fill: color-mix(in srgb, var(--you) 8%, transparent); stroke: var(--you); stroke-width: 0.22; stroke-dasharray: 0.6 0.35; pointer-events: none; }
+
+/* ---- Intro ---- */
+.intro-sheet h2 { margin: 0 0 4px; }
+.intro-steps { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.intro-steps li { display: flex; gap: 10px; align-items: flex-start; }
+.intro-icon { flex: 0 0 2rem; height: 2rem; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.intro-tips { margin: 0 0 12px; }
+.intro-actions { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.intro-actions .link { align-self: center; margin-top: 4px; }
