@@ -153,7 +153,7 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
     case 'endcap': return inAisle(c.aisle, undefined, c.end === 'front' ? 0.02 : 0.98);
     case 'display': return c.aisle ? inAisle(c.aisle, undefined, 0.5) : c.dept ? findDept(l, c.dept, product?.categoryId) : undefined;
     case 'dept': return findDept(l, c.dept, product?.categoryId);
-    case 'checkout': return undefined;
+    case 'checkout': return l.places.find((p) => /checkout/i.test(p.label))?.id;
   }
 }
 

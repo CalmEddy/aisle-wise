@@ -22,6 +22,8 @@ interface PlaceBase {
   y: number;
   /** Category ids stocked here, in order along the shelf (top/left first) or across the area. */
   categories: string[];
+  /** Generated from aisle answers but not confirmed by any (drawn dashed). */
+  guess?: boolean;
 }
 
 /** A shelf: a single run of shelving, one square thick, reachable from either side. */
@@ -57,12 +59,28 @@ export interface StoreLayout {
   checkout: Point;
   /** Named walkways ("Aisle 5"), drawn along the space between shelves. */
   aisles?: AisleLabel[];
+  /** Map generated from shoppers' aisle answers ("Where was it?"). */
+  gen?: GeneratedMap;
+}
+
+/** Settings for a store map generated from aisle answers. */
+export interface GeneratedMap {
+  /** Regenerate automatically when answers change. */
+  enabled: boolean;
+  /** Which front corner the entrance is in (Produce is on that side; aisle 1 is nearest it). */
+  entrance: 'left' | 'right';
+  /** Generated parts (by id) the shopper changed or deleted: never regenerated. */
+  locked: string[];
+  /** What the current map was generated from (to know when to regenerate). */
+  key?: string;
 }
 
 /** A label for a walkway: the rectangle of floor it names. */
 export interface AisleLabel {
   id: string;
   label: string;
+  /** Generated, but no answer mentions this aisle yet (drawn faint). */
+  guess?: boolean;
   x: number;
   y: number;
   w: number;

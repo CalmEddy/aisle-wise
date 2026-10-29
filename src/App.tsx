@@ -14,6 +14,7 @@ import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turn
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
 import { recordPick, startTrip, unrecordPick, type Trip } from './core/trips';
+import { buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -240,7 +241,35 @@ export default function App() {
 
   // ---- Build mode: grow the map from where things are picked up ----
 
-  const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? next : l)));
+  /** A shopper's change to a store. Generated parts they change are kept as they are from then on. */
+  const keepEdits = (before: StoreLayout, after: StoreLayout): StoreLayout => {
+    const edited = newlyEdited(before, after);
+    return edited.length && after.gen ? { ...after, gen: { ...after.gen, locked: [...after.gen.locked, ...edited] } } : after;
+  };
+  const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? keepEdits(l, next) : l)));
+
+  // ---- Map generated from aisle answers ----
+  // Rebuilt whenever the answers for this store change; a blank store starts doing this with its first answer.
+  useEffect(() => {
+    const hasAnswers = products.some((p) => p.clues?.[layout.id]);
+    if (!layout.gen && !(hasAnswers && layout.places.length === 0)) return;
+    const gen = layout.gen ?? { enabled: true, entrance: 'left' as const, locked: [] };
+    if (!gen.enabled) return;
+    const model = buildModel(products, layout.id);
+    if (modelKey(model, gen.entrance) === gen.key) return;
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? regenerate({ ...l, gen }, model) : l)));
+  }, [products, layout, setLayouts]);
+
+  /** Turns generating on or off, flips the entrance side, or lets edited parts be regenerated. */
+  function setGen(patch: Partial<NonNullable<StoreLayout['gen']>>): Snapshot {
+    const snapshot = snapshotNow();
+    setLayouts((prev) => prev.map((l) => {
+      if (l.id !== layout.id) return l;
+      const gen = { enabled: true, entrance: 'left' as const, locked: [], ...l.gen, ...patch, key: undefined };
+      return { ...l, gen };
+    }));
+    return snapshot;
+  }
 
   /**
    * Picks up an item where the shopper is standing (checking it off, or into
@@ -420,7 +449,7 @@ export default function App() {
   /** Puts the entrance or checkout on a square of the map (the tapped one, or where it was dragged). */
   function markAt(which: 'entrance' | 'checkout', at: Point) {
     setLayouts((prev) => prev.map((l) => (l.id === layout.id
-      ? { ...l, [which]: { x: clamp(at.x, 0, l.width - 1), y: clamp(at.y, 0, l.height - 1) } }
+      ? keepEdits(l, { ...l, [which]: { x: clamp(at.x, 0, l.width - 1), y: clamp(at.y, 0, l.height - 1) } })
       : l)));
   }
 
@@ -708,7 +737,10 @@ export default function App() {
           build={{
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
             startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
-            store: { layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id },
+            store: {
+              layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id,
+              gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length,
+            },
           }}
           setItemCategory={setItemCategory}
           where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: () => setTrips((prev) => startTrip(prev, layout.id, Date.now())) }}

@@ -4,7 +4,7 @@ import { BRUSH_LENGTH, BRUSH_PRESETS, MAX_AISLE, MIN_AISLE, type Brush, type Sid
 import type { StoreLayout } from '../core/types';
 import { NumberField } from './PlacePanel';
 import { CategoryPicker } from './CategoryPicker';
-import type { Category } from '../core/types';
+import type { Category, GeneratedMap } from '../core/types';
 
 /** What tapping or dragging on the map does in build mode. */
 export type BuildTool = 'walk' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'area' | 'entrance' | 'checkout';
@@ -48,6 +48,11 @@ export interface StoreApi {
   shareStore: () => void;
   resetDemo: () => Snapshot;
   isDemo: boolean;
+  /** The map generated from aisle answers ("Where was it?"), if any. */
+  gen?: GeneratedMap;
+  setGen: (patch: Partial<GeneratedMap>) => Snapshot;
+  /** Items with an aisle answer for this store. */
+  answers: number;
 }
 
 /** The collapsible "Store settings" section of the build panel. */
@@ -87,6 +92,47 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
           <button className="btn danger" onClick={store.deleteStore} disabled={store.layouts.length <= 1}>Delete</button>
           {store.isDemo && (
             <button className="btn" onClick={() => onUndoable('Demo store reset.', store.resetDemo())}>Reset demo</button>
+          )}
+        </div>
+        <div className="field gen-field">
+          <span>Map from aisle answers</span>
+          {store.gen?.enabled ? (
+            <>
+              <p className="muted small">
+                Built from {store.answers} answer{store.answers === 1 ? '' : 's'} and updated as more come in.
+                Dashed aisles are guesses no answer has mentioned yet.
+              </p>
+              <div className="segmented" role="group" aria-label="Entrance">
+                {(['left', 'right'] as const).map((e) => (
+                  <button key={e} className={store.gen!.entrance === e ? 'active' : ''} aria-pressed={store.gen!.entrance === e}
+                    onClick={() => onUndoable(`Entrance on the ${e}.`, store.setGen({ entrance: e }))}>
+                    Entrance {e === 'left' ? '◧ front left' : 'front right ◨'}
+                  </button>
+                ))}
+              </div>
+              <div className="store-actions">
+                {store.gen.locked.length > 0 && (
+                  <button className="btn" onClick={() => onUndoable('Edited parts will be rebuilt from the answers.', store.setGen({ locked: [] }))}>
+                    Redo my {store.gen.locked.length} edited part{store.gen.locked.length === 1 ? '' : 's'}
+                  </button>
+                )}
+                <button className="btn" onClick={() => onUndoable('The map won’t change by itself now.', store.setGen({ enabled: false }))}>
+                  Stop updating automatically
+                </button>
+              </div>
+              {store.gen.locked.length > 0 && <p className="muted small">Parts you’ve changed ({store.gen.locked.length}) are kept as you left them.</p>}
+            </>
+          ) : (
+            <>
+              <p className="muted small">
+                {store.answers
+                  ? `${store.answers} item${store.answers === 1 ? ' has' : 's have'} an aisle answer here. Build the map from them, and keep it updated as more come in.`
+                  : 'Check items off as you shop and say where they were; the map can then build itself.'}
+              </p>
+              <button className="btn" disabled={!store.answers} onClick={() => onUndoable('Map built from aisle answers.', store.setGen({ enabled: true }))}>
+                Build map from aisle answers
+              </button>
+            </>
           )}
         </div>
         <div className="field">
