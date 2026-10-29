@@ -135,12 +135,24 @@ function aisleSpot(l: StoreLayout, a: AisleLabel, side: AisleSide | undefined, a
     const low = (s === 'L') === leftIsLow;
     const across = vertical ? (low ? a.x - 1 : a.x + a.w) : (low ? a.y - 1 : a.y + a.h);
     const t = frontIsStart ? along : 1 - along;
-    const at = vertical ? { x: across, y: Math.min(a.y + a.h - 1, Math.floor(a.y + t * a.h)) } : { x: Math.min(a.x + a.w - 1, Math.floor(a.x + t * a.w)), y: across };
-    const shelf = l.places.find((p): p is Shelf => {
+    const target = vertical ? { x: across, y: Math.min(a.y + a.h - 1, Math.floor(a.y + t * a.h)) } : { x: Math.min(a.x + a.w - 1, Math.floor(a.x + t * a.w)), y: across };
+    const shelfAt = (q: Point) => l.places.find((p): p is Shelf => {
       if (p.kind !== 'shelf') return false;
       const f = footprint(p);
-      return at.x >= f.x && at.x < f.x + f.w && at.y >= f.y && at.y < f.y + f.h;
+      return q.x >= f.x && q.x < f.x + f.w && q.y >= f.y && q.y < f.y + f.h;
     });
+    // The shelf beside that spot, or (if it falls in a gap, e.g. a cross aisle) the nearest one along the aisle.
+    let at = target;
+    let shelf = shelfAt(at);
+    const run = vertical ? a.h : a.w;
+    for (let d = 1; !shelf && d < run; d++) {
+      for (const sign of [1, -1]) {
+        const q = vertical ? { x: target.x, y: target.y + sign * d } : { x: target.x + sign * d, y: target.y };
+        const inside = vertical ? q.y >= a.y && q.y < a.y + a.h : q.x >= a.x && q.x < a.x + a.w;
+        const hit = inside ? shelfAt(q) : undefined;
+        if (hit) { shelf = hit; at = q; break; }
+      }
+    }
     if (!shelf) continue;
     const start = shelf.orientation === 'vertical' ? shelf.y : shelf.x;
     const u = ((shelf.orientation === 'vertical' ? at.y : at.x) - start + 0.5) / shelf.length;

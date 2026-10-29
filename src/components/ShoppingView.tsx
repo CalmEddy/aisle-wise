@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { cutPreview, cutsVertical, type CutNumbers } from '../core/cut';
+import { CutPanel } from './CutPanel';
+import { useBlockDrag } from './ShelfBlock';
 import type { Usual } from '../core/trips';
 import type { LayoutQuestion } from '../core/learn';
 import { LayoutQuestionCard } from './LayoutQuestionCard';
@@ -107,6 +110,8 @@ export interface BuildApi {
     add: (rect: Rect, label: string) => { id: string; snapshot: Snapshot };
     rename: (id: string, label: string) => void;
     remove: (id: string) => Snapshot;
+    renumber: () => Snapshot;
+    cut: (box: Rect, numbers: CutNumbers) => { snapshot: Snapshot; cut: number; renamed: string[] };
   };
   store: StoreApi;
 }
@@ -167,6 +172,18 @@ export function ShoppingView(props: Props) {
   const [tool, setToolState] = useState<BuildTool>('walk');
   const block = useShelfBlock(layout, double, lane);
   const blocking = building && tool === 'block';
+  // Cut tool: drag a box across a block of aisles to make a cross aisle.
+  const cutDrag = useBlockDrag(layout);
+  const [cutWidth, setCutWidth] = useState<number>();
+  const [cutNumbers, setCutNumbers] = useState<CutNumbers>('same');
+  const cutting = building && tool === 'cut';
+  /** The cut box: as dragged, with its thickness changed by the panel's Width. */
+  const cutBox = cutDrag.rect && cutWidth !== undefined
+    ? (cutsVertical(cutDrag.rect)
+      ? { ...cutDrag.rect, y: cutDrag.rect.y + Math.floor((cutDrag.rect.h - cutWidth) / 2), h: cutWidth }
+      : { ...cutDrag.rect, x: cutDrag.rect.x + Math.floor((cutDrag.rect.w - cutWidth) / 2), w: cutWidth })
+    : cutDrag.rect;
+  const cut = cutting && cutBox ? cutPreview(layout, cutBox) : undefined;
   // Aisle brush: the way you're facing, and steps you can back up.
   const brush: Brush = { ...DEFAULT_BRUSH, ...props.display.brush };
   const setBrush = (b: Brush) => props.setDisplay((d) => ({ ...d, brush: b }));
@@ -198,8 +215,10 @@ export function ShoppingView(props: Props) {
   function setTool(t: BuildTool) {
     setToolState(t);
     block.reset();
+    cutDrag.clear();
+    setCutWidth(undefined);
     setBrushSteps([]);
-    if (t === 'block') {
+    if (t === 'block' || t === 'cut') {
       setEditingId(undefined);
       setNote(null);
     }
@@ -319,6 +338,8 @@ export function ShoppingView(props: Props) {
     for (const seg of brushSegments(position, brushDir, brush)) ghosts.push({ rect: segmentRect(seg), kind: seg.kind === 'wall' ? 'wall' : 'preview' });
   } else if (blocking) {
     for (const sh of block.shelves) ghosts.push({ rect: footprint(sh), kind: 'block' });
+  } else if (cut) {
+    for (const r of cut.removed) ghosts.push({ rect: r, kind: 'cut' });
   } else if (building) {
     const added = buildPreview && buildPreview.action !== 'onShelf' && buildPreview.action !== 'inArea'
       ? addedRect(layout, buildPreview.layout, buildPreview.placeId) : undefined;
@@ -640,17 +661,24 @@ export function ShoppingView(props: Props) {
             selectedAisleId={editingAisle?.id}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
-            onMapTap={blocking ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+            onMapTap={blocking || cutting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
               if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
             } : undefined}
-            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : building ? {
+            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : cutting ? {
+              className: 'map drawing',
+              onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => { setCutWidth(undefined); cutDrag.down(e); },
+              onPointerMove: cutDrag.move, onPointerUp: cutDrag.up, onPointerCancel: cutDrag.up,
+            } : building ? {
               className: `map tappable${tool !== 'walk' || editing ? ' build-editing' : ''}`,
               onPointerMove: onMapDragMove,
               onPointerUp: endMapDrag,
               onPointerCancel: endMapDrag,
             } : mapStrip ? { className: 'map strip tappable' } : undefined}
           >
+            {cutting && cutBox && (
+              <rect className="map-cut-outline" x={cutBox.x} y={cutBox.y} width={cutBox.w} height={cutBox.h} />
+            )}
             {blocking && block.drag.rect && (
               <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
             )}
@@ -706,6 +734,10 @@ export function ShoppingView(props: Props) {
                   setEditingAisleId(undefined);
                   setNote({ kind: 'message', text: `Removed “${editingAisle.label}”.`, snapshot });
                 }}>Remove label</button>
+                <button className="btn" onClick={() => {
+                  const snapshot = props.build.aisles.renumber();
+                  setNote({ kind: 'message', text: 'Aisles renumbered 1, 2, 3… from the back, door side first.', snapshot });
+                }}>Renumber all aisles</button>
               </div>
             </div>
           )}
@@ -743,6 +775,26 @@ export function ShoppingView(props: Props) {
               onCancel={() => setTool('walk')}
             />
           )}
+          {cutting && (
+            <CutPanel
+              box={cutBox}
+              shelves={cut?.shelves.length ?? 0}
+              aisles={cut?.aisles.map((a) => a.label) ?? []}
+              nextNumber={Math.max(0, ...(layout.aisles ?? []).map((a) => parseInt(a.label.replace(/^\D*/, ''), 10)).filter((n) => !Number.isNaN(n))) + 1}
+              width={cutBox ? (cutsVertical(cutBox) ? cutBox.h : cutBox.w) : 2}
+              setWidth={setCutWidth}
+              numbers={cutNumbers}
+              setNumbers={setCutNumbers}
+              onCut={() => {
+                if (!cutBox) return;
+                const r = props.build.aisles.cut(cutBox, cutNumbers);
+                setTool('walk');
+                setNote({ kind: 'message', snapshot: r.snapshot,
+                  text: r.renamed.length ? `Cut ${r.cut} shelves. New aisles: ${r.renamed.join(', ')}.` : `Cut ${r.cut} shelves; the aisles carry on past the break.` });
+              }}
+              onCancel={() => setTool('walk')}
+            />
+          )}
           {building && tool === 'brush' && (
             <BrushPanel
               brush={brush}
@@ -758,7 +810,7 @@ export function ShoppingView(props: Props) {
               lastResult={brushResult}
             />
           )}
-          {building && !blocking && tool !== 'brush' && (
+          {building && !blocking && !cutting && tool !== 'brush' && (
             <BuildPanel
               layout={layout}
               position={position}

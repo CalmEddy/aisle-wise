@@ -9,7 +9,7 @@ import { CategoryPicker } from './CategoryPicker';
 import type { Category, GeneratedMap } from '../core/types';
 
 /** What tapping or dragging on the map does in build mode. */
-export type BuildTool = 'walk' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'area' | 'entrance' | 'checkout';
+export type BuildTool = 'walk' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'cut' | 'area' | 'entrance' | 'checkout';
 
 const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
   { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
@@ -17,6 +17,7 @@ const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
   { id: 'shelf-v', icon: '▮↕', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
   { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
   { id: 'block', icon: '▤', label: 'Shelf block', hint: 'Drag across the map to fill it with shelves.' },
+  { id: 'cut', icon: '✂', label: 'Cut aisles', hint: 'Drag a box across a block of aisles to make a cross aisle through them.' },
   { id: 'area', icon: '▦', label: 'Open area', hint: 'Tap the map to add an open area, like Produce.' },
   { id: 'entrance', icon: 'IN', label: 'Entrance', hint: 'Tap where shoppers come in (or drag IN in Walk).' },
   { id: 'checkout', icon: '$', label: 'Checkout', hint: 'Tap where shoppers pay (or drag $ in Walk).' },

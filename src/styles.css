@@ -818,3 +818,7 @@ main { padding-bottom: 110px; }
 .temp-frame { fill: none; stroke-width: 0.22; pointer-events: none; }
 .place.chilled .temp-frame { stroke: #1e9fb3; }
 .place.frozen .temp-frame { stroke: #2f6fe0; }
+
+/* ---- Cut aisles ---- */
+.map-cut-outline { fill: rgba(192, 57, 43, 0.12); stroke: var(--danger); stroke-width: 0.2; stroke-dasharray: 0.5 0.3; pointer-events: none; }
+.map-ghost.cut rect:not(.hit) { fill: var(--danger); fill-opacity: 0.55; stroke: none; }

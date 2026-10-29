@@ -1,4 +1,4 @@
-import { aisleNumber, DEPTS, guessDept } from './clues';
+import { aisleNumber, DEPTS, findAisle, guessDept } from './clues';
 import { footprint } from './geometry';
 import type { AisleLabel, AislePos, Area, Arrangement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
@@ -348,11 +348,13 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
  */
 export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout {
   const gen: GeneratedMap = layout.gen ?? { enabled: true, entrance: 'left', locked: [] };
-  const parts = generateParts(model, gen.entrance, gen);
   const locked = new Set(gen.locked);
   const isGenerated = (id: string) => id.startsWith('g-');
   const kept = layout.places.filter((p) => !isGenerated(p.id) || locked.has(p.id));
   const keptAisles = (layout.aisles ?? []).filter((a) => !isGenerated(a.id) || locked.has(a.id));
+  // Aisles the shopper has given a number to elsewhere (e.g. the front half of a cut aisle) aren't generated again.
+  const elsewhere = (label: string) => keptAisles.some((k) => k.id !== `g-aisle-${label}` && findAisle({ ...layout, aisles: [k] }, label));
+  const parts = generateParts({ ...model, aisles: model.aisles.filter((a) => !elsewhere(a.label)) }, gen.entrance, gen);
   const taken = kept.map(footprint);
   const places = [
     ...kept,

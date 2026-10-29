@@ -17,6 +17,7 @@ import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
+import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
 import { buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
 import { DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
@@ -532,6 +533,21 @@ export default function App() {
       const snapshot = snapshotNow();
       replaceLayout(removeAisle(layout, id));
       return snapshot;
+    },
+    /** Numbers every numbered aisle 1, 2, 3… from the back block, door side first. */
+    renumber(): Snapshot {
+      const snapshot = snapshotNow();
+      replaceLayout(renumberAisles(layout));
+      return snapshot;
+    },
+    /** Cuts a cross aisle through the shelves under `box`. */
+    cut(box: Rect, numbers: CutNumbers): { snapshot: Snapshot; cut: number; renamed: string[] } {
+      const snapshot = snapshotNow();
+      const r = cutAisles(layout, products, box, numbers);
+      if (!r.cut) return { snapshot, cut: 0, renamed: [] };
+      replaceLayout(r.layout);
+      setProducts(() => r.products);
+      return { snapshot, cut: r.cut, renamed: r.renamed };
     },
   };
 
