@@ -52,13 +52,18 @@ const current = <K extends keyof Arrangement>(gen: GeneratedMap, k: K): Choice<K
 const deptName = (id: string) => DEPTS.find((d) => d.id === id)?.name ?? id;
 
 /** Settings that make a difference for this store (enough aisles, the departments involved). */
-function relevant(model: StoreModel): (keyof Arrangement)[] {
+export function relevant(model: StoreModel): (keyof Arrangement)[] {
   const out: (keyof Arrangement)[] = [];
   if (model.aisles.length >= 2) out.push('aisleOne');
-  if (model.depts.includes('produce') || model.depts.includes('frozen')) out.push('produce');
-  if (BACK_WALL.filter((d) => model.depts.includes(d)).length >= 2) out.push('backWall');
+  if (unplaced(model, 'produce') || unplaced(model, 'frozen')) out.push('produce');
+  if (unplacedBack(model).length >= 2) out.push('backWall');
   return out;
 }
+
+/** A department in the store whose wall no answer has said (so it goes where stores usually put it). */
+const unplaced = (model: StoreModel, d: string) => model.sections.some((s) => s.dept === d && !s.wall);
+/** Back-wall departments placed by the usual order (no wall said). */
+export const unplacedBack = (model: StoreModel) => BACK_WALL.filter((d) => unplaced(model, d));
 
 /** The question for a setting, in the shopper's terms. */
 export function questionFor(setting: LayoutSetting, model: StoreModel): LayoutQuestion | undefined {
@@ -82,7 +87,7 @@ export function questionFor(setting: LayoutSetting, model: StoreModel): LayoutQu
         ],
       };
     case 'produce': {
-      const produce = model.depts.includes('produce');
+      const produce = unplaced(model, 'produce');
       return {
         setting,
         text: produce ? 'Is Produce near the door, or across the store?' : 'Is the frozen food near the door, or across the store?',
@@ -93,7 +98,7 @@ export function questionFor(setting: LayoutSetting, model: StoreModel): LayoutQu
       };
     }
     case 'backWall': {
-      const back = BACK_WALL.filter((d) => model.depts.includes(d));
+      const back = unplacedBack(model);
       if (back.length < 2) return undefined;
       const first = deptName(back[0]);
       const last = deptName(back[back.length - 1]);

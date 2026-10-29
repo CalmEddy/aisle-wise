@@ -17,9 +17,9 @@ import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
-import { BACK_WALL, buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
+import { buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
 import { DEPTS } from './core/clues';
-import { describeArrangement, learnArrangement, type LayoutQuestion } from './core/learn';
+import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -418,8 +418,9 @@ export default function App() {
   /** Which arrangement settings this store's map has (for Store settings). */
   const layoutHas = useMemo(() => {
     const m = buildModel(products, layout.id);
-    const back = BACK_WALL.filter((d) => m.depts.includes(d)).map((d) => DEPTS.find((x) => x.id === d)!.name);
-    return { aisles: m.aisles.length >= 2, produce: m.depts.includes('produce'), backWall: back.length >= 2 ? [back[0], back[back.length - 1]] as [string, string] : undefined };
+    const back = unplacedBack(m).map((d) => DEPTS.find((x) => x.id === d)!.name);
+    const has = relevant(m);
+    return { aisles: has.includes('aisleOne'), produce: has.includes('produce') && m.sections.some((x) => x.dept === 'produce' && !x.wall), backWall: back.length >= 2 ? [back[0], back[back.length - 1]] as [string, string] : undefined };
   }, [products, layout.id]);
   /** The shopper's answer to the layout question (undefined: not sure). */
   function answerLayout(q: LayoutQuestion, option: number | undefined) {

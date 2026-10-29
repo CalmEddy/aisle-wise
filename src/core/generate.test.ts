@@ -112,3 +112,66 @@ describe('map from aisle answers', () => {
     expect(parts.places.every((p) => p.x >= 0 && p.x < parts.width)).toBe(true);
   });
 });
+
+describe('walls as chains of sections, and things out in the open', () => {
+  // The example store: entrance front right; Produce then Bread up the right wall; Meat then
+  // Refrigerated along the back; Refrigerated then Freezer down the left wall; produce tables
+  // near the door and freezer cases in the middle; five aisles.
+  const c = (id: string, categoryId: string | undefined, clue: Product['clues'] extends infer _ ? any : never): Product =>
+    ({ id, name: id, ...(categoryId && { categoryId }), clues: { s: clue } });
+  const shop: Product[] = [
+    c('apples', 'fruit', { kind: 'wall', wall: 'right', part: 'front' }),
+    c('bread', 'bakery', { kind: 'wall', wall: 'right', part: 'back' }),
+    c('steak', 'meat', { kind: 'wall', wall: 'back', part: 'left' }),
+    c('juice', 'water', { kind: 'wall', wall: 'back', part: 'right', temp: 'chilled' }),
+    c('cheese', undefined, { kind: 'wall', wall: 'left', part: 'back', temp: 'chilled' }),
+    c('pizza', 'frozen', { kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' }),
+    c('melon', 'fruit', { kind: 'open', near: 'entrance', fixture: 'table' }),
+    c('icecream', 'icecream', { kind: 'open', near: 'middle', fixture: 'case', temp: 'frozen' }),
+    c('cereal', 'breakfast', { kind: 'aisle', aisle: '5' }),
+  ];
+  const l = regenerate({ ...blank, gen: { enabled: true, entrance: 'right', locked: [] } }, buildModel(shop, 's'));
+  const get = (id: string) => { const p = l.places.find((x) => x.id === id); if (!p) throw new Error(`no ${id}: ${l.places.map((x) => x.id)}`); return p; };
+
+  it('puts each wall’s sections in the order said', () => {
+    const produce = get('g-dept-produce');
+    const bakery = get('g-dept-bakery');
+    expect(produce.x).toBeGreaterThan(l.width / 2); // right wall
+    expect(bakery.x).toBe(produce.x);
+    expect(bakery.y).toBeLessThan(produce.y); // back of the store is up the map
+    expect(get('g-dept-meat').x).toBeLessThan(get('g-wall-back-chilled').x);
+    expect(get('g-wall-back-chilled')).toMatchObject({ kind: 'shelf', temp: 'chilled', y: 1, label: 'Refrigerated' });
+    const leftFridge = get('g-wall-left-chilled');
+    const freezer = get('g-wall-left-frozen');
+    expect(leftFridge.x).toBe(1);
+    expect(freezer.x).toBeLessThan(l.width / 2);
+    expect(leftFridge.y).toBeLessThan(freezer.y);
+    expect(freezer.temp).toBe('frozen');
+  });
+
+  it('puts tables and cases out in the open, between the aisles and the checkout', () => {
+    const table = get('g-open-entrance-table-room');
+    const fcase = get('g-open-middle-case-frozen');
+    expect(table.label).toBe('Produce table');
+    expect(fcase).toMatchObject({ label: 'Freezer case', temp: 'frozen' });
+    expect(table.x).toBeGreaterThan(fcase.x); // the door is on the right
+    const shelfEnd = Math.max(...l.places.filter((p) => p.kind === 'shelf' && p.orientation === 'vertical' && p.id.startsWith('g-shelf')).map((p) => p.y + (p as Shelf).length));
+    expect(table.y).toBeGreaterThan(shelfEnd);
+  });
+
+  it('answers land where they were said, and everything can be reached', () => {
+    const catalog = new Catalog(shop, []);
+    const where = (id: string) => { const r = locateProduct(shop.find((p) => p.id === id)!, l, catalog); return r.kind === 'spot' ? r.spot.placeId : r.kind; };
+    expect(where('bread')).toBe('g-dept-bakery');
+    expect(where('pizza')).toBe('g-wall-left-frozen');
+    expect(where('cheese')).toBe('g-wall-left-chilled');
+    expect(where('juice')).toBe('g-wall-back-chilled');
+    expect(where('melon')).toBe('g-open-entrance-table-room');
+    expect(where('icecream')).toBe('g-open-middle-case-frozen');
+    const floor = new Floor(l);
+    for (const p of l.places) {
+      const f = p.kind === 'shelf' ? { x: p.x, y: p.y } : { x: p.x, y: p.y };
+      expect(floor.reachable(l.entrance, f), p.id).toBe(true);
+    }
+  });
+});
