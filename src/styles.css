@@ -744,3 +744,12 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .map.strip { max-height: 150px; height: 150px; }
 .view-menu { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .toggle.icon-only.action[aria-pressed='false'] { filter: none; opacity: 1; }
+
+/* Store picker */
+button.store-pick { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.85rem; font-weight: 600; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.store-list { list-style: none; padding: 0; margin: 0 0 10px; }
+.store-list li + li { border-top: 1px solid var(--line); }
+.store-row-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 12px 4px; background: none; border: 0; text-align: left; color: var(--text); }
+.store-row-btn .name { flex: 1; font-weight: 600; }
+.store-row-btn.current .radio { color: var(--accent); }
+.new-store { margin-top: 4px; }

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
 import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { ListBar } from './components/ListsSheet';
+import { StoreSheet } from './components/StoreSheet';
+import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
 import { defaultDisplay, type Display, type SectionLook } from './display';
@@ -19,7 +21,7 @@ import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Clue, Rect } from './core/types';
+import type { Clue, GeoPoint, Rect } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
 import { clampPlace } from './core/geometry';
@@ -537,6 +539,68 @@ export default function App() {
     return snapshot;
   }
 
+  // ---- Which store: by location ----
+  const [storesOpen, setStoresOpen] = useState(false);
+  const [here, setHere] = useState<GeoPoint>();
+  const [locating, setLocating] = useState<'finding' | 'off' | 'ok'>('off');
+  /** Asks the phone where we are (it may ask permission the first time). */
+  function locate(then?: (p: GeoPoint) => void) {
+    if (!('geolocation' in navigator)) {
+      setLocating('off');
+      return;
+    }
+    setLocating('finding');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setHere(p);
+        setLocating('ok');
+        then?.(p);
+      },
+      () => setLocating('off'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    );
+  }
+  function openStores() {
+    setStoresOpen(true);
+    locate();
+  }
+  // Walking into a store you've shopped at: pick it automatically (only if location is already allowed – never asks on its own).
+  useEffect(() => {
+    let cancelled = false;
+    navigator.permissions?.query({ name: 'geolocation' as PermissionName }).then((s) => {
+      if (cancelled || s.state !== 'granted') return;
+      locate((p) => {
+        const at = storeHere(layoutsRef.current, p);
+        if (at && at.id !== activeIdRef.current) {
+          setActiveId(at.id);
+          setNotice(`You’re at ${at.name}. Tap the store name to change.`);
+        }
+      });
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const layoutsRef = useRef(layouts);
+  layoutsRef.current = layouts;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
+  /** A new, empty store where you're standing (it learns its layout as you shop). */
+  function newStoreHere(name: string) {
+    const fresh = { ...blankStore(name), ...(here && { geo: here }) };
+    setLayouts((prev) => [...prev, fresh]);
+    setActiveId(fresh.id);
+    setPos({ layoutId: fresh.id, point: fresh.entrance });
+    setView('list');
+  }
+
+  function saveStoreHere() {
+    if (!here) return;
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? { ...l, geo: here } : l)));
+    setNotice(`${layout.name} will be picked when you’re here.`);
+  }
+
   function startBlankStore() {
     const fresh = blankStore(`New store ${layouts.length + 1}`);
     setLayouts((prev) => [...prev, fresh]);
@@ -687,13 +751,9 @@ export default function App() {
             )}
           </div>
           <div className="title-sub">
-            {layouts.length > 1 ? (
-              <select className="store-pick" value={layout.id} onChange={(e) => setActiveId(e.target.value)} aria-label="Store">
-                {layouts.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            ) : (
-              <span className="muted store-name">{layout.name}</span>
-            )}
+            <button className="store-pick" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
+              {layout.name} <span aria-hidden="true">▾</span>
+            </button>
             {view === 'list' && (
               <ListBar name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'} count={lists.length} onOpen={() => setListsOpen(true)} />
             )}
@@ -769,6 +829,18 @@ export default function App() {
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
           undo={undo}
+        />
+      )}
+      {storesOpen && (
+        <StoreSheet
+          layouts={layouts}
+          activeId={layout.id}
+          here={here}
+          locating={locating}
+          onPick={(id) => setActiveId(id)}
+          onNew={newStoreHere}
+          onSaveHere={saveStoreHere}
+          onClose={() => setStoresOpen(false)}
         />
       )}
       {householdOpen && (

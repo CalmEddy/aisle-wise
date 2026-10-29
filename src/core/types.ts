@@ -61,6 +61,13 @@ export interface StoreLayout {
   aisles?: AisleLabel[];
   /** Map generated from shoppers' aisle answers ("Where was it?"). */
   gen?: GeneratedMap;
+  /** Where the store is (for picking it automatically when you walk in). */
+  geo?: GeoPoint;
+}
+
+export interface GeoPoint {
+  lat: number;
+  lon: number;
 }
 
 /** Settings for a store map generated from aisle answers. */
