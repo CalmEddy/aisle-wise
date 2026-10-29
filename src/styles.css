@@ -717,3 +717,25 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .place.guess .shelf-label { opacity: 0.5; }
 .aisle-label.guess text { opacity: 0.4; }
 .gen-field p { margin: 2px 0 6px; }
+
+/* A stop with one item: one line (number, item, where it is underneath) */
+.route-list .visit.single { display: flex; align-items: center; gap: 4px; padding: 0 10px 0 8px; }
+.route-list .visit.single .single-num { flex: none; width: 40px; display: grid; place-items: center; }
+.route-list .visit.single .single-body { flex: 1; min-width: 0; }
+.route-list .visit.single .items { margin: 0; }
+.route-list .visit.single .badge { font-size: 0.6rem; padding: 2px 4px; }
+
+/* Shopping rows: checkbox, icon, name and ⋯ only; swipe for the rest.
+   The swipe's top layer takes the background of what it sits on. */
+.card, .route-list .visit { --row-bg: var(--surface); }
+.route-list .visit.tinted { --row-bg: color-mix(in srgb, var(--cat) 9%, var(--surface)); }
+.route-list .visit.next-card { --row-bg: var(--accent-soft); }
+.spot.tinted, .row.tinted { --row-bg: color-mix(in srgb, var(--cat) 13%, var(--surface)); }
+.items .row .swipe { flex: 1; min-width: 0; border-radius: 8px; }
+.items .row .swipe-top { background: var(--row-bg, var(--surface)); }
+.items .row:has(> .swipe) { display: block; padding: 0; }
+.row-inner { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+.row-inner > label { flex: 1; min-width: 0; }
+.pinned-dot { font-size: 0.9rem; flex: none; }
+.route-list .spot-detail { margin: 6px 0 0 6px; position: relative; z-index: 1; }
+.route-list .spot.tinted { padding-top: 2px; }

@@ -21,6 +21,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { CategoryPicker } from './CategoryPicker';
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
+import { SwipeRow } from './SwipeRow';
 import { DEPTS, aislesUsed, describeClue, guessDept } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
@@ -485,6 +486,8 @@ export function ShoppingView(props: Props) {
     setItems((prev) => prev.filter((i) => i.id !== item.id));
   }
 
+  const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);
+
   /** Takes items off the list, with Undo. */
   function removeWithUndo(gone: ListItem[]) {
     if (!gone.length) return;
@@ -762,9 +765,11 @@ export function ShoppingView(props: Props) {
             <ItemRows
               items={nearestFirst.map((e) => e.item)}
               onToggle={toggle}
-              onRemove={remove}
+              onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
-              drag={dragHandlers}
+              simple={!building}
+              onNotHere={(i) => markAvailable(i, false)}
+              drag={building ? dragHandlers : undefined}
               dragging={drag?.item.id}
               iconOf={iconOf}
               pinned={pinned}
@@ -779,12 +784,12 @@ export function ShoppingView(props: Props) {
 
         {grouped && nextVisit && (
           <div className="card route-list">
-          <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} big />
+          <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
+            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={sub} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
           )} />
         {laterVisits.map((v) => (
-          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={remove} onMenu={setMenuFor} drag={dragHandlers} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} />
+          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
+            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={sub} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
           )} />
         ))}
           </div>
@@ -799,8 +804,10 @@ export function ShoppingView(props: Props) {
             <ItemRows
               items={byClue.map((b) => b.item)}
               onToggle={toggle}
-              onRemove={remove}
+              onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
+              simple={!building}
+              onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               subOf={(item) => { const b = byClue.find((x) => x.item.id === item.id); return b && (b.clue ? describeClue(b.clue) : `usually ${typicalWhere(b.categoryId!, catalog)}`); }}
             />
@@ -871,7 +878,7 @@ export function ShoppingView(props: Props) {
         {done.length > 0 && (
           <details className="card done">
             <summary>In the cart ({done.length})</summary>
-            <ItemRows items={done} onToggle={toggle} onRemove={remove} iconOf={iconOf} />
+            <ItemRows items={done} onToggle={toggle} onRemove={removeWithUndoOne} iconOf={iconOf} simple />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
         )}
@@ -924,6 +931,11 @@ export function ShoppingView(props: Props) {
           }}
           onWhere={() => {
             setWhereFor(menuFor);
+            setMenuFor(null);
+          }}
+          pinned={pinned.has(menuFor.id)}
+          onPin={() => {
+            togglePin(menuFor);
             setMenuFor(null);
           }}
           onNotAvailable={() => {
@@ -1024,7 +1036,8 @@ function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
   visit: { number: number; stops: Stop[] };
   next?: boolean;
   drag: Drag | null;
-  rows: (stop: Stop) => React.ReactNode;
+  /** The item rows for a stop; `sub` gives each a second line (used when a stop is shown as one line). */
+  rows: (stop: Stop, sub?: (item: ListItem) => string | undefined) => React.ReactNode;
   /** Tapping the place or a section moves the "you are here" marker there. */
   onGoTo: (stop: Stop) => void;
   /** Section tint (category colour), or undefined for none. */
@@ -1041,6 +1054,22 @@ function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
   const colors = next ? [] : visit.stops.map((st) => colorOf?.(st));
   const oneColor = colors.length > 0 && colors.every((c) => c && c === colors[0]) ? colors[0] : undefined;
   const tint = (c: string | undefined) => (c ? ({ '--cat': c } as React.CSSProperties) : undefined);
+  const where = `${first.placeLabel || 'Unnamed'}${first.detail ? ` · ${first.detail}` : sectionName?.(first) && visit.stops.length > 1 ? ` · ${sectionName(first)}` : ''}`;
+  // One item at one spot: a single line, with where it is under the name.
+  if (count === 1) {
+    return (
+      <section
+        className={`visit single${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
+        style={tint(oneColor)}
+        data-drop={first.key}
+      >
+        <button className="goto single-num" onClick={() => onGoTo(first)} aria-label={`I'm at ${first.label}`}>
+          {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
+        </button>
+        <div className="single-body">{rows(first, () => where)}</div>
+      </section>
+    );
+  }
   return (
     <section
       className={`visit${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
@@ -1075,7 +1104,7 @@ function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
 
 type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big }: {
+function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -1094,6 +1123,12 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
   dropOf?: (i: ListItem) => string | undefined;
   firstIsNearest?: boolean;
   big?: boolean;
+  /**
+   * Shopping rows: just the checkbox, icon, name and ⋯. Swipe right to check
+   * off, left for Not here / Remove. (📍 and × move into the ⋯ menu.)
+   */
+  simple?: boolean;
+  onNotHere?: (i: ListItem) => void;
 }) {
   return (
     <ul className={big ? 'items big' : 'items'}>
@@ -1105,6 +1140,33 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
           style={tintOf?.(item) ? ({ '--cat': tintOf(item) } as React.CSSProperties) : undefined}
           data-drop={dropOf?.(item)}
         >
+          {simple ? (
+            <SwipeRow
+              onSwipeRight={() => onToggle(item)}
+              rightLabel={item.done ? <>↩ Back on the list</> : <>✓ Got it</>}
+              leftActions={(close) => (
+                <>
+                  {onNotHere && !item.done && <button className="swipe-btn sold" onClick={() => { close(); onNotHere(item); }}>🚫 Not here</button>}
+                  <button className="swipe-btn delete" onClick={() => { close(); onRemove(item); }}>Remove</button>
+                </>
+              )}
+            >
+              <div className="row-inner">
+                <label>
+                  <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
+                  {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
+                  <span className="name">
+                    {item.name}
+                    {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
+                  </span>
+                </label>
+                {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
+                {onMenu
+                  ? <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+                  : <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>}
+              </div>
+            </SwipeRow>
+          ) : (<>
           {drag && (
             <span className="handle" aria-label={`Drag ${item.name} to a new location`} {...drag(item)}>⠿</span>
           )}
@@ -1131,6 +1193,7 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
           )}
           <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>
           </span>
+          </>)}
         </li>
       ))}
     </ul>
@@ -1204,7 +1267,7 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
   );
 }
 
-function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onCancel }: {
+function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onCancel, pinned, onPin }: {
   item: ListItem;
   where: string;
   storeName: string;
@@ -1218,6 +1281,9 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
   onNotAvailable: () => void;
   onRemove: () => void;
   onCancel: () => void;
+  /** Pulsing circle on the map for this item. */
+  pinned: boolean;
+  onPin: () => void;
 }) {
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
@@ -1235,6 +1301,7 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
             label={`Category of ${item.name}`}
           />
         </div>
+        <button className="pick" onClick={onPin}>{pinned ? '◎ Stop showing on the map' : '◎ Show on the map'}</button>
         <button className="pick" onClick={onChangePlace}>📍 Change place on the map</button>
         <button className="pick" onClick={onWhere}>🏷 Aisle / department…</button>
         <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
