@@ -70,8 +70,21 @@ export interface GeoPoint {
   lon: number;
 }
 
+/** How a generated store is arranged, beyond which corner the entrance is in. Unset means the usual. */
+export interface Arrangement {
+  /** Aisle 1 is the aisle nearest the entrance (usual) or the farthest. */
+  aisleOne?: 'near' | 'far';
+  /** Produce along the entrance-side wall and Frozen along the far wall (usual), or the other way round. */
+  produce?: 'near' | 'far';
+  /** The back-wall departments in the usual order from the entrance side, or reversed. */
+  backWall?: 'usual' | 'reversed';
+}
+
+/** A generated-map setting the app can learn or ask about. */
+export type LayoutSetting = 'entrance' | keyof Arrangement;
+
 /** Settings for a store map generated from aisle answers. */
-export interface GeneratedMap {
+export interface GeneratedMap extends Arrangement {
   /** Regenerate automatically when answers change. */
   enabled: boolean;
   /** Which front corner the entrance is in (Produce is on that side; aisle 1 is nearest it). */
@@ -80,6 +93,10 @@ export interface GeneratedMap {
   locked: string[];
   /** What the current map was generated from (to know when to regenerate). */
   key?: string;
+  /** Settings the shopper chose or answered: never changed by learning. */
+  sure?: LayoutSetting[];
+  /** Settings the shopper wasn't sure about when asked: not asked again. */
+  skipped?: LayoutSetting[];
 }
 
 /** A label for a walkway: the rectangle of floor it names. */
@@ -102,6 +119,10 @@ export interface ListItem {
   productId?: string;
   /** Which shopping list it's on. Missing means the main list (MAIN_LIST). */
   listId?: string;
+  /** How many (missing means one). */
+  qty?: number;
+  /** A note for whoever shops ("the big tub", "2 lb"). */
+  note?: string;
 }
 
 /** A named shopping list, e.g. "Weekly staples" or "Taco night". */

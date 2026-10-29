@@ -1,4 +1,6 @@
 import type { Snapshot } from '../App';
+import type { LayoutQuestion } from '../core/learn';
+import { LayoutQuestionCard } from './LayoutQuestionCard';
 import type { Direction } from '../core/build';
 import { BRUSH_LENGTH, BRUSH_PRESETS, MAX_AISLE, MIN_AISLE, type Brush, type SideKind } from '../core/brush';
 import type { StoreLayout } from '../core/types';
@@ -53,6 +55,40 @@ export interface StoreApi {
   setGen: (patch: Partial<GeneratedMap>) => Snapshot;
   /** Items with an aisle answer for this store. */
   answers: number;
+  /** A question about the layout the trips can't settle. */
+  question?: LayoutQuestion;
+  answer: (q: LayoutQuestion, option: number | undefined) => void;
+  /** Which arrangement settings apply to this store; backWall names its two ends. */
+  layoutHas: { aisles: boolean; produce: boolean; backWall?: [string, string] };
+}
+
+type GenKey = 'entrance' | 'aisleOne' | 'produce' | 'backWall';
+
+/** A row of choices for one generated-map setting. Choosing one means the trips won't change it. */
+function GenChoice({ store, setting, label, options, note, onUndoable }: {
+  store: StoreApi;
+  onUndoable: (text: string, snapshot: Snapshot) => void;
+  setting: GenKey;
+  label: string;
+  options: [string, string][];
+  note: (value: string) => string;
+}) {
+  const gen = store.gen!;
+  const value = (gen[setting] as string | undefined) ?? options[0][0];
+  const sure = gen.sure?.includes(setting);
+  return (
+    <div className="gen-choice">
+      <span className="gen-choice-label">{label}{!sure && <span className="muted small"> · guess</span>}</span>
+      <div className="segmented" role="group" aria-label={label}>
+        {options.map(([v, text]) => (
+          <button key={v} className={value === v ? 'active' : ''} aria-pressed={value === v}
+            onClick={() => onUndoable(note(v), store.setGen({ [setting]: v, sure: [...new Set([...(gen.sure ?? []), setting])] }))}>
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /** The collapsible "Store settings" section of the build panel. */
@@ -102,14 +138,24 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
                 Built from {store.answers} answer{store.answers === 1 ? '' : 's'} and updated as more come in.
                 Dashed aisles are guesses no answer has mentioned yet.
               </p>
-              <div className="segmented" role="group" aria-label="Entrance">
-                {(['left', 'right'] as const).map((e) => (
-                  <button key={e} className={store.gen!.entrance === e ? 'active' : ''} aria-pressed={store.gen!.entrance === e}
-                    onClick={() => onUndoable(`Entrance on the ${e}.`, store.setGen({ entrance: e }))}>
-                    Entrance {e === 'left' ? '◧ front left' : 'front right ◨'}
-                  </button>
-                ))}
-              </div>
+              {store.question && (
+                <LayoutQuestionCard compact question={store.question} onAnswer={(o) => store.answer(store.question!, o)} />
+              )}
+              <GenChoice store={store} onUndoable={onUndoable} setting="entrance" label="Entrance" note={(t) => `Entrance on the ${t}.`}
+                options={[['left', 'Front left ◧'], ['right', 'Front right ◨']]} />
+              {store.layoutHas.aisles && (
+                <GenChoice store={store} onUndoable={onUndoable} setting="aisleOne" label="Aisle 1" note={(t) => `Aisle 1 is the ${t === 'far' ? 'farthest from' : 'nearest'} the door.`}
+                  options={[['near', 'Nearest the door'], ['far', 'Farthest']]} />
+              )}
+              {store.layoutHas.produce && (
+                <GenChoice store={store} onUndoable={onUndoable} setting="produce" label="Produce" note={(t) => `Produce ${t === 'far' ? 'across the store' : 'near the door'}.`}
+                  options={[['near', 'Near the door'], ['far', 'Across the store']]} />
+              )}
+              {store.layoutHas.backWall && (
+                <GenChoice store={store} onUndoable={onUndoable} setting="backWall" label="Back wall, door end" note={(t) => `${store.layoutHas.backWall![t === 'reversed' ? 1 : 0]} is nearer the door.`}
+                  options={[['usual', store.layoutHas.backWall[0]], ['reversed', store.layoutHas.backWall[1]]]} />
+              )}
+              <p className="muted small">Trips teach the map which way round things are; what you pick here stays put.</p>
               <div className="store-actions">
                 {store.gen.locked.length > 0 && (
                   <button className="btn" onClick={() => onUndoable('Edited parts will be rebuilt from the answers.', store.setGen({ locked: [] }))}>

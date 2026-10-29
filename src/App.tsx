@@ -15,8 +15,10 @@ import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
-import { recordPick, startTrip, unrecordPick, type Trip } from './core/trips';
-import { buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
+import { recordPick, startTrip, TRIP_GAP, unrecordPick, type Trip } from './core/trips';
+import { BACK_WALL, buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
+import { DEPTS } from './core/clues';
+import { describeArrangement, learnArrangement, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
@@ -258,7 +260,7 @@ export default function App() {
     const gen = layout.gen ?? { enabled: true, entrance: 'left' as const, locked: [] };
     if (!gen.enabled) return;
     const model = buildModel(products, layout.id);
-    if (modelKey(model, gen.entrance) === gen.key) return;
+    if (modelKey(model, gen) === gen.key) return;
     setLayouts((prev) => prev.map((l) => (l.id === layout.id ? regenerate({ ...l, gen }, model) : l)));
   }, [products, layout, setLayouts]);
 
@@ -374,7 +376,50 @@ export default function App() {
   // ---- Where things are, in plain words ("aisle 7, left") ----
 
   // Check-off order per trip, per store (on this phone only), for learning the layout later.
-  const [, setTrips] = usePersistentState<Trip[]>('aw.trips', []);
+  const [trips, setTrips] = usePersistentState<Trip[]>('aw.trips', []);
+
+  // ---- Learning how the store is arranged from the trips ----
+  /** What all the trips here say (including one in progress): for the one question. */
+  const learned = useMemo(() => learnArrangement(layout, products, trips, catalog), [layout, products, trips, catalog]);
+  /** Updates the generated map with what these trips clearly show. */
+  function learnFrom(list: Trip[]) {
+    const l = learnArrangement(layout, products, list, catalog);
+    if (!Object.keys(l.apply).length) return;
+    setLayouts((prev) => prev.map((x) => (x.id === layout.id && x.gen ? { ...x, gen: { ...x.gen, ...l.apply } } : x)));
+    setNotice(`Map updated from your trips: ${describeArrangement(l.apply, buildModel(products, layout.id))}.`);
+  }
+  // Once per store per visit to the app, from the finished trips (not one in progress, so the map doesn't shift mid-shop).
+  const learnedFor = useRef(new Set<string>());
+  useEffect(() => {
+    if (!layout.gen?.enabled || learnedFor.current.has(layout.id)) return;
+    learnedFor.current.add(layout.id);
+    const mine = trips.filter((t) => t.layoutId === layout.id);
+    const last = mine[mine.length - 1];
+    const lastAt = last?.picks[last.picks.length - 1]?.at ?? 0;
+    learnFrom(last && Date.now() - lastAt < TRIP_GAP ? trips.filter((t) => t !== last) : trips);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout.id, layout.gen?.enabled]);
+  /** Which arrangement settings this store's map has (for Store settings). */
+  const layoutHas = useMemo(() => {
+    const m = buildModel(products, layout.id);
+    const back = BACK_WALL.filter((d) => m.depts.includes(d)).map((d) => DEPTS.find((x) => x.id === d)!.name);
+    return { aisles: m.aisles.length >= 2, produce: m.depts.includes('produce'), backWall: back.length >= 2 ? [back[0], back[back.length - 1]] as [string, string] : undefined };
+  }, [products, layout.id]);
+  /** The shopper's answer to the layout question (undefined: not sure). */
+  function answerLayout(q: LayoutQuestion, option: number | undefined) {
+    const gen = layout.gen;
+    if (!gen) return;
+    if (option === undefined) {
+      setGen({ skipped: [...(gen.skipped ?? []), q.setting] });
+      return;
+    }
+    setGen({ ...q.options[option].patch, sure: [...(gen.sure ?? []), q.setting] });
+    setNotice('Thanks – the map is updated.');
+  }
+  function endTrip() {
+    learnFrom(trips);
+    setTrips((prev) => startTrip(prev, layout.id, Date.now()));
+  }
   function notePick(item: ListItem, picked: boolean) {
     const product = productFor(item, catalog);
     setTrips((prev) => (picked
@@ -799,11 +844,11 @@ export default function App() {
             startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
             store: {
               layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id,
-              gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length,
+              gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas,
             },
           }}
           setItemCategory={setItemCategory}
-          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: () => setTrips((prev) => startTrip(prev, layout.id, Date.now())) }}
+          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

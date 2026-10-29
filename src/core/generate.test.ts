@@ -55,6 +55,18 @@ describe('map from aisle answers', () => {
     expect(l.entrance.x).toBeGreaterThan(l.width / 2);
   });
 
+  it('can number the aisles from the far side and swap Produce and Frozen', () => {
+    const l = regenerate({ ...blank, gen: { ...blank.gen!, aisleOne: 'far', produce: 'far' } }, buildModel(products, 's'));
+    const x = (id: string) => l.places.find((p) => p.id === id)!.x;
+    expect(x('g-shelf-1-L')).toBeGreaterThan(x('g-shelf-3-L'));
+    expect(x('g-dept-produce')).toBeGreaterThan(x('g-shelf-1-R'));
+    expect(x('g-dept-frozen')).toBeLessThan(x('g-shelf-3-L'));
+    expect(l.entrance.x).toBeLessThan(l.width / 2);
+    // Maps made with the usual settings keep their key.
+    expect(l.gen!.key).toContain('"a1":"far"');
+    expect(regenerate(blank, buildModel(products, 's')).gen!.key).not.toContain('a1');
+  });
+
   it('answers land on the generated map, and one answer places the whole category', () => {
     const l = regenerate(blank, buildModel(products, 's'));
     const catalog = new Catalog(products, []);

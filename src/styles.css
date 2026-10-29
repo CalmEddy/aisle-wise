@@ -765,3 +765,20 @@ button.store-pick { border: 0; background: none; padding: 0; color: var(--muted)
 .where-bar-choices { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
 .where-bar-choices .btn { flex: none; padding: 9px 12px; white-space: nowrap; }
 main { padding-bottom: 110px; }
+
+/* ---- One question about the store's layout ---- */
+.layout-question {
+  margin: 0.75rem auto 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: left;
+  max-width: 28rem;
+}
+.layout-question p { margin: 0 0 0.5rem; }
+.layout-question.compact { margin: 0.5rem 0; }
+.layout-question-choices { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.gen-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; margin: 0.35rem 0; }
+.gen-choice-label { flex: 0 0 9em; font-size: 0.9rem; }
+.gen-choice .segmented { flex: 1 1 14rem; }

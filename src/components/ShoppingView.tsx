@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { LayoutQuestion } from '../core/learn';
+import { LayoutQuestionCard } from './LayoutQuestionCard';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
 import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type Direction } from '../core/build';
 import { addedRect, nextShelves, skippedShelves } from '../core/rows';
@@ -57,6 +59,9 @@ interface Props {
     notePick: (item: ListItem, picked: boolean) => void;
     /** The cart was cleared: the next check-off starts a new trip. */
     newTrip: () => void;
+    /** A question about how the store is laid out, when the trips can't tell. */
+    question?: LayoutQuestion;
+    answer: (q: LayoutQuestion, option: number | undefined) => void;
   };
   position: Point;
   setPosition: (p: Point) => void;
@@ -902,6 +907,9 @@ export function ShoppingView(props: Props) {
         {items.length > 0 && items.length === done.length && (
           <div className="empty">
             <p>All done! Head to checkout.</p>
+            {props.where.question && (
+              <LayoutQuestionCard question={props.where.question} onAnswer={(o) => props.where.answer(props.where.question!, o)} />
+            )}
           </div>
         )}
 

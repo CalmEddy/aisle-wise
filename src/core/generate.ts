@@ -1,6 +1,6 @@
 import { aisleNumber, DEPTS } from './clues';
 import { footprint } from './geometry';
-import type { AisleLabel, AislePos, Area, Clue, Dept, GeneratedMap, Place, Product, Rect, Shelf, StoreLayout } from './types';
+import type { AisleLabel, AislePos, Area, Arrangement, Clue, Dept, GeneratedMap, Place, Product, Rect, Shelf, StoreLayout } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -22,7 +22,7 @@ import type { AisleLabel, AislePos, Area, Clue, Dept, GeneratedMap, Place, Produ
 /** Squares along each aisle. */
 export const AISLE_LENGTH = 14;
 /** The other departments, in order along the back wall from the entrance side. */
-const BACK_WALL: Dept[] = ['bakery', 'deli', 'meat', 'seafood', 'dairy'];
+export const BACK_WALL: Dept[] = ['bakery', 'deli', 'meat', 'seafood', 'dairy'];
 const FRONT_CORNER_NEAR: Dept[] = ['floral'];
 const FRONT_CORNER_FAR: Dept[] = ['pharmacy'];
 
@@ -95,10 +95,17 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
   return { aisles: all, depts: [...depts], freezerWall, checkout };
 }
 
+/** What a map is generated with: the entrance corner and the arrangement. */
+export type GenSettings = Arrangement & { entrance: GeneratedMap['entrance'] };
+
 /** A short fingerprint of what a map would be generated from. */
-export function modelKey(model: StoreModel, entrance: GeneratedMap['entrance']): string {
+export function modelKey(model: StoreModel, settings: GenSettings): string {
   return JSON.stringify({
-    e: entrance,
+    e: settings.entrance,
+    // Only when not the usual, so maps made before these settings existed aren't rebuilt.
+    ...(settings.aisleOne === 'far' && { a1: 'far' }),
+    ...(settings.produce === 'far' && { p: 'far' }),
+    ...(settings.backWall === 'reversed' && { b: 'rev' }),
     a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
     c: model.checkout,
@@ -115,7 +122,7 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, entrance: GeneratedMap['entrance']) {
+export function generateParts(model: StoreModel, entrance: GeneratedMap['entrance'], arrangement: Arrangement = {}) {
   const n = model.aisles.length;
   const L = AISLE_LENGTH;
   const x0 = 6; // first shelf column (side wall area x 1–4, walkway at x 5)
@@ -126,9 +133,10 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
   const places: Place[] = [];
   const aisles: AisleLabel[] = [];
 
-  // Aisles, numbered from the entrance side. Slot i (from the left) holds shelves at x0+4i (left side) and x0+4i+3 (right side).
+  // Aisles, numbered from the entrance side (or from the far side). Slot i (from the left) holds shelves at x0+4i (left side) and x0+4i+3 (right side).
   model.aisles.forEach((a, k) => {
-    const slot = entrance === 'left' ? k : n - 1 - k;
+    const fromEntrance = arrangement.aisleOne === 'far' ? n - 1 - k : k;
+    const slot = entrance === 'left' ? fromEntrance : n - 1 - fromEntrance;
     const walk: Rect = { x: x0 + 1 + 4 * slot, y: yShelf, w: 2, h: L };
     aisles.push({ id: `g-aisle-${a.label}`, label: `Aisle ${a.label}`, ...walk, ...(a.seen ? {} : { guess: true }) });
     for (const side of ['L', 'R'] as const) {
@@ -142,11 +150,15 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
     }
   });
 
-  // Departments: Produce up the entrance-side wall, Frozen up the far wall, the rest along the back.
+  // Departments: Produce up the entrance-side wall, Frozen up the far wall (or swapped), the rest along the back.
   const area = (d: Dept, r: Rect): Area => ({ kind: 'area', id: `g-dept-${d}`, label: deptInfo(d).name, ...mirror(r), categories: [...deptInfo(d).categories] });
-  if (model.depts.includes('produce')) places.push(area('produce', { x: 1, y: yShelf, w: 4, h: L }));
-  if (model.depts.includes('frozen')) places.push(area('frozen', { x: width - 5, y: yShelf, w: 4, h: L }));
+  const nearWall = 1;
+  const farWall = width - 5;
+  const produceFar = arrangement.produce === 'far';
+  if (model.depts.includes('produce')) places.push(area('produce', { x: produceFar ? farWall : nearWall, y: yShelf, w: 4, h: L }));
+  if (model.depts.includes('frozen')) places.push(area('frozen', { x: produceFar ? nearWall : farWall, y: yShelf, w: 4, h: L }));
   const back = BACK_WALL.filter((d) => model.depts.includes(d));
+  if (arrangement.backWall === 'reversed') back.reverse();
   if (back.length) {
     const span = width - 2;
     back.forEach((d, i) => {
@@ -177,7 +189,7 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
  */
 export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout {
   const gen: GeneratedMap = layout.gen ?? { enabled: true, entrance: 'left', locked: [] };
-  const parts = generateParts(model, gen.entrance);
+  const parts = generateParts(model, gen.entrance, gen);
   const locked = new Set(gen.locked);
   const isGenerated = (id: string) => id.startsWith('g-');
   const kept = layout.places.filter((p) => !isGenerated(p.id) || locked.has(p.id));
@@ -199,7 +211,7 @@ export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout 
     aisles,
     entrance: locked.has('g-entrance') ? layout.entrance : parts.entrance,
     checkout: locked.has('g-checkout-point') ? layout.checkout : parts.checkout,
-    gen: { ...gen, key: modelKey(model, gen.entrance) },
+    gen: { ...gen, key: modelKey(model, gen) },
   };
 }
 
