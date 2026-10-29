@@ -17,6 +17,9 @@ export interface SharedItem {
   /** Where it is in plain words ("aisle 7, left") in the shared store. */
   clue?: Clue;
   notAvailable?: true;
+  /** How many, and a note (list shares). */
+  qty?: number;
+  note?: string;
 }
 
 export interface ListShare {
@@ -47,7 +50,7 @@ export function buildListShare(items: ListItem[], catalog: Catalog): ListShare {
     items: items.filter((i) => !i.done).map((i) => {
       const p = (i.productId && catalog.productById.get(i.productId)) || catalog.exact(i.name);
       const category = p?.categoryId ? catalog.categoryById.get(p.categoryId)?.name : undefined;
-      return { name: p?.name ?? i.name, ...(category && { category }) };
+      return { name: p?.name ?? i.name, ...(category && { category }), ...(i.qty && i.qty > 1 && { qty: i.qty }), ...(i.note && { note: i.note }) };
     }),
   };
 }
@@ -154,7 +157,11 @@ export function applyListShare(share: ListShare, data: Data): Data & { added: nu
       skipped++;
       continue;
     }
-    items.push({ id: newId(), name: product.name, done: false, productId: product.id });
+    items.push({
+      id: newId(), name: product.name, done: false, productId: product.id,
+      ...(typeof shared.qty === 'number' && shared.qty > 1 && { qty: Math.min(99, Math.round(shared.qty)) }),
+      ...(typeof shared.note === 'string' && shared.note && { note: shared.note.slice(0, 200) }),
+    });
     added++;
   }
   return { ...data, items, products, categories, added, skipped };

@@ -37,7 +37,11 @@ export function combineLists(items: ListItem[], target: string, sources: string[
         skipped++;
         continue;
       }
-      copies.push({ id: newId(), name: i.name, done: false, ...(i.productId && { productId: i.productId }), ...(target !== MAIN_LIST && { listId: target }) });
+      copies.push({
+        id: newId(), name: i.name, done: false,
+        ...(i.productId && { productId: i.productId }), ...(i.qty && { qty: i.qty }), ...(i.note && { note: i.note }),
+        ...(target !== MAIN_LIST && { listId: target }),
+      });
     }
   }
   return { items: [...items, ...copies], added: copies.length, skipped };

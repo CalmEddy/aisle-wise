@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
 import { byName } from './CategoryPicker';
+import { amountText, parseAmount, withAmount } from '../core/items';
 import type { Product } from '../core/types';
 
 /**
@@ -28,9 +29,12 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   const [added, setAdded] = useState<{ id: number; names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }[]>([]);
   const last = text.split(',').pop() ?? '';
   const typed = last.trim();
-  const suggestions = useMemo(() => catalog.suggest(typed, 12), [catalog, typed]);
-  const isNew = typed.length > 0 && !catalog.exact(typed);
-  const guess = isNew ? catalog.match(typed)?.categoryId : undefined;
+  // "2 milk", "milk x2", "flour (the big bag)": search for the name, keep the amount and note.
+  const amount = parseAmount(typed);
+  const query = amount.name;
+  const suggestions = useMemo(() => catalog.suggest(query, 12), [catalog, query]);
+  const isNew = query.length > 0 && !catalog.exact(query);
+  const guess = isNew ? catalog.match(query)?.categoryId : undefined;
   const categories = useMemo(
     () => byName(catalog.categories).filter((c) => catalog.products.some((p) => p.categoryId === c.id)),
     [catalog],
@@ -58,11 +62,15 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
       <li key={p.id} className="suggestion">
         <span className="add-icon-cat" aria-hidden="true">{iconOf(p.categoryId) ?? '·'}</span>
         <div className="s-text">
-          <span>{p.name}</span>
+          <span>{p.name}{browse === undefined && (amount.qty || amount.note) ? <span className="muted small"> · {amountText(amount)}</span> : null}</span>
           <span className="muted small">{waiting ? 'On your list' : whereText(p)}</span>
         </div>
-        {!waiting && <button type="button" className="s-btn" onClick={() => (browse !== undefined ? add([p.name], 'list') : addFromBox(p.name, 'list'))}>+ List</button>}
-        <button type="button" className="s-btn cart" onClick={() => (browse !== undefined ? add([p.name], 'cart') : addFromBox(p.name, 'cart'))}>🛒</button>
+        {(!waiting || amount.qty || amount.note) && (
+          <button type="button" className="s-btn" onClick={() => (browse !== undefined ? add([p.name], 'list') : addFromBox(withAmount(p.name, amount), 'list'))}>
+            {waiting ? 'Update' : '+ List'}
+          </button>
+        )}
+        <button type="button" className="s-btn cart" onClick={() => (browse !== undefined ? add([p.name], 'cart') : addFromBox(withAmount(p.name, amount), 'cart'))}>🛒</button>
       </li>
     );
   };
@@ -87,7 +95,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           <button type="submit" disabled={!typed}>+ List</button>
         </form>
         <p className="muted small add-sheet-hint">
-          {typed ? <>Enter adds to the list · 🛒 puts it straight in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</> : <>Or browse by category:</>}
+          {typed ? <>Enter adds to the list · 🛒 puts it straight in your cart{hereLabel ? <> (at {hereLabel})</> : null}. “2 milk” or “flour (big bag)” adds an amount or note.</> : <>Or browse by category:</>}
         </p>
 
         {typed ? (

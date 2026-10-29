@@ -46,3 +46,24 @@ describe('swipes', () => {
     expect(swipeRelease(-50)).toBe('reveal');
   });
 });
+
+describe('amounts and notes', () => {
+  it('reads counts, units and notes off typed names', async () => {
+    const { parseAmount, withAmount } = await import('./items');
+    expect(parseAmount('2 milk')).toEqual({ name: 'milk', qty: 2 });
+    expect(parseAmount('milk x3')).toEqual({ name: 'milk', qty: 3 });
+    expect(parseAmount('2x Milk')).toEqual({ name: 'Milk', qty: 2 });
+    expect(parseAmount('Eggs ×12')).toEqual({ name: 'Eggs', qty: 12 });
+    expect(parseAmount('2 lb ground beef')).toEqual({ name: 'ground beef', note: '2 lb' });
+    expect(parseAmount('1 bag of flour')).toEqual({ name: 'flour', note: '1 bag' });
+    expect(parseAmount('bread (wholemeal)')).toEqual({ name: 'bread', note: 'wholemeal' });
+    expect(parseAmount('3 yogurt (vanilla)')).toEqual({ name: 'yogurt', qty: 3, note: 'vanilla' });
+    // Names that only look like amounts.
+    expect(parseAmount('2% milk')).toEqual({ name: '2% milk' });
+    expect(parseAmount('1 milk')).toEqual({ name: 'milk' });
+    expect(parseAmount('7up')).toEqual({ name: '7up' });
+    expect(parseAmount('V8')).toEqual({ name: 'V8' });
+    expect(withAmount('Milk', { qty: 2, note: 'skim' })).toBe('2 Milk (skim)');
+    expect(parseAmount(withAmount('Ground beef', { note: '2 lb' }))).toEqual({ name: 'Ground beef', note: '2 lb' });
+  });
+});

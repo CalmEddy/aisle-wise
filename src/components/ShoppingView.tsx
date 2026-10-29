@@ -983,6 +983,10 @@ export function ShoppingView(props: Props) {
             setWhereFor(menuFor);
             setMenuFor(null);
           }}
+          onAmount={(patch) => {
+            setItems((prev) => prev.map((i) => (i.id === menuFor.id ? { ...i, ...patch } : i)));
+            setMenuFor({ ...menuFor, ...patch });
+          }}
           pinned={pinned.has(menuFor.id)}
           onPin={() => {
             togglePin(menuFor);
@@ -1207,6 +1211,8 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
                   {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
                   <span className="name">
                     {item.name}
+                    {item.qty && item.qty > 1 && <span className="qty"> ×{item.qty}</span>}
+                    {item.note && <span className="item-note">{item.note}</span>}
                     {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
                   </span>
                 </label>
@@ -1225,6 +1231,8 @@ function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, p
             {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
             <span className="name">
               {item.name}
+              {item.qty && item.qty > 1 && <span className="qty"> ×{item.qty}</span>}
+              {item.note && <span className="item-note">{item.note}</span>}
               {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
             </span>
           </label>
@@ -1317,8 +1325,10 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
   );
 }
 
-function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onCancel, pinned, onPin }: {
+function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onCancel, pinned, onPin, onAmount }: {
   item: ListItem;
+  /** Changes how many, or the note. */
+  onAmount: (patch: Pick<ListItem, 'qty' | 'note'>) => void;
   where: string;
   storeName: string;
   categoryId?: string;
@@ -1335,11 +1345,34 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
   pinned: boolean;
   onPin: () => void;
 }) {
+  const qty = item.qty ?? 1;
+  const [note, setNote] = useState(item.note ?? '');
+  const saveNote = () => {
+    const clean = note.trim();
+    if (clean !== (item.note ?? '')) onAmount({ note: clean || undefined });
+  };
+  const close = () => { saveNote(); onCancel(); };
   return (
-    <div className="sheet-backdrop" onClick={onCancel}>
+    <div className="sheet-backdrop" onClick={close}>
       <div className="sheet" role="dialog" aria-label={`Options for ${item.name}`} onClick={(e) => e.stopPropagation()}>
         <h2>{item.name}</h2>
         <p className="muted small">{where}</p>
+        <div className="amount-row">
+          <div className="stepper" role="group" aria-label="How many">
+            <button className="icon" onClick={() => onAmount({ qty: qty - 1 > 1 ? qty - 1 : undefined })} disabled={qty <= 1} aria-label="One fewer">−</button>
+            <span className="stepper-value" aria-live="polite">{qty}</span>
+            <button className="icon" onClick={() => onAmount({ qty: qty + 1 })} aria-label="One more">＋</button>
+          </div>
+          <input
+            className="note-input"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onBlur={saveNote}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            placeholder="Note (brand, size…)"
+            aria-label={`Note for ${item.name}`}
+          />
+        </div>
         <div className="field menu-category">
           <span>Category</span>
           <CategoryPicker
@@ -1358,7 +1391,7 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
         <button className="pick danger" onClick={onRemove}>Remove from list</button>
         <div className="sheet-actions">
           <span style={{ flex: 1 }} />
-          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn" onClick={close}>Done</button>
         </div>
       </div>
     </div>

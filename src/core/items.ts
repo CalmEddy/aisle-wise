@@ -34,6 +34,52 @@ export function quickAddItems(text: string, catalog: Catalog): { created: Produc
   return { created, existing };
 }
 
+/** Words for amounts that aren't a count ("2 lb ground beef" is a 2 lb note, not two of them). */
+const UNITS = /^(lbs?|pounds?|kg|kilos?|g|grams?|oz|ounces?|l|litres?|liters?|ml|gal|gallons?|pints?|quarts?|qt|dozen|doz|packs?|packets?|bags?|box(es)?|cans?|tins?|jars?|bottles?|bunch(es)?|heads?|loaf|loaves|cartons?|tubs?|rolls?|slices?|cups?)\b\.?\s+(of\s+)?/i;
+
+/**
+ * Splits an amount and a note off a typed name: "2 milk", "milk x2" and
+ * "2x milk" are two of Milk; "2 lb ground beef" is Ground beef with the
+ * note "2 lb"; "bread (wholemeal)" is Bread with the note "wholemeal".
+ */
+export function parseAmount(raw: string): { name: string; qty?: number; note?: string } {
+  let name = raw.trim().replace(/\s+/g, ' ');
+  const notes: string[] = [];
+  const paren = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  if (paren && paren[1]) {
+    name = paren[1];
+    if (paren[2].trim()) notes.push(paren[2].trim());
+  }
+  let qty: number | undefined;
+  const lead = name.match(/^(\d{1,3}(?:\.\d+)?)\s*(?:x|×)?\s+(.+)$/i) ?? name.match(/^(\d{1,2})\s*(?:x|×)(\S.*)$/i);
+  const trail = name.match(/^(.+?)\s*(?:x|×)\s*(\d{1,2})$/i);
+  if (lead) {
+    const unit = lead[2].match(UNITS);
+    if (unit && lead[2].length > unit[0].length) {
+      notes.unshift(`${lead[1]} ${unit[0].trim().replace(/\s+of$/i, '')}`);
+      name = lead[2].slice(unit[0].length);
+    } else if (Number.isInteger(Number(lead[1]))) {
+      qty = Number(lead[1]);
+      name = lead[2];
+    }
+  } else if (trail) {
+    qty = Number(trail[2]);
+    name = trail[1];
+  }
+  const note = notes.join(', ');
+  return { name: name.trim(), ...(qty && qty > 1 && { qty }), ...(note && { note }) };
+}
+
+/** A typed name with its amount and note put back ("2 Milk (the big one)"). */
+export function withAmount(name: string, a: { qty?: number; note?: string }): string {
+  return `${a.qty && a.qty > 1 ? `${a.qty} ` : ''}${name}${a.note ? ` (${a.note})` : ''}`;
+}
+
+/** An amount and note for showing next to a name ("×2 · the big tub"). */
+export function amountText(a: { qty?: number; note?: string }): string {
+  return [a.qty && a.qty > 1 ? `×${a.qty}` : '', a.note ?? ''].filter(Boolean).join(' · ');
+}
+
 /** Quick views of the master list. */
 export type ItemFilter = 'all' | 'place' | 'nocat' | 'list' | 'notsold';
 

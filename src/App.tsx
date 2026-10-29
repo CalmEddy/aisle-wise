@@ -16,6 +16,7 @@ import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turn
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, type Trip } from './core/trips';
+import { parseAmount } from './core/items';
 import { BACK_WALL, buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
 import { DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, type LayoutQuestion } from './core/learn';
@@ -191,8 +192,10 @@ export default function App() {
     const results: QuickAddResult['added'] = [];
 
     for (const raw of names) {
-      const name = raw.trim();
+      const amount = parseAmount(raw);
+      const name = amount.name;
       if (!name) continue;
+      const extra = { ...(amount.qty && { qty: amount.qty }), ...(amount.note && { note: amount.note }) };
       let product = new Catalog(nextProducts, categories).exact(name);
       let saved: string | undefined;
       let conflict: QuickAddResult['added'][number]['conflict'];
@@ -225,9 +228,12 @@ export default function App() {
       const pid = product.id;
       const waiting = nextItems.find((i) => !i.done && (i.productId === pid || productFor(i, catalog)?.id === pid));
       if (waiting && mode === 'cart') {
-        nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, done: true, productId: pid } : i));
-      } else if (!waiting) {
-        nextItems = [...nextItems, { id: newId(), name: product.name, done: mode === 'cart', productId: pid }];
+        nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, ...extra, done: true, productId: pid } : i));
+      } else if (waiting) {
+        // Already on the list: a new amount or note replaces the old one.
+        if (amount.qty || amount.note) nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, ...extra } : i));
+      } else {
+        nextItems = [...nextItems, { id: newId(), name: product.name, done: mode === 'cart', productId: pid, ...extra }];
       }
       results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list', conflict });
     }
