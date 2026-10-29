@@ -823,3 +823,4 @@ main { padding-bottom: 110px; }
 .map-cut-outline { fill: rgba(192, 57, 43, 0.12); stroke: var(--danger); stroke-width: 0.2; stroke-dasharray: 0.5 0.3; pointer-events: none; }
 .map-ghost.cut rect:not(.hit) { fill: var(--danger); fill-opacity: 0.55; stroke: none; }
 .place.shelf.wall.chilled .shelf-label, .place.shelf.wall.frozen .shelf-label { fill: var(--text); stroke: var(--surface); }
+.aisle-group-outline { fill: color-mix(in srgb, var(--you) 8%, transparent); stroke: var(--you); stroke-width: 0.22; stroke-dasharray: 0.6 0.35; pointer-events: none; }

@@ -1,4 +1,5 @@
 import { forwardRef, type ReactNode, type SVGProps } from 'react';
+import { aisleShelves } from '../core/aisles';
 import { footprint, placeNear, sectionShapes, shelfBacks, type Segment } from '../core/geometry';
 import type { SectionLook } from '../display';
 import type { Place, Point, Rect, StoreLayout } from '../core/types';
@@ -77,6 +78,9 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
 ) {
   const pad = focus ? 1.5 : 0.5;
   const box = focus ?? { x: 0, y: 0, w: layout.width, h: layout.height };
+  // A selected aisle shows its shelves selected too (they move and turn with it).
+  const selectedAisle = selectedAisleId ? layout.aisles?.find((a) => a.id === selectedAisleId) : undefined;
+  const aisleShelfIds = new Set(selectedAisle ? aisleShelves(layout, selectedAisle).map((sh) => sh.id) : []);
   const viewBox = `${box.x - pad} ${box.y - pad} ${box.w + pad * 2} ${box.h + pad * 2}`;
   return (
     <svg
@@ -105,7 +109,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           place={place}
           backs={place.kind === 'shelf' ? shelfBacks(layout, place) : []}
           highlighted={highlightId === place.id}
-          selected={selectedId === place.id}
+          selected={selectedId === place.id || aisleShelfIds.has(place.id)}
           look={look}
           onTap={onPlaceTap}
           onPointerDown={onPlacePointerDown}
@@ -128,6 +132,16 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           </g>
         );
       })}
+
+      {selectedAisle && (() => {
+        // One outline round the selected aisle and the shelves that go with it.
+        const parts = [selectedAisle, ...[...aisleShelfIds].map((id) => footprint(layout.places.find((p) => p.id === id)!))];
+        const x = Math.min(...parts.map((r) => r.x));
+        const y = Math.min(...parts.map((r) => r.y));
+        const w = Math.max(...parts.map((r) => r.x + r.w)) - x;
+        const h = Math.max(...parts.map((r) => r.y + r.h)) - y;
+        return <rect className="aisle-group-outline" x={x - 0.2} y={y - 0.2} width={w + 0.4} height={h + 0.4} rx={0.5} />;
+      })()}
 
       {ghosts.map((g, i) => {
         const r = g.rect;
