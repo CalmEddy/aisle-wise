@@ -1,6 +1,7 @@
 import type { Catalog } from './catalog';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
-import type { ListItem, Product, Spot, Stop, StoreLayout } from './types';
+import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
+import { clueRank, resolveClue } from './clues';
 
 export { normalize } from './catalog';
 
@@ -47,6 +48,8 @@ export function resolveSpot(key: string, layout: StoreLayout, catalog: Catalog):
 export type Location =
   | { kind: 'spot'; spot: Spot; product?: Product; /** True when the user set it, not inferred from the category. */ exact: boolean }
   | { kind: 'not-sold'; product: Product }
+  /** The shopper said where it is ("aisle 7"), but the map has nothing to put it on yet. */
+  | { kind: 'clue'; clue: Clue; product: Product }
   | { kind: 'unknown'; product?: Product };
 
 /** Where to find a product in a store. */
@@ -55,6 +58,14 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
   const saved = product.locations?.[layout.id];
   const savedSpot = saved && resolveSpot(saved, layout, catalog);
   if (savedSpot) return { kind: 'spot', spot: savedSpot, product, exact: true };
+  // Where the shopper said it is: on the map if the map can place it, otherwise as said.
+  const clue = product.clues?.[layout.id];
+  if (clue) {
+    const key = resolveClue(clue, layout, product);
+    const spot = key ? resolveSpot(key, layout, catalog) : undefined;
+    if (spot) return { kind: 'spot', spot, product, exact: true };
+    return { kind: 'clue', clue, product };
+  }
   const cat = product.categoryId;
   const place = cat ? layout.places.find((p) => p.categories.includes(cat)) : undefined;
   const spot = place && resolveSpot(`${place.id}:${cat}`, layout, catalog);
@@ -80,11 +91,14 @@ export function groupIntoStops(items: ListItem[], locate: (item: ListItem) => Lo
   const byKey = new Map<string, Stop>();
   const unplaced: ListItem[] = [];
   const notSold: ListItem[] = [];
+  /** Items the shopper has said where they are, but the map can't place yet; sorted by where they are. */
+  const byClue: { item: ListItem; clue: Clue }[] = [];
   for (const item of items) {
     if (item.done) continue;
     const loc = locate(item);
     if (loc.kind === 'not-sold') notSold.push(item);
     else if (loc.kind === 'unknown') unplaced.push(item);
+    else if (loc.kind === 'clue') byClue.push({ item, clue: loc.clue });
     else {
       const square = `${loc.spot.placeId}#${loc.spot.point.x},${loc.spot.point.y}`;
       const stop = byKey.get(square) ?? { ...loc.spot, items: [] };
@@ -92,5 +106,6 @@ export function groupIntoStops(items: ListItem[], locate: (item: ListItem) => Lo
       byKey.set(square, stop);
     }
   }
-  return { stops: [...byKey.values()], unplaced, notSold };
+  byClue.sort((a, b) => clueRank(a.clue) - clueRank(b.clue));
+  return { stops: [...byKey.values()], unplaced, notSold, byClue };
 }

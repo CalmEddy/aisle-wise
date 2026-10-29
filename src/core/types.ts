@@ -107,7 +107,32 @@ export interface Product {
   locations?: Record<string, string>;
   /** Layout ids of stores that don't sell this item. */
   notAt?: string[];
+  /**
+   * Layout id → where the shopper said it was, in plain store terms ("aisle 7,
+   * left, middle", "Produce"). Independent of the map, so maps can be
+   * regenerated without losing it.
+   */
+  clues?: Record<string, Clue>;
 }
+
+/** A side of an aisle, as you walk in from the front of the store. */
+export type AisleSide = 'L' | 'R';
+/** How far along an aisle, from the front of the store. */
+export type AislePos = 'front' | 'middle' | 'back';
+/** Store departments (usually around the walls). */
+export type Dept = 'produce' | 'floral' | 'bakery' | 'deli' | 'meat' | 'seafood' | 'dairy' | 'frozen' | 'pharmacy';
+
+/** Where an item was found, in the words a store uses. */
+export type Clue =
+  | { kind: 'aisle'; aisle: string; side?: AisleSide; pos?: AislePos }
+  | { kind: 'dept'; dept: Dept }
+  /** A freezer case: in a numbered aisle, or along a wall (no aisle). */
+  | { kind: 'freezer'; aisle?: string; side?: AisleSide; pos?: AislePos }
+  /** The display at the end of an aisle. */
+  | { kind: 'endcap'; aisle: string; end: 'front' | 'back' }
+  /** A stand-alone or mid-aisle display, near an aisle or a department. */
+  | { kind: 'display'; aisle?: string; dept?: Dept }
+  | { kind: 'checkout' };
 
 /** A spot where items are picked up. */
 export interface Spot {

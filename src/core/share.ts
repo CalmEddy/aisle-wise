@@ -1,6 +1,6 @@
 import { Catalog, normalize } from './catalog';
 import { aislesToShelves } from './migrate';
-import type { Category, ListItem, Product, StoreLayout } from './types';
+import type { Category, ListItem, Product, StoreLayout, Clue } from './types';
 
 /**
  * Sharing without a server: everything needed is packed into the link
@@ -14,6 +14,8 @@ export interface SharedItem {
   category?: string;
   /** Spot key in the shared store. */
   at?: string;
+  /** Where it is in plain words ("aisle 7, left") in the shared store. */
+  clue?: Clue;
   notAvailable?: true;
 }
 
@@ -54,10 +56,11 @@ export function buildStoreShare(layout: StoreLayout, catalog: Catalog): StoreSha
   const items: SharedItem[] = [];
   for (const p of catalog.products) {
     const at = p.locations?.[layout.id];
+    const clue = p.clues?.[layout.id];
     const notAvailable = p.notAt?.includes(layout.id);
-    if (!at && !notAvailable) continue;
+    if (!at && !clue && !notAvailable) continue;
     const category = p.categoryId ? catalog.categoryById.get(p.categoryId)?.name : undefined;
-    items.push({ name: p.name, ...(category && { category }), ...(at && { at }), ...(notAvailable && { notAvailable: true as const }) });
+    items.push({ name: p.name, ...(category && { category }), ...(at && { at }), ...(clue && { clue }), ...(notAvailable && { notAvailable: true as const }) });
   }
   const used = new Set(layout.places.flatMap((p) => p.categories));
   return { v: 1, kind: 'store', layout, categories: catalog.categories.filter((c) => used.has(c.id)), items };
@@ -194,7 +197,9 @@ export function applyStoreShare(share: StoreShare, data: Data, replaceId?: strin
     // Updating a store: the shared copy's item locations replace ours.
     const locations = { ...p.locations };
     delete locations[replaceId];
-    return { ...p, locations, notAt: p.notAt?.filter((id) => id !== replaceId) };
+    const clues = { ...p.clues };
+    delete clues[replaceId];
+    return { ...p, locations, clues, notAt: p.notAt?.filter((id) => id !== replaceId) };
   });
   for (const shared of share.items) {
     const product = productForShared(shared, products, categories);
@@ -202,6 +207,7 @@ export function applyStoreShare(share: StoreShare, data: Data, replaceId?: strin
     products[i] = {
       ...product,
       locations: shared.at ? { ...product.locations, [layoutId]: remapKey(shared.at) } : product.locations,
+      clues: shared.clue ? { ...product.clues, [layoutId]: shared.clue } : product.clues,
       notAt: shared.notAvailable ? [...(product.notAt ?? []).filter((id) => id !== layoutId), layoutId] : product.notAt,
     };
   }

@@ -10,6 +10,8 @@ import { whereText } from './ShoppingView';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker, byName } from './CategoryPicker';
 import { SwipeRow } from './SwipeRow';
+import { WherePanel } from './WherePanel';
+import { aislesUsed, describeClue } from '../core/clues';
 
 interface Props {
   catalog: Catalog;
@@ -466,6 +468,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
   const [name, setName] = useState(product.name);
   useEffect(() => setName(product.name), [product.name]);
   const [mapFor, setMapFor] = useState<StoreLayout | null>(null);
+  const [whereAt, setWhereAt] = useState<StoreLayout | null>(null);
   const duplicate = catalog.products.find((p) => p.id !== product.id && normalize(p.name) === normalize(name));
 
   function commitName() {
@@ -493,7 +496,8 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
     const sold = !product.notAt?.includes(l.id);
     // What "automatic" resolves to: the place stocking this item's category.
     const auto = locateProduct({ ...product, locations: {}, notAt: [] }, l, catalog);
-    const autoText = auto.kind === 'spot' ? auto.spot.label : 'nowhere yet – pick a place';
+    const autoText = auto.kind === 'spot' ? auto.spot.label : auto.kind === 'clue' ? describeClue(auto.clue) : 'nowhere yet – pick a place';
+    const clue = product.clues?.[l.id];
     const key = product.locations?.[l.id];
     const exactSpot = key && parseExactKey(key) ? resolveSpot(key, l, catalog) : undefined;
     return (
@@ -519,6 +523,19 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
               ))}
             </select>
             <button type="button" className="btn" onClick={() => setMapFor(l)}>📍 Map</button>
+          </div>
+        )}
+        {sold && (
+          <div className="clue-row">
+            <span className="muted small">🏷 {clue ? describeClue(clue) : 'No aisle or department yet'}</span>
+            <button type="button" className="link" onClick={() => setWhereAt(l)}>{clue ? 'Change' : 'Set'}</button>
+            {clue && (
+              <button type="button" className="link" onClick={() => onChange((p) => {
+                const clues = { ...p.clues };
+                delete clues[l.id];
+                return { ...p, clues };
+              }, `${product.name}: aisle info cleared at ${l.name}.`)}>Clear</button>
+            )}
           </div>
         )}
       </div>
@@ -554,6 +571,21 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
         </details>
       )}
 
+      {whereAt && (
+        <WherePanel
+          itemName={product.name}
+          categoryId={product.categoryId}
+          storeName={whereAt.name}
+          recentAisles={aislesUsed(catalog.products, whereAt.id)}
+          current={product.clues?.[whereAt.id]}
+          onSave={(c) => {
+            const at = whereAt;
+            onChange((p) => ({ ...p, clues: { ...p.clues, [at.id]: c } }), `${product.name}: ${describeClue(c)} at ${at.name}.`);
+            setWhereAt(null);
+          }}
+          onSkip={() => setWhereAt(null)}
+        />
+      )}
       {mapFor && (
         <SpotPicker
           title={`Where is ${product.name} at ${mapFor.name}?`}

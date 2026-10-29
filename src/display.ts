@@ -15,6 +15,8 @@ export interface Display {
   buildDouble?: boolean;
   /** Walkway width (squares) between shelves in a shelf block. */
   blockLane?: number;
+  /** Stores where the app doesn't ask "Where was it?" at check-off. */
+  noAskStores?: string[];
   /** The aisle brush's sides and walkway width. */
   brush?: { left: 'shelf' | 'wall' | 'gap'; right: 'shelf' | 'wall' | 'gap'; width: number; leftCategory?: string; rightCategory?: string; aisleLabel?: string };
 }

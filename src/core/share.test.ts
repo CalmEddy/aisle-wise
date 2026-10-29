@@ -63,6 +63,14 @@ describe('sharing a store', () => {
     expect(result.products.find((p) => p.name === 'Pretzels')!.notAt).toEqual([result.layoutId]);
   });
 
+  it('carries "aisle 7, left" answers with the store', () => {
+    const withClue = defaultProducts.map((p) => (p.name === 'Bread' ? { ...p, clues: { demo: { kind: 'aisle' as const, aisle: '7', side: 'L' as const } } } : p));
+    const s2 = buildStoreShare(demoLayout, new Catalog(withClue, defaultCategories));
+    expect(s2.items).toContainEqual({ name: 'Bread', category: 'Bakery', clue: { kind: 'aisle', aisle: '7', side: 'L' } });
+    const result = applyStoreShare(s2, fresh());
+    expect(result.products.find((p) => p.name === 'Bread')!.clues?.[result.layoutId]).toEqual({ kind: 'aisle', aisle: '7', side: 'L' });
+  });
+
   it('maps categories by name when ids differ, creating missing ones', () => {
     const renamed = { ...share, categories: share.categories.map((c) => ({ ...c, id: `their-${c.id}` })) };
     renamed.layout = { ...share.layout, places: share.layout.places.map((p) => ({ ...p, categories: p.categories.map((c) => `their-${c}`) })) };

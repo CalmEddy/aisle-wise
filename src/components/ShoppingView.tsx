@@ -7,7 +7,7 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { ListItem, Place, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
+import type { Clue, ListItem, Place, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, type BuildTool, type StoreApi } from './BuildTools';
@@ -20,6 +20,9 @@ import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { CategoryPicker } from './CategoryPicker';
 import { AddItemsSheet } from './AddItemsSheet';
+import { WherePanel } from './WherePanel';
+import { aislesUsed, describeClue } from '../core/clues';
+import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
 
@@ -44,6 +47,15 @@ interface Props {
   setProductLocation: (productId: string, spotKey: string | null) => void;
   build: BuildApi;
   setItemCategory: (item: ListItem, categoryId: string | undefined) => void;
+  /** "Where was it?": whether to ask in this store, saving answers, and logging check-off order. */
+  where: {
+    ask: boolean;
+    setAsk: (on: boolean) => void;
+    setClue: (item: ListItem, clue: Clue | undefined) => Snapshot;
+    notePick: (item: ListItem, picked: boolean) => void;
+    /** The cart was cleared: the next check-off starts a new trip. */
+    newTrip: () => void;
+  };
   position: Point;
   setPosition: (p: Point) => void;
   onEditLayout: () => void;
@@ -117,6 +129,10 @@ export function ShoppingView(props: Props) {
   const [menuFor, setMenuFor] = useState<ListItem | null>(null);
   const [note, setNote] = useState<BuildNote | null>(null);
   const building = props.display.buildMode;
+  // Build-mode banners belong to build mode: leaving it clears them.
+  useEffect(() => {
+    if (!building) setNote(null);
+  }, [building]);
   // Build mode: the shelf or area being edited.
   const [editingId, setEditingId] = useState<string>();
   const editing = building ? layout.places.find((p) => p.id === editingId) : undefined;
@@ -348,8 +364,8 @@ export function ShoppingView(props: Props) {
   };
 
   // Re-plans every time the list, the layout, the master list or the shopper's position changes.
-  const { route, visits, unplaced, notSold } = useMemo(() => {
-    const { stops, unplaced, notSold } = groupIntoStops(items, locate);
+  const { route, visits, unplaced, notSold, byClue } = useMemo(() => {
+    const { stops, unplaced, notSold, byClue } = groupIntoStops(items, locate);
     // Each shelf or area is picked up in one pass, walked end to end.
     const route = planGroupedRoute(position, stops, layout.checkout, floor.distance, (st) => {
       const place = layout.places.find((p) => p.id === st.placeId);
@@ -357,7 +373,7 @@ export function ShoppingView(props: Props) {
       const alongX = place.kind === 'shelf' ? place.orientation === 'horizontal' : place.w >= place.h;
       return alongX ? st.point.x * 1000 + st.point.y : st.point.y * 1000 + st.point.x;
     });
-    return { route, visits: groupVisits(route), unplaced, notSold };
+    return { route, visits: groupVisits(route), unplaced, notSold, byClue };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, layout, floor, catalog, position]);
 
@@ -427,9 +443,42 @@ export function ShoppingView(props: Props) {
       return;
     }
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
+    props.where.notePick(item, !item.done);
     // Picking something up tells us where the shopper is standing.
     const loc = locate(item);
     if (!item.done && loc.kind === 'spot') setPosition(loc.spot.point);
+    // Nothing saved about where it is in this store yet: ask.
+    if (!item.done && props.where.ask && isUnknownHere(item)) setWhereFor(item);
+  }
+
+  // ---- "Where was it?" ----
+  const [whereFor, setWhereFor] = useState<ListItem | null>(null);
+  // Items to ask about later (per store), and the last answer (for "Same as last").
+  const [askLater, setAskLater] = usePersistentState<Record<string, string[]>>('aw.askLater', {});
+  const [lastClue, setLastClue] = useState<Clue>();
+  /** No saved place and no answer for this store. */
+  function isUnknownHere(item: ListItem) {
+    const p = productFor(item, catalog);
+    return !p?.locations?.[layout.id] && !p?.clues?.[layout.id];
+  }
+  const laterHere = (askLater[layout.id] ?? [])
+    .map((id) => items.find((i) => i.id === id))
+    .filter((i): i is ListItem => !!i && isUnknownHere(i));
+  const setLaterHere = (fn: (ids: string[]) => string[]) =>
+    setAskLater((prev) => ({ ...prev, [layout.id]: fn(prev[layout.id] ?? []) }));
+  /** After answering (or skipping), the next one waiting, if reviewing the ask-later list. */
+  function nextWhere(after: ListItem) {
+    const rest = laterHere.filter((i) => i.id !== after.id);
+    setLaterHere((ids) => ids.filter((id) => id !== after.id));
+    setWhereFor(reviewing && rest.length ? rest[0] : null);
+    if (!rest.length) setReviewing(false);
+  }
+  const [reviewing, setReviewing] = useState(false);
+  function saveWhere(item: ListItem, clue: Clue) {
+    const snapshot = props.where.setClue(item, clue);
+    setLastClue(clue);
+    setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
+    nextWhere(item);
   }
 
   function remove(item: ListItem) {
@@ -446,6 +495,7 @@ export function ShoppingView(props: Props) {
   }
 
   function newTrip() {
+    props.where.newTrip();
     setItems((prev) => prev.filter((i) => !i.done));
     setPosition(layout.entrance);
   }
@@ -498,6 +548,21 @@ export function ShoppingView(props: Props) {
           lists={props.lists}
           onClose={props.onListsClose}
           onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+        />
+      )}
+      {whereFor && (
+        <WherePanel
+          key={whereFor.id}
+          itemName={whereFor.name}
+          categoryId={productFor(whereFor, catalog)?.categoryId}
+          storeName={layout.name}
+          recentAisles={aislesUsed(catalog.products, layout.id)}
+          lastClue={lastClue}
+          queued={reviewing ? Math.max(0, laterHere.filter((i) => i.id !== whereFor.id).length) : undefined}
+          onSave={(clue) => saveWhere(whereFor, clue)}
+          onLater={reviewing ? undefined : () => { setLaterHere((ids) => [...ids.filter((id) => id !== whereFor.id), whereFor.id]); setWhereFor(null); }}
+          onSkip={() => nextWhere(whereFor)}
+          onStopAsking={() => { props.where.setAsk(false); setWhereFor(null); setReviewing(false); }}
         />
       )}
       {adding && (
@@ -668,6 +733,11 @@ export function ShoppingView(props: Props) {
       )}
 
       <main>
+        {laterHere.length > 0 && (
+          <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => { setReviewing(true); setWhereFor(laterHere[0]); }}>
+            📍 {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>
+          </button>
+        )}
         {items.length === 0 && (
           <div className="empty">
             <p>Your list is empty.</p>
@@ -718,6 +788,20 @@ export function ShoppingView(props: Props) {
           )} />
         ))}
           </div>
+        )}
+
+        {byClue.length > 0 && (
+          <section className="card by-clue">
+            <h3>By aisle <span className="muted small">· not on the map yet</span></h3>
+            <ItemRows
+              items={byClue.map((b) => b.item)}
+              onToggle={toggle}
+              onRemove={remove}
+              onMenu={setMenuFor}
+              iconOf={iconOf}
+              subOf={(item) => { const b = byClue.find((x) => x.item.id === item.id); return b && describeClue(b.clue); }}
+            />
+          </section>
         )}
 
         {(unplaced.length > 0 || notSold.length > 0) && (
@@ -824,7 +908,7 @@ export function ShoppingView(props: Props) {
           item={menuFor}
           where={(() => {
             const loc = locate(menuFor);
-            return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
+            return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'clue' ? describeClue(loc.clue) : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
           })()}
           storeName={layout.name}
           categoryId={productFor(menuFor, catalog)?.categoryId}
@@ -833,6 +917,10 @@ export function ShoppingView(props: Props) {
           onCategory={(id) => props.setItemCategory(menuFor, id)}
           onChangePlace={() => {
             setPicking({ productId: productFor(menuFor, catalog)?.id, item: menuFor, name: menuFor.name });
+            setMenuFor(null);
+          }}
+          onWhere={() => {
+            setWhereFor(menuFor);
             setMenuFor(null);
           }}
           onNotAvailable={() => {
@@ -905,6 +993,7 @@ export function whereText(product: Product, layout: StoreLayout, catalog: Catalo
   const loc = locateProduct(product, layout, catalog);
   if (loc.kind === 'spot') return loc.spot.label;
   if (loc.kind === 'not-sold') return 'Not available here';
+  if (loc.kind === 'clue') return describeClue(loc.clue);
   return catalog.categoryById.get(product.categoryId ?? '')?.name ?? 'No location yet';
 }
 
@@ -1103,7 +1192,7 @@ function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClos
   );
 }
 
-function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onNotAvailable, onRemove, onCancel }: {
+function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onCancel }: {
   item: ListItem;
   where: string;
   storeName: string;
@@ -1112,6 +1201,8 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
   looks: Map<string, { color: string; icon: string }>;
   onCategory: (id: string | undefined) => void;
   onChangePlace: () => void;
+  /** Say where it is in plain words (aisle, department…). */
+  onWhere: () => void;
   onNotAvailable: () => void;
   onRemove: () => void;
   onCancel: () => void;
@@ -1132,7 +1223,8 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
             label={`Category of ${item.name}`}
           />
         </div>
-        <button className="pick" onClick={onChangePlace}>📍 Change place</button>
+        <button className="pick" onClick={onChangePlace}>📍 Change place on the map</button>
+        <button className="pick" onClick={onWhere}>🏷 Aisle / department…</button>
         <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
         <button className="pick danger" onClick={onRemove}>Remove from list</button>
         <div className="sheet-actions">

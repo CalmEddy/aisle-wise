@@ -13,11 +13,12 @@ import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
+import { recordPick, startTrip, unrecordPick, type Trip } from './core/trips';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Rect } from './core/types';
+import type { Clue, Rect } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
 import { clampPlace } from './core/geometry';
@@ -339,6 +340,45 @@ export default function App() {
     return snapshot;
   }
 
+  // ---- Where things are, in plain words ("aisle 7, left") ----
+
+  // Check-off order per trip, per store (on this phone only), for learning the layout later.
+  const [, setTrips] = usePersistentState<Trip[]>('aw.trips', []);
+  function notePick(item: ListItem, picked: boolean) {
+    const product = productFor(item, catalog);
+    setTrips((prev) => (picked
+      ? recordPick(prev, layout.id, { ...(product && { productId: product.id }), name: product?.name ?? item.name, at: Date.now() })
+      : unrecordPick(prev, layout.id, product?.name ?? item.name)));
+  }
+
+  /** Saves where a list item is in this store (on its master-list item, creating one if needed). Returns what Undo restores. */
+  function setClue(item: ListItem, clue: Clue | undefined): Snapshot {
+    const snapshot: Snapshot = { items, products, layouts };
+    const apply = (p: Product): Product => {
+      const clues = { ...p.clues };
+      if (clue) clues[layout.id] = clue;
+      else delete clues[layout.id];
+      return { ...p, clues };
+    };
+    const product = productFor(item, catalog);
+    if (product) {
+      setProducts((prev) => prev.map((p) => (p.id === product.id ? apply(p) : p)));
+      if (item.productId !== product.id) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: product.id } : i)));
+    } else {
+      const created = apply({ id: `p-${newId()}`, name: capitalize(item.name.trim()) });
+      setProducts((prev) => [...prev, created]);
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
+    }
+    return snapshot;
+  }
+
+  /** Whether to ask "Where was it?" at check-off in this store. */
+  const askWhere = !display.noAskStores?.includes(layout.id);
+  const setAskWhere = (on: boolean) => setDisplay((d) => ({
+    ...d,
+    noAskStores: on ? (d.noAskStores ?? []).filter((id) => id !== layout.id) : [...(d.noAskStores ?? []).filter((id) => id !== layout.id), layout.id],
+  }));
+
   /** Changes a list item's category (on its master-list item, creating one if needed). */
   function setItemCategory(item: ListItem, categoryId: string | undefined) {
     const product = productFor(item, catalog);
@@ -512,6 +552,7 @@ export default function App() {
     setProducts((prev) => prev.map((p) => ({
       ...p,
       locations: p.locations?.[fromId] ? { ...p.locations, [toId]: p.locations[fromId] } : p.locations,
+      clues: p.clues?.[fromId] ? { ...p.clues, [toId]: p.clues[fromId] } : p.clues,
       notAt: p.notAt?.includes(fromId) ? [...p.notAt, toId] : p.notAt,
     })));
   }
@@ -670,6 +711,7 @@ export default function App() {
             store: { layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id },
           }}
           setItemCategory={setItemCategory}
+          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: () => setTrips((prev) => startTrip(prev, layout.id, Date.now())) }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}
