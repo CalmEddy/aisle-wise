@@ -17,6 +17,8 @@ export interface Display {
   blockLane?: number;
   /** Show the whole map while shopping (otherwise a strip around you and the next stop). */
   mapFull?: boolean;
+  /** Build mode shows every tool (single shelves, cut, entrance, checkout), not just the main four. */
+  buildMoreTools?: boolean;
   /** Stores where the app doesn't ask "Where was it?" at check-off. */
   noAskStores?: string[];
   /** The aisle brush's sides and walkway width. */

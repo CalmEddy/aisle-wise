@@ -24,17 +24,32 @@ const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
 ];
 
 /** The build-mode tools under the map: one row of icons, with the chosen tool's name and a short hint. */
-export function BuildToolbar({ tool, setTool }: { tool: BuildTool; setTool: (t: BuildTool) => void }) {
+/** The tools shown until "more" is opened: enough to lay out most stores. */
+const MAIN_TOOLS: BuildTool[] = ['walk', 'brush', 'block', 'area'];
+
+export function BuildToolbar({ tool, setTool, more, setMore }: {
+  tool: BuildTool;
+  setTool: (t: BuildTool) => void;
+  /** Showing every tool. */
+  more: boolean;
+  setMore: (more: boolean) => void;
+}) {
   const current = TOOLS.find((t) => t.id === tool)!;
+  // A tool in use stays visible even when the extra ones are hidden.
+  const shown = TOOLS.filter((t) => more || MAIN_TOOLS.includes(t.id) || t.id === tool);
   return (
     <div className="build-toolbar">
       <div className="toolbar tool-icons" role="toolbar" aria-label="Build tools">
-        {TOOLS.map((t) => (
+        {shown.map((t) => (
           <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} aria-pressed={tool === t.id}
             aria-label={t.label} title={t.label} onClick={() => setTool(t.id)}>
             {t.icon}
           </button>
         ))}
+        <button className="chip more-tools" aria-expanded={more} aria-label={more ? 'Fewer tools' : 'More tools'}
+          title={more ? 'Fewer tools' : 'More tools: single shelves, cut aisles, entrance, checkout'} onClick={() => setMore(!more)}>
+          {more ? '‹' : '⋯'}
+        </button>
       </div>
       <p className="muted small tool-hint"><b>{current.label}:</b> {current.hint}</p>
     </div>

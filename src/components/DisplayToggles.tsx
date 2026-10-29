@@ -15,6 +15,7 @@ const LABELS: Record<Switch, string> = {
   buildArea: 'Build areas',
   buildDouble: 'Double shelves',
   mapFull: 'Whole map',
+  buildMoreTools: 'More build tools',
 };
 
 /** What the compact switch shows. */
@@ -28,6 +29,7 @@ const SHORT: Record<Switch, string> = {
   buildArea: 'Areas',
   buildDouble: 'Double',
   mapFull: '🗺',
+  buildMoreTools: '⋯',
 };
 
 /** Switches shown together under a heading ("Map 🎨 🍎"). */

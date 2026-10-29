@@ -89,6 +89,11 @@ test('selecting an aisle selects its shelves; it moves as one, and turns when th
 test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page }) => {
   await fresh(page, cornerStore());
   await page.getByRole('button', { name: 'Build mode' }).click();
+  // The main four tools show first; the rest are under "More tools" (remembered).
+  await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(4);
+  await page.getByRole('button', { name: 'More tools' }).click();
+  await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(9);
+  expect((await saved<any>(page, 'display')).buildMoreTools).toBe(true);
   await page.getByRole('button', { name: 'Cut aisles' }).click();
   const l0 = await layout(page);
   await dragMap(page, [5, 12], [l0.width - 7, 13]);

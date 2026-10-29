@@ -680,7 +680,10 @@ export function ShoppingView(props: Props) {
             })()}
           </StoreMap>
           )}
-          {building && <BuildToolbar tool={tool} setTool={setTool} />}
+          {building && (
+            <BuildToolbar tool={tool} setTool={setTool} more={!!props.display.buildMoreTools}
+              setMore={(more) => props.setDisplay((d) => ({ ...d, buildMoreTools: more }))} />
+          )}
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
