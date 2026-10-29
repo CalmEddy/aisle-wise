@@ -73,6 +73,17 @@ export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categorie
         </div>
       )}
 
+      <div className="field">
+        <span>Kept</span>
+        <div className="segmented" role="group" aria-label="Kept">
+          {([undefined, 'chilled', 'frozen'] as const).map((t) => (
+            <button key={String(t)} className={place.temp === t ? 'active' : ''} aria-pressed={place.temp === t} onClick={() => onChange({ temp: t })}>
+              {t === undefined ? 'Room temperature' : t === 'chilled' ? '🧊 Fridge' : '❄ Freezer'}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="field-row nudge">
         <span className="muted small">Position {place.x}, {place.y} · {f.w}×{f.h}</span>
         <button className="btn" onClick={() => move(-1, 0)} aria-label="Move left">←</button>

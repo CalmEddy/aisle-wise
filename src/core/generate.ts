@@ -143,8 +143,9 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
       // Walking up the aisle from the front, left is the smaller x.
       const x = side === 'L' ? walk.x - 1 : walk.x + 2;
       const shelf: Shelf = {
-        kind: 'shelf', id: `g-shelf-${a.label}-${side}`, label: `${a.label}${side}${a.freezer ? ' ❄' : ''}`,
+        kind: 'shelf', id: `g-shelf-${a.label}-${side}`, label: `${a.label}${side}`,
         orientation: 'vertical', x, y: yShelf, length: L, categories: cats(a, side), ...(a.seen ? {} : { guess: true }),
+        ...(a.freezer && { temp: 'frozen' as const }),
       };
       places.push(shelf);
     }

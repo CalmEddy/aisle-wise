@@ -24,7 +24,12 @@ interface PlaceBase {
   categories: string[];
   /** Generated from aisle answers but not confirmed by any (drawn dashed). */
   guess?: boolean;
+  /** A freezer or a fridge (cold case), not room-temperature shelving. */
+  temp?: Temp;
 }
+
+/** Freezer or fridge. */
+export type Temp = 'frozen' | 'chilled';
 
 /** A shelf: a single run of shelving, one square thick, reachable from either side. */
 export interface Shelf extends PlaceBase {

@@ -787,9 +787,9 @@ main { padding-bottom: 110px; }
 .row .qty { font-weight: 700; color: var(--accent); white-space: nowrap; }
 .row .item-note { display: block; font-size: 0.8rem; color: var(--muted); font-style: italic; }
 .amount-row { display: flex; gap: 0.5rem; align-items: center; margin: 0.25rem 0 0.75rem; }
-.stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; }
-.stepper .icon { width: 2.5rem; height: 2.5rem; font-size: 1.2rem; }
-.stepper-value { min-width: 1.75rem; text-align: center; font-weight: 700; }
+.qty-stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; }
+.qty-stepper .icon { width: 2.5rem; height: 2.5rem; font-size: 1.2rem; }
+.qty-stepper-value { min-width: 1.75rem; text-align: center; font-weight: 700; }
 .note-input { flex: 1; min-width: 0; }
 
 /* ---- Buy again (add window) ---- */
@@ -802,3 +802,19 @@ main { padding-bottom: 110px; }
 .trip-done-card h3 { margin: 0; color: var(--accent); }
 .trip-done-card p { margin: 0; }
 .trip-done-card .layout-question { margin: 0; max-width: none; }
+
+/* ---- Freezers and fridges ---- */
+.place.chilled .place-bg { fill: #bfe9ee; stroke: #3aa7b8; stroke-width: 0.12; }
+.place.frozen .place-bg { fill: #c7dcff; stroke: #4a7fd6; stroke-width: 0.12; }
+.place.shelf.wall.chilled .place-bg { fill: #7cc9d4; }
+.place.shelf.wall.frozen .place-bg { fill: #86a9e6; }
+.temp-badge { pointer-events: none; }
+@media (prefers-color-scheme: dark) {
+  .place.chilled .place-bg { fill: #1f4f56; }
+  .place.frozen .place-bg { fill: #233d6b; }
+  .place.shelf.wall.chilled .place-bg { fill: #2b6a73; }
+  .place.shelf.wall.frozen .place-bg { fill: #2f4f8a; }
+}
+.temp-frame { fill: none; stroke-width: 0.22; pointer-events: none; }
+.place.chilled .temp-frame { stroke: #1e9fb3; }
+.place.frozen .temp-frame { stroke: #2f6fe0; }

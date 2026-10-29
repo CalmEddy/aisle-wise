@@ -197,7 +197,7 @@ function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointe
   const size = isShelf
     ? Math.min(0.78, (run / chars) * 1.6)
     : Math.min(1.5, Math.max(0.8, thick * 0.4), (run / chars) * 1.7);
-  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.guess && 'guess', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
+  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, place.guess && 'guess', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
   const pad = 0.6; // easier to tap a thin shelf
 
@@ -238,6 +238,15 @@ function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointe
         >
           {place.label}
         </text>
+      )}
+      {place.temp && (
+        <>
+          <rect className="temp-frame" x={f.x + 0.05} y={f.y + 0.05} width={f.w - 0.1} height={f.h - 0.1} rx={isShelf ? 0.25 : 0.6} />
+          <text className="temp-badge" x={f.x + f.w - Math.min(0.5, f.w / 2)} y={f.y + f.h - Math.min(0.5, f.h / 2)} textAnchor="middle" dominantBaseline="central"
+            fontSize={Math.min(0.8, f.w, f.h)} aria-label={place.temp === 'frozen' ? 'Freezer' : 'Fridge'}>
+            {place.temp === 'frozen' ? '❄' : '🧊'}
+          </text>
+        </>
       )}
       {look?.iconOf && sections.map((sec, i) => {
         const icon = look.iconOf!(sec.categoryId);

@@ -1394,9 +1394,9 @@ function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCat
         <h2>{item.name}</h2>
         <p className="muted small">{where}</p>
         <div className="amount-row">
-          <div className="stepper" role="group" aria-label="How many">
+          <div className="qty-stepper" role="group" aria-label="How many">
             <button className="icon" onClick={() => onAmount({ qty: qty - 1 > 1 ? qty - 1 : undefined })} disabled={qty <= 1} aria-label="One fewer">−</button>
-            <span className="stepper-value" aria-live="polite">{qty}</span>
+            <span className="qty-stepper-value" aria-live="polite">{qty}</span>
             <button className="icon" onClick={() => onAmount({ qty: qty + 1 })} aria-label="One more">＋</button>
           </div>
           <input
