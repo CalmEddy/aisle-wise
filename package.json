@@ -7,7 +7,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -16,6 +17,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.2.12",
+    "@playwright/test": "1.63.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

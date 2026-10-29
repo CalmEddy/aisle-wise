@@ -535,10 +535,6 @@ export function ShoppingView(props: Props) {
     nextWhere(item);
   }
 
-  function remove(item: ListItem) {
-    setItems((prev) => prev.filter((i) => i.id !== item.id));
-  }
-
   const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);
 
   /** Takes items off the list, with Undo. */
@@ -1114,7 +1110,7 @@ export function ShoppingView(props: Props) {
             setMenuFor(null);
           }}
           onRemove={() => {
-            remove(menuFor);
+            removeWithUndoOne(menuFor);
             setMenuFor(null);
           }}
           onCancel={() => setMenuFor(null)}

@@ -186,7 +186,12 @@ npm install
 npm run dev      # open the "Network" URL on your phone (same Wi-Fi)
 npm test         # routing, matching, sharing, sync and database-rule tests
 npm run build    # static files in dist/ – host anywhere (GitHub Pages, Netlify…)
+npm run e2e      # browser tests on a phone-sized screen (after npm run build;
+                 # first time: npx playwright install chromium)
 ```
+
+The browser tests live in `e2e/`. GitHub Actions runs them, with the unit tests,
+before every deploy and on pull requests.
 
 On the phone, use **Share → Add to Home Screen** (iOS) or **Install app**
 (Android) to run it full-screen like a native app. It keeps working with poor
