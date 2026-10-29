@@ -44,3 +44,53 @@ describe('aisle labels', () => {
     expect(clipAisles({ ...l, height: 10 }).aisles).toHaveLength(0);
   });
 });
+
+describe('moving and turning a whole aisle', () => {
+  const l: StoreLayout = {
+    id: 't', name: 'T', width: 30, height: 30, entrance: { x: 0, y: 29 }, checkout: { x: 5, y: 29 },
+    places: [
+      { kind: 'shelf', id: 'L', label: 'L', orientation: 'vertical', x: 10, y: 5, length: 10, categories: ['a', 'b'] },
+      { kind: 'shelf', id: 'R', label: 'R', orientation: 'vertical', x: 13, y: 5, length: 10, categories: [], back: 1 },
+      { kind: 'shelf', id: 'other', label: 'O', orientation: 'vertical', x: 20, y: 5, length: 10, categories: [] },
+    ],
+    aisles: [{ id: 'a', label: 'Aisle 1', x: 11, y: 5, w: 2, h: 10 }],
+  };
+
+  it('finds the shelves on both sides', async () => {
+    const { aisleShelves } = await import('./aisles');
+    expect(aisleShelves(l, l.aisles![0]).map((s) => s.id).sort()).toEqual(['L', 'R']);
+  });
+
+  it('moves label and shelves together, unless something is in the way', async () => {
+    const { moveAisle } = await import('./aisles');
+    const r = moveAisle(l, 'a', 2, -1);
+    expect(r.ok).toBe(true);
+    expect(r.layout.places.find((p) => p.id === 'L')).toMatchObject({ x: 12, y: 4 });
+    expect(r.layout.places.find((p) => p.id === 'R')).toMatchObject({ x: 15, y: 4 });
+    expect(r.layout.aisles![0]).toMatchObject({ x: 13, y: 4 });
+    expect(r.layout.places.find((p) => p.id === 'other')).toMatchObject({ x: 20 });
+    expect(moveAisle(l, 'a', 7, 0).ok).toBe(false); // R would land on "other"
+  });
+
+  it('turns a quarter turn about its middle and back again', async () => {
+    const { turnAisle } = await import('./aisles');
+    const r = turnAisle(l, 'a');
+    expect(r.ok).toBe(true);
+    const a = r.layout.aisles![0];
+    expect(a).toMatchObject({ w: 10, h: 2 });
+    const L = r.layout.places.find((p) => p.id === 'L') as Shelf;
+    const R = r.layout.places.find((p) => p.id === 'R') as Shelf;
+    expect(L.orientation).toBe('horizontal');
+    // The left shelf goes below the walkway (top → left keeps its order), the right one above.
+    expect(L.y).toBe(a.y + a.h);
+    expect(R.y).toBe(a.y - 1);
+    expect(R.back).toBe(-1); // still backed away from the walkway
+    expect(L.categories).toEqual(['a', 'b']);
+    // Same middle.
+    expect(a.x + a.w / 2).toBeCloseTo(12, 0);
+    expect(a.y + a.h / 2).toBeCloseTo(10, 0);
+    const back = turnAisle(r.layout, 'a');
+    expect(back.layout.places.find((p) => p.id === 'L')).toMatchObject({ x: 10, y: 5, orientation: 'vertical' });
+    expect(back.layout.aisles![0]).toMatchObject({ x: 11, y: 5, w: 2, h: 10 });
+  });
+});

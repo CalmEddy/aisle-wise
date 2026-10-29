@@ -111,6 +111,8 @@ export interface BuildApi {
     rename: (id: string, label: string) => void;
     remove: (id: string) => Snapshot;
     renumber: () => Snapshot;
+    move: (id: string, dx: number, dy: number) => boolean;
+    turn: (id: string) => Snapshot | undefined;
     cut: (box: Rect, numbers: CutNumbers) => { snapshot: Snapshot; cut: number; renamed: string[] };
   };
   store: StoreApi;
@@ -729,6 +731,33 @@ export function ShoppingView(props: Props) {
                   <span>Name (shown along the walkway)</span>
                   <input value={editingAisle.label} onChange={(e) => props.build.aisles.rename(editingAisle.id, e.target.value)} placeholder="e.g. Aisle 5" autoFocus />
                 </label>
+                <div className="field">
+                  <span>Whole aisle (label and the shelves on both sides)</span>
+                  <div className="segmented" role="group" aria-label="Aisle direction">
+                    {(['vertical', 'horizontal'] as const).map((o) => {
+                      const now = editingAisle.h >= editingAisle.w ? 'vertical' : 'horizontal';
+                      return (
+                        <button key={o} className={now === o ? 'active' : ''} aria-pressed={now === o} onClick={() => {
+                          if (now === o) return;
+                          const snapshot = props.build.aisles.turn(editingAisle.id);
+                          setNote(snapshot
+                            ? { kind: 'message', text: `Turned ${editingAisle.label}.`, snapshot }
+                            : { kind: 'message', text: 'No room to turn it here: something’s in the way, or it would go past the walls.' });
+                        }}>
+                          {o === 'vertical' ? '↕ Up & down' : '↔ Side to side'}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="field-row nudge">
+                  <span className="muted small">Move the aisle</span>
+                  {([['←', -1, 0, 'left'], ['↑', 0, -1, 'up'], ['↓', 0, 1, 'down'], ['→', 1, 0, 'right']] as const).map(([icon, dx, dy, word]) => (
+                    <button key={word} className="btn" aria-label={`Move aisle ${word}`} onClick={() => {
+                      if (!props.build.aisles.move(editingAisle.id, dx, dy)) setNote({ kind: 'message', text: 'Can’t move it that way: something’s in the way, or it’s at the wall.' });
+                    }}>{icon}</button>
+                  ))}
+                </div>
                 <button className="btn danger" onClick={() => {
                   const snapshot = props.build.aisles.remove(editingAisle.id);
                   setEditingAisleId(undefined);

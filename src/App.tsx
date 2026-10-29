@@ -14,7 +14,7 @@ import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
-import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
+import { addAisle, clipAisles, removeAisle, renameAisle, moveAisle, turnAisle } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
@@ -532,6 +532,20 @@ export default function App() {
     remove(id: string): Snapshot {
       const snapshot = snapshotNow();
       replaceLayout(removeAisle(layout, id));
+      return snapshot;
+    },
+    /** Moves the whole aisle (label and both shelves). False if there's no room. */
+    move(id: string, dx: number, dy: number): boolean {
+      const r = moveAisle(layout, id, dx, dy);
+      if (r.ok) replaceLayout(r.layout);
+      return r.ok;
+    },
+    /** Turns the whole aisle a quarter turn. Undefined if there's no room. */
+    turn(id: string): Snapshot | undefined {
+      const snapshot = snapshotNow();
+      const r = turnAisle(layout, id);
+      if (!r.ok) return undefined;
+      replaceLayout(r.layout);
       return snapshot;
     },
     /** Numbers every numbered aisle 1, 2, 3… from the back block, door side first. */

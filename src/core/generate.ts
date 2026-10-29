@@ -234,7 +234,7 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
     }
   });
 
-  // Along the walls: each wall is a chain of sections. Departments go on the wall the answers say,
+  // Along the walls: each wall is a chain of shelf sections. Departments go on the wall the answers say,
   // or their usual one: Produce up the entrance-side wall, Frozen up the far wall (or swapped),
   // the rest along the back from the entrance side. Floral and Pharmacy take the front corners.
   const sideRun = { from: yShelf, len: L };
@@ -285,14 +285,13 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
     const extra = temp ? { temp } : {};
     // Side walls run up the map from the front (bottom).
     const y = sideRun.from + sideRun.len - start - len;
-    if (sec.dept) {
-      const info = deptInfo(sec.dept);
-      const r: Rect = wall === 'back' ? { x: backRun.from + start, y: 1, w: len, h: 3 }
-        : { x: wall === 'left' ? 1 : width - 5, y, w: 4, h: len };
-      return { kind: 'area', id: `g-dept-${sec.dept}`, label: info.name, ...r, categories: [...info.categories], ...extra };
-    }
-    const label = temp === 'frozen' ? 'Freezer' : temp === 'chilled' ? 'Refrigerated' : 'Wall shelves';
-    const base = { kind: 'shelf' as const, id: `g-wall-${sec.key}`, label, length: len, categories: [...sec.categories], ...extra };
+    // Every section is a run of wall shelving, stocked from the store side only.
+    const info = sec.dept && deptInfo(sec.dept);
+    const label = info ? info.name : temp === 'frozen' ? 'Freezer' : temp === 'chilled' ? 'Refrigerated' : 'Wall shelves';
+    const base = {
+      kind: 'shelf' as const, id: info ? `g-dept-${sec.dept}` : `g-wall-${sec.key}`, label, length: len,
+      categories: info ? [...info.categories] : [...sec.categories], ...extra,
+    };
     if (wall === 'back') return { ...base, orientation: 'horizontal', x: backRun.from + start, y: 1, back: -1 };
     return { ...base, orientation: 'vertical', x: wall === 'left' ? 1 : width - 2, y, back: wall === 'left' ? -1 : 1 };
   }

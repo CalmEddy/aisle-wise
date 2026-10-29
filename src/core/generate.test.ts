@@ -139,6 +139,9 @@ describe('walls as chains of sections, and things out in the open', () => {
     expect(produce.x).toBeGreaterThan(l.width / 2); // right wall
     expect(bakery.x).toBe(produce.x);
     expect(bakery.y).toBeLessThan(produce.y); // back of the store is up the map
+    // Wall sections are shelves stocked from the store side (closed against the wall).
+    expect(produce).toMatchObject({ kind: 'shelf', orientation: 'vertical', back: 1, x: l.width - 2 });
+    expect(get('g-dept-meat')).toMatchObject({ kind: 'shelf', orientation: 'horizontal', back: -1, y: 1 });
     expect(get('g-dept-meat').x).toBeLessThan(get('g-wall-back-chilled').x);
     expect(get('g-wall-back-chilled')).toMatchObject({ kind: 'shelf', temp: 'chilled', y: 1, label: 'Refrigerated' });
     const leftFridge = get('g-wall-left-chilled');

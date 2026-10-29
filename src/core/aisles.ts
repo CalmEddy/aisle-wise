@@ -82,3 +82,90 @@ export function clipAisles(l: StoreLayout): StoreLayout {
     .filter((a) => a.w > 0 && a.h > 0);
   return { ...l, aisles };
 }
+
+// ---------------------------------------------------------------------------
+// Moving and turning a whole aisle: its label and the shelves on both sides
+
+/** The shelves along either side of an aisle's walkway. */
+export function aisleShelves(l: StoreLayout, a: AisleLabel): Shelf[] {
+  const vertical = a.h >= a.w;
+  return l.places.filter((p): p is Shelf => {
+    if (p.kind !== 'shelf' || (p.orientation === 'vertical') !== vertical) return false;
+    if (vertical) return (p.x === a.x - 1 || p.x === a.x + a.w) && p.y < a.y + a.h && p.y + p.length > a.y;
+    return (p.y === a.y - 1 || p.y === a.y + a.h) && p.x < a.x + a.w && p.x + p.length > a.x;
+  });
+}
+
+const shelfRect = (s: Shelf): Rect => (s.orientation === 'vertical' ? { x: s.x, y: s.y, w: 1, h: s.length } : { x: s.x, y: s.y, w: s.length, h: 1 });
+const placeRect = (p: StoreLayout['places'][number]): Rect => (p.kind === 'shelf' ? shelfRect(p) : { x: p.x, y: p.y, w: p.w, h: p.h });
+
+/** Whether the aisle's new parts fit: inside the store, and clear of everything else. */
+function fits(l: StoreLayout, moving: Set<string>, rects: Rect[]): boolean {
+  const others = l.places.filter((p) => !moving.has(p.id)).map(placeRect);
+  return rects.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= l.width && r.y + r.h <= l.height && !others.some((o) => overlaps(o, r)));
+}
+
+/** Moves an aisle (label and both shelves) by dx, dy squares. Unchanged if there's no room. */
+export function moveAisle(l: StoreLayout, id: string, dx: number, dy: number): { layout: StoreLayout; ok: boolean } {
+  const a = (l.aisles ?? []).find((x) => x.id === id);
+  if (!a) return { layout: l, ok: false };
+  const shelves = aisleShelves(l, a);
+  const moving = new Set(shelves.map((s) => s.id));
+  const shift = <T extends Rect | Shelf>(r: T): T => ({ ...r, x: r.x + dx, y: r.y + dy });
+  if (!fits(l, moving, [shift(a), ...shelves.map((s) => shift(shelfRect(s)))])) return { layout: l, ok: false };
+  return {
+    layout: {
+      ...l,
+      places: l.places.map((p) => (moving.has(p.id) ? shift(p as Shelf) : p)),
+      aisles: (l.aisles ?? []).map((x) => (x.id === id ? shift(x) : x)),
+    },
+    ok: true,
+  };
+}
+
+/**
+ * Turns an aisle a quarter turn about its middle (up-and-down ↔ side-to-side),
+ * label and shelves together. Each shelf keeps its order (top becomes left,
+ * left becomes top), so saved spots and categories stay where they were
+ * along it; wall shelves keep their back away from the walkway.
+ */
+export function turnAisle(l: StoreLayout, id: string): { layout: StoreLayout; ok: boolean } {
+  const a = (l.aisles ?? []).find((x) => x.id === id);
+  if (!a) return { layout: l, ok: false };
+  const shelves = aisleShelves(l, a);
+  const parts: Rect[] = [a, ...shelves.map(shelfRect)];
+  const x0 = Math.min(...parts.map((r) => r.x));
+  const y0 = Math.min(...parts.map((r) => r.y));
+  const GW = Math.max(...parts.map((r) => r.x + r.w)) - x0;
+  const GH = Math.max(...parts.map((r) => r.y + r.h)) - y0;
+  // The turned group, centred where it was.
+  const nx0 = Math.round(x0 + GW / 2 - GH / 2);
+  const ny0 = Math.round(y0 + GH / 2 - GW / 2);
+  const wasVertical = a.h >= a.w;
+  const turn = (r: Rect): Rect => {
+    const rx = r.x - x0;
+    const ry = r.y - y0;
+    // Up-and-down turns anticlockwise (top → left); side-to-side turns clockwise (left → top).
+    return wasVertical
+      ? { x: nx0 + ry, y: ny0 + (GW - (rx + r.w)), w: r.h, h: r.w }
+      : { x: nx0 + (GH - (ry + r.h)), y: ny0 + rx, w: r.h, h: r.w };
+  };
+  const label = { ...a, ...turn(a) };
+  const turned = new Map(shelves.map((s) => {
+    const r = turn(shelfRect(s));
+    const next: Shelf = {
+      ...s, x: r.x, y: r.y, orientation: wasVertical ? 'horizontal' : 'vertical',
+      ...(s.back !== undefined && { back: (-s.back) as -1 | 1 }),
+    };
+    return [s.id, next];
+  }));
+  if (!fits(l, new Set(turned.keys()), [label, ...[...turned.values()].map(shelfRect)])) return { layout: l, ok: false };
+  return {
+    layout: {
+      ...l,
+      places: l.places.map((p) => turned.get(p.id) ?? p),
+      aisles: (l.aisles ?? []).map((x) => (x.id === id ? label : x)),
+    },
+    ok: true,
+  };
+}
