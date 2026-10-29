@@ -60,4 +60,21 @@ describe('plain-language locations', () => {
     expect(g.unplaced.map((i) => i.name)).toEqual(['Jam']);
     expect(aislesUsed(products, 's')).toEqual(['9']);
   });
+
+  it('a store it knows nothing about still gets a sensible order from categories', () => {
+    const blank: StoreLayout = { id: 'new', name: 'New', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 } };
+    const list: Product[] = [
+      { id: '1', name: 'Ice cream', categoryId: 'icecream' }, { id: '2', name: 'Milk', categoryId: 'dairy' },
+      { id: '3', name: 'Pasta', categoryId: 'pasta' }, { id: '4', name: 'Apples', categoryId: 'fruit' },
+      { id: '5', name: 'Cereal', categoryId: 'breakfast' }, { id: '6', name: 'Bread', categoryId: 'bakery' },
+      { id: '7', name: 'Chicken', categoryId: 'meat' }, { id: '8', name: 'Mystery' },
+      // An answer beats the guess: aisle 2 comes before the centre-store guesses.
+      { id: '9', name: 'Soup', categoryId: 'canned', clues: { new: { kind: 'aisle', aisle: '2' } } },
+    ];
+    const catalog = new Catalog(list, []);
+    const items = list.map((p) => ({ id: p.id, name: p.name, done: false, productId: p.id }));
+    const g = groupIntoStops(items, (i) => locateItem(i, blank, catalog));
+    expect(g.byClue.map((b) => b.item.name)).toEqual(['Apples', 'Bread', 'Soup', 'Cereal', 'Pasta', 'Chicken', 'Milk', 'Ice cream']);
+    expect(g.unplaced.map((i) => i.name)).toEqual(['Mystery']);
+  });
 });

@@ -1,7 +1,7 @@
 import type { Catalog } from './catalog';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
-import { clueRank, resolveClue } from './clues';
+import { clueRank, resolveClue, typicalRank } from './clues';
 
 export { normalize } from './catalog';
 
@@ -50,6 +50,8 @@ export type Location =
   | { kind: 'not-sold'; product: Product }
   /** The shopper said where it is ("aisle 7"), but the map has nothing to put it on yet. */
   | { kind: 'clue'; clue: Clue; product: Product }
+  /** Nothing known for this store: where its category usually is in a supermarket. */
+  | { kind: 'guess'; categoryId: string; product: Product }
   | { kind: 'unknown'; product?: Product };
 
 /** Where to find a product in a store. */
@@ -69,7 +71,8 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
   const cat = product.categoryId;
   const place = cat ? layout.places.find((p) => p.categories.includes(cat)) : undefined;
   const spot = place && resolveSpot(`${place.id}:${cat}`, layout, catalog);
-  return spot ? { kind: 'spot', spot, product, exact: false } : { kind: 'unknown', product };
+  if (spot) return { kind: 'spot', spot, product, exact: false };
+  return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
 }
 
 /** The master-list item for a list entry. */
@@ -91,14 +94,18 @@ export function groupIntoStops(items: ListItem[], locate: (item: ListItem) => Lo
   const byKey = new Map<string, Stop>();
   const unplaced: ListItem[] = [];
   const notSold: ListItem[] = [];
-  /** Items the shopper has said where they are, but the map can't place yet; sorted by where they are. */
-  const byClue: { item: ListItem; clue: Clue }[] = [];
+  /**
+   * Items the map can't place yet, in walking order: ones the shopper has said
+   * where they are ("aisle 9"), and ones placed where their category usually is.
+   */
+  const byClue: { item: ListItem; rank: number; clue?: Clue; categoryId?: string }[] = [];
   for (const item of items) {
     if (item.done) continue;
     const loc = locate(item);
     if (loc.kind === 'not-sold') notSold.push(item);
     else if (loc.kind === 'unknown') unplaced.push(item);
-    else if (loc.kind === 'clue') byClue.push({ item, clue: loc.clue });
+    else if (loc.kind === 'clue') byClue.push({ item, clue: loc.clue, rank: clueRank(loc.clue) });
+    else if (loc.kind === 'guess') byClue.push({ item, categoryId: loc.categoryId, rank: typicalRank(loc.categoryId) });
     else {
       const square = `${loc.spot.placeId}#${loc.spot.point.x},${loc.spot.point.y}`;
       const stop = byKey.get(square) ?? { ...loc.spot, items: [] };
@@ -106,6 +113,6 @@ export function groupIntoStops(items: ListItem[], locate: (item: ListItem) => Lo
       byKey.set(square, stop);
     }
   }
-  byClue.sort((a, b) => clueRank(a.clue) - clueRank(b.clue));
+  byClue.sort((a, b) => a.rank - b.rank);
   return { stops: [...byKey.values()], unplaced, notSold, byClue };
 }

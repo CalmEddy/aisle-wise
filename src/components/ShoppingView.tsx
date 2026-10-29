@@ -21,7 +21,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { CategoryPicker } from './CategoryPicker';
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
-import { aislesUsed, describeClue } from '../core/clues';
+import { DEPTS, aislesUsed, describeClue, guessDept } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
@@ -792,14 +792,17 @@ export function ShoppingView(props: Props) {
 
         {byClue.length > 0 && (
           <section className="card by-clue">
-            <h3>By aisle <span className="muted small">· not on the map yet</span></h3>
+            <h3>
+              {byClue.some((b) => b.clue) ? 'By aisle' : 'In typical store order'}
+              <span className="muted small"> · {byClue.some((b) => !b.clue) ? 'until you say where things are' : 'not on the map yet'}</span>
+            </h3>
             <ItemRows
               items={byClue.map((b) => b.item)}
               onToggle={toggle}
               onRemove={remove}
               onMenu={setMenuFor}
               iconOf={iconOf}
-              subOf={(item) => { const b = byClue.find((x) => x.item.id === item.id); return b && describeClue(b.clue); }}
+              subOf={(item) => { const b = byClue.find((x) => x.item.id === item.id); return b && (b.clue ? describeClue(b.clue) : `usually ${typicalWhere(b.categoryId!, catalog)}`); }}
             />
           </section>
         )}
@@ -908,7 +911,7 @@ export function ShoppingView(props: Props) {
           item={menuFor}
           where={(() => {
             const loc = locate(menuFor);
-            return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'clue' ? describeClue(loc.clue) : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
+            return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'clue' ? describeClue(loc.clue) : loc.kind === 'guess' ? `Usually ${typicalWhere(loc.categoryId, catalog)}` : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
           })()}
           storeName={layout.name}
           categoryId={productFor(menuFor, catalog)?.categoryId}
@@ -988,12 +991,21 @@ export function ShoppingView(props: Props) {
   );
 }
 
+/** Where a category usually is: its department ("Produce"), or "with the <category>" in the aisles. */
+function typicalWhere(categoryId: string, catalog?: Catalog): string {
+  const dept = guessDept(categoryId);
+  if (dept) return `in ${DEPTS.find((d) => d.id === dept)!.name}`;
+  const name = catalog?.categoryById.get(categoryId)?.name;
+  return name ? `in the aisles (${name})` : 'in the aisles';
+}
+
 /** Short "where is it" text for a master-list item in this store. */
 export function whereText(product: Product, layout: StoreLayout, catalog: Catalog): string {
   const loc = locateProduct(product, layout, catalog);
   if (loc.kind === 'spot') return loc.spot.label;
   if (loc.kind === 'not-sold') return 'Not available here';
   if (loc.kind === 'clue') return describeClue(loc.clue);
+  if (loc.kind === 'guess') return `Usually ${typicalWhere(loc.categoryId, catalog)}`;
   return catalog.categoryById.get(product.categoryId ?? '')?.name ?? 'No location yet';
 }
 

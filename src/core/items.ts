@@ -41,7 +41,7 @@ export type ItemFilter = 'all' | 'place' | 'nocat' | 'list' | 'notsold';
 export function itemMatches(p: Product, filter: ItemFilter, layout: StoreLayout, catalog: Catalog, onList: Set<string>): boolean {
   switch (filter) {
     case 'all': return true;
-    case 'place': return locateProduct(p, layout, catalog).kind === 'unknown';
+    case 'place': { const k = locateProduct(p, layout, catalog).kind; return k === 'unknown' || k === 'guess'; }
     case 'nocat': return !p.categoryId || !catalog.categoryById.has(p.categoryId);
     case 'list': return onList.has(p.id);
     case 'notsold': return !!p.notAt?.includes(layout.id);

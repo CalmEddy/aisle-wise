@@ -167,3 +167,22 @@ export function aislesUsed(products: Product[], layoutId: string): string[] {
   }
   return [...n.entries()].sort((a, b) => b[1] - a[1] || aisleNumber(a[0]) - aisleNumber(b[0])).map(([a]) => a);
 }
+
+// ---------------------------------------------------------------------------
+// Typical store order (no answers yet)
+
+/** Centre-store categories in the order a typical supermarket's aisles run. */
+const CENTRE_ORDER = ['breakfast', 'coffee', 'baking', 'pasta', 'canned', 'condiments', 'snacks', 'cookies', 'soda', 'water', 'paper', 'laundry', 'health', 'baby'];
+
+/**
+ * Where a category usually is in a walk round a store, on the same scale as
+ * clueRank: departments in their usual place, centre-store categories after
+ * any numbered aisles (we don't know their numbers) but before the back
+ * departments. Unknown categories go just before the back.
+ */
+export function typicalRank(categoryId: string): number {
+  const dept = guessDept(categoryId);
+  if (dept) return deptRank(dept);
+  const i = CENTRE_ORDER.indexOf(categoryId);
+  return 5000 + (i < 0 ? CENTRE_ORDER.length : i);
+}
