@@ -206,3 +206,24 @@ export function shelfBacks(layout: StoreLayout, shelf: Shelf): Segment[] {
   }
   return out;
 }
+
+/**
+ * The part of the store to show in the small map strip while shopping: a
+ * wide window centred between you and your next stop (both in view), kept
+ * inside the store. `aspect` is width ÷ height.
+ */
+export function stripFocus(l: Pick<StoreLayout, 'width' | 'height'>, you: Point, next?: Point, aspect = 2.6): Rect {
+  const a = next ?? you;
+  const cx = (you.x + a.x) / 2 + 0.5;
+  const cy = (you.y + a.y) / 2 + 0.5;
+  // Wide enough for both (plus room around), at least 18 squares, at most the store.
+  let w = Math.max(18, Math.abs(you.x - a.x) + 8, (Math.abs(you.y - a.y) + 6) * aspect);
+  // As wide as the store anyway: just show the whole store.
+  if (w >= l.width) return { x: 0, y: 0, w: l.width, h: l.height };
+  let h = Math.min(w / aspect, l.height);
+  if (h < w / aspect) w = Math.min(l.width, h * aspect);
+  h = Math.max(h, Math.min(l.height, 6));
+  const x = Math.max(0, Math.min(l.width - w, cx - w / 2));
+  const y = Math.max(0, Math.min(l.height - h, cy - h / 2));
+  return { x, y, w, h };
+}

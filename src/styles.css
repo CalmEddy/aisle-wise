@@ -739,3 +739,8 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .pinned-dot { font-size: 0.9rem; flex: none; }
 .route-list .spot-detail { margin: 6px 0 0 6px; position: relative; z-index: 1; }
 .route-list .spot.tinted { padding-top: 2px; }
+
+/* Map strip while shopping, and the view-settings menu */
+.map.strip { max-height: 150px; height: 150px; }
+.view-menu { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.toggle.icon-only.action[aria-pressed='false'] { filter: none; opacity: 1; }

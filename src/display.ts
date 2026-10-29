@@ -15,6 +15,8 @@ export interface Display {
   buildDouble?: boolean;
   /** Walkway width (squares) between shelves in a shelf block. */
   blockLane?: number;
+  /** Show the whole map while shopping (otherwise a strip around you and the next stop). */
+  mapFull?: boolean;
   /** Stores where the app doesn't ask "Where was it?" at check-off. */
   noAskStores?: string[];
   /** The aisle brush's sides and walkway width. */

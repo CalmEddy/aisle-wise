@@ -14,11 +14,12 @@ const LABELS: Record<Switch, string> = {
   buildMode: 'Build mode',
   buildArea: 'Build areas',
   buildDouble: 'Double shelves',
+  mapFull: 'Whole map',
 };
 
 /** What the compact switch shows. */
 const SHORT: Record<Switch, string> = {
-  buildMode: '🛠 Build',
+  buildMode: '🛠 Edit map',
   groupList: '☰',
   mapColors: '🎨',
   mapIcons: '🍎',
@@ -26,6 +27,7 @@ const SHORT: Record<Switch, string> = {
   listIcons: '🍎',
   buildArea: 'Areas',
   buildDouble: 'Double',
+  mapFull: '🗺',
 };
 
 /** Switches shown together under a heading ("Map 🎨 🍎"). */

@@ -4,7 +4,7 @@ import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type D
 import { addedRect, nextShelves, skippedShelves } from '../core/rows';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
-import { exactKey, exactSpotAt, footprint, placeAt } from '../core/geometry';
+import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, ListItem, Place, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
@@ -540,6 +540,9 @@ export function ShoppingView(props: Props) {
 
   const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
   const [nextVisit, ...laterVisits] = visits;
+  // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
+  const mapStrip = !building && !props.display.mapFull;
+  const [viewOpen, setViewOpen] = useState(false);
   const addButton = (
     <button type="button" className="toggle add-toggle" onClick={() => setAdding(true)} aria-label="Add items" title="Add items">＋</button>
   );
@@ -590,6 +593,7 @@ export function ShoppingView(props: Props) {
           <StoreMap
             layout={layout}
             you={position}
+            focus={mapStrip ? stripFocus(layout, position, route[0]?.point) : undefined}
             dots={mapDots}
             pins={pins}
             ghosts={ghosts}
@@ -609,7 +613,7 @@ export function ShoppingView(props: Props) {
               onPointerMove: onMapDragMove,
               onPointerUp: endMapDrag,
               onPointerCancel: endMapDrag,
-            } : undefined}
+            } : mapStrip ? { className: 'map strip tappable' } : undefined}
           >
             {blocking && block.drag.rect && (
               <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
@@ -630,9 +634,25 @@ export function ShoppingView(props: Props) {
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
-            show={['buildMode', 'groupList', 'mapColors', 'mapIcons', 'listColors', 'listIcons']}
+            show={['groupList', 'buildMode']}
             lead={addButton}
+            extra={(
+              <>
+                {!building && (
+                  <button type="button" className="toggle icon-only action" aria-pressed={!mapStrip} onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
+                    aria-label={mapStrip ? 'Show the whole map' : 'Smaller map'} title={mapStrip ? 'Show the whole map' : 'Smaller map'}>🗺</button>
+                )}
+                <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
+                  aria-label="View settings" title="View settings">⚙</button>
+              </>
+            )}
           />
+          {viewOpen && (
+            <div className="view-menu" role="group" aria-label="View settings">
+              <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors', 'listIcons']} />
+              <span className="muted small">🎨 category colours · 🍎 category icons</span>
+            </div>
+          )}
           {editingAisle && (
             <div className="build-edit aisle-edit">
               <div className="build-edit-head">
