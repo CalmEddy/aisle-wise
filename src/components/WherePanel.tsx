@@ -1,17 +1,33 @@
 import { useState } from 'react';
-import { DEPTS, describeClue, guessDept } from '../core/clues';
-import type { AislePos, AisleSide, Clue, Dept } from '../core/types';
+import { DEPTS, describeClue, guessDept, NEAR_WORD } from '../core/clues';
+import type { AislePos, AisleSide, Clue, Dept, Fixture, OpenNear, Temp, Wall, WallPart } from '../core/types';
 
-type Tab = 'aisle' | 'dept' | 'freezer' | 'endcap' | 'display' | 'checkout';
+type Tab = 'aisle' | 'wall' | 'open' | 'dept' | 'endcap' | 'checkout';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'aisle', label: 'Aisle' },
+  { id: 'wall', label: 'Wall' },
+  { id: 'open', label: 'Open' },
   { id: 'dept', label: 'Department' },
-  { id: 'freezer', label: '🧊 Freezer' },
   { id: 'endcap', label: 'End-cap' },
-  { id: 'display', label: 'Display' },
   { id: 'checkout', label: 'Checkout' },
 ];
+
+/** Cold or not, as a first guess from the category. */
+function guessTemp(categoryId?: string): Temp | undefined {
+  if (categoryId === 'frozen' || categoryId === 'icecream') return 'frozen';
+  if (categoryId === 'dairy' || categoryId === 'eggs') return 'chilled';
+  return undefined;
+}
+
+/** Which tab an existing answer opens on. */
+function tabFor(c: Clue): Tab {
+  switch (c.kind) {
+    case 'freezer': return c.aisle ? 'aisle' : 'wall';
+    case 'display': return 'open';
+    default: return c.kind;
+  }
+}
 
 /**
  * "Where was it?" – asked when an item with no known place in this store is
@@ -36,11 +52,20 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
   queued?: number;
 }) {
   const guess = guessDept(categoryId);
-  const startTab: Tab = current ? (current.kind === 'aisle' ? 'aisle' : current.kind) : guess ? 'dept' : 'aisle';
+  const startTab: Tab = current ? tabFor(current) : guess ? 'dept' : 'aisle';
   const [tab, setTab] = useState<Tab>(startTab);
   const [aisle, setAisle] = useState(current && 'aisle' in current && current.aisle ? current.aisle : '');
   const [side, setSide] = useState<AisleSide | undefined>(current && 'side' in current ? current.side : undefined);
   const [pos, setPos] = useState<AislePos | undefined>(current && 'pos' in current ? current.pos : undefined);
+  const [temp, setTemp] = useState<Temp | undefined>(
+    current ? (current.kind === 'freezer' ? 'frozen' : 'temp' in current ? current.temp : undefined) : guessTemp(categoryId),
+  );
+  const [wall, setWall] = useState<Wall | undefined>(current?.kind === 'wall' ? current.wall : undefined);
+  const [part, setPart] = useState<WallPart | undefined>(current?.kind === 'wall' ? current.part : undefined);
+  const [near, setNear] = useState<OpenNear | undefined>(current?.kind === 'open' ? current.near : undefined);
+  const [fixture, setFixture] = useState<Fixture | undefined>(current?.kind === 'open' ? current.fixture : undefined);
+  const withTemp = temp ? { temp } : {};
+  const coldWord = temp === 'frozen' ? 'Freezer' : temp === 'chilled' ? 'Fridge' : '';
 
   const aisleOk = aisle.trim().length > 0;
   const deptChips = (onPick: (d: Dept) => void, highlight?: Dept) => (
@@ -55,7 +80,7 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
   const aislePicker = (optional = false) => (
     <div className="where-aisle">
       <div className="where-row">
-        <span className="where-label">Aisle{optional ? ' (if any)' : ''}</span>
+        <span className="where-label">{optional ? 'Or by aisle' : 'Aisle'}</span>
         {recentAisles.slice(0, 6).map((a) => (
           <button key={a} className={`chip${aisle === a ? ' active' : ''}`} onClick={() => setAisle(a)}>{a}</button>
         ))}
@@ -86,6 +111,27 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
     </>
   );
 
+  const tempRow = (
+    <div className="where-row">
+      <span className="where-label">Kept</span>
+      {([undefined, 'chilled', 'frozen'] as const).map((t) => (
+        <button key={String(t)} className={`chip${temp === t ? ' active' : ''}`} aria-pressed={temp === t} onClick={() => setTemp(t)}>
+          {t === undefined ? 'Shelf' : t === 'chilled' ? '🧊 Fridge' : '❄ Freezer'}
+        </button>
+      ))}
+    </div>
+  );
+  const choice = <T extends string>(label: string, options: [T, string][], value: T | undefined, set: (v: T | undefined) => void) => (
+    <div className="where-row">
+      <span className="where-label">{label}</span>
+      {options.map(([v, text]) => (
+        <button key={v} className={`chip${value === v ? ' active' : ''}`} aria-pressed={value === v} onClick={() => set(value === v ? undefined : v)}>{text}</button>
+      ))}
+    </div>
+  );
+  const wallClue: Clue | undefined = wall ? { kind: 'wall', wall, ...(part && { part }), ...withTemp } : undefined;
+  const openClue: Clue = { kind: 'open', ...(near && !aisle.trim() && { near }), ...(aisle.trim() && { aisle: aisle.trim() }), ...(fixture && { fixture }), ...withTemp };
+
   return (
     <div className="sheet-backdrop" onClick={onLater ?? onSkip}>
       <div className="sheet where-panel" role="dialog" aria-label={`Where was ${itemName}?`} onClick={(e) => e.stopPropagation()}>
@@ -106,24 +152,36 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
             <>
               {aislePicker()}
               {sidePos}
-              <button className="btn primary wide" disabled={!aisleOk} onClick={() => onSave({ kind: 'aisle', aisle: aisle.trim(), ...(side && { side }), ...(pos && { pos }) })}>
-                Save{aisleOk ? ` · Aisle ${aisle.trim()}` : ''}
+              {tempRow}
+              <button className="btn primary wide" disabled={!aisleOk}
+                onClick={() => onSave({ kind: 'aisle', aisle: aisle.trim(), ...(side && { side }), ...(pos && { pos }), ...withTemp })}>
+                Save{aisleOk ? ` · ${coldWord ? `${coldWord}, aisle` : 'Aisle'} ${aisle.trim()}` : ''}
               </button>
             </>
           )}
-          {tab === 'dept' && deptChips((dept) => onSave({ kind: 'dept', dept }), guess)}
-          {tab === 'freezer' && (
+          {tab === 'wall' && (
             <>
-              {aislePicker(true)}
-              {aisleOk && sidePos}
-              <div className="where-row">
-                <button className="btn primary" disabled={!aisleOk} onClick={() => onSave({ kind: 'freezer', aisle: aisle.trim(), ...(side && { side }), ...(pos && { pos }) })}>
-                  Save · Freezer aisle {aisle.trim()}
-                </button>
-                <button className="btn" onClick={() => onSave({ kind: 'freezer' })}>Freezer along a wall</button>
-              </div>
+              {choice<Wall>('Wall', [['left', '← Left'], ['back', '↑ Back'], ['right', 'Right →']], wall, (w) => { setWall(w); setPart(undefined); })}
+              {wall && choice<WallPart>('Along', wall === 'back'
+                ? [['left', 'Left end'], ['middle', 'Middle'], ['right', 'Right end']]
+                : [['front', 'Front'], ['middle', 'Middle'], ['back', 'Back']], part, setPart)}
+              {tempRow}
+              <p className="muted small where-note">Left and right as you face into the store from the entrance.</p>
+              <button className="btn primary wide" disabled={!wallClue} onClick={() => wallClue && onSave(wallClue)}>
+                {wallClue ? `Save · ${describeClue(wallClue)}` : 'Pick a wall'}
+              </button>
             </>
           )}
+          {tab === 'open' && (
+            <>
+              {choice<Fixture>('What', [['table', 'Table'], ['case', 'Case'], ['stand', 'Stand / display']], fixture, setFixture)}
+              {choice<OpenNear>('Where', (['entrance', 'middle', 'far'] as const).map((n) => [n, NEAR_WORD[n][0].toUpperCase() + NEAR_WORD[n].slice(1)] as [OpenNear, string]), aisle.trim() ? undefined : near, (n) => { setNear(n); setAisle(''); })}
+              {aislePicker(true)}
+              {tempRow}
+              <button className="btn primary wide" onClick={() => onSave(openClue)}>Save · {describeClue(openClue)}</button>
+            </>
+          )}
+          {tab === 'dept' && deptChips((dept) => onSave({ kind: 'dept', dept }), guess)}
           {tab === 'endcap' && (
             <>
               {aislePicker()}
@@ -131,14 +189,6 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
                 <button className="btn primary" disabled={!aisleOk} onClick={() => onSave({ kind: 'endcap', aisle: aisle.trim(), end: 'front' })}>Front end</button>
                 <button className="btn primary" disabled={!aisleOk} onClick={() => onSave({ kind: 'endcap', aisle: aisle.trim(), end: 'back' })}>Back end</button>
               </div>
-            </>
-          )}
-          {tab === 'display' && (
-            <>
-              {aislePicker()}
-              <button className="btn primary wide" disabled={!aisleOk} onClick={() => onSave({ kind: 'display', aisle: aisle.trim() })}>Near aisle {aisle.trim()}</button>
-              <p className="muted small where-note">…or in a department:</p>
-              {deptChips((dept) => onSave({ kind: 'display', dept }), guess)}
             </>
           )}
           {tab === 'checkout' && (

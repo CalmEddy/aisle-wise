@@ -175,15 +175,28 @@ export type Dept = 'produce' | 'floral' | 'bakery' | 'deli' | 'meat' | 'seafood'
 
 /** Where an item was found, in the words a store uses. */
 export type Clue =
-  | { kind: 'aisle'; aisle: string; side?: AisleSide; pos?: AislePos }
+  /** In a numbered aisle; `temp` when it was in a fridge or freezer there. */
+  | { kind: 'aisle'; aisle: string; side?: AisleSide; pos?: AislePos; temp?: Temp }
   | { kind: 'dept'; dept: Dept }
-  /** A freezer case: in a numbered aisle, or along a wall (no aisle). */
+  /** Along a wall, as you face into the store from the entrance. */
+  | { kind: 'wall'; wall: Wall; part?: WallPart; temp?: Temp }
+  /** Out in the open: a table, case or stand on the floor, not against a wall or in an aisle. */
+  | { kind: 'open'; near?: OpenNear; aisle?: string; fixture?: Fixture; temp?: Temp }
+  /** Older answers: a freezer case in an aisle, or along a wall (no aisle). */
   | { kind: 'freezer'; aisle?: string; side?: AisleSide; pos?: AislePos }
   /** The display at the end of an aisle. */
   | { kind: 'endcap'; aisle: string; end: 'front' | 'back' }
-  /** A stand-alone or mid-aisle display, near an aisle or a department. */
+  /** Older answers: a display near an aisle or in a department. */
   | { kind: 'display'; aisle?: string; dept?: Dept }
   | { kind: 'checkout' };
+
+/** The walls, as you face into the store from the entrance. */
+export type Wall = 'left' | 'back' | 'right';
+/** Where along a wall: front/middle/back for the side walls, left/middle/right for the back wall. */
+export type WallPart = 'front' | 'middle' | 'back' | 'left' | 'right';
+/** Where out in the open. */
+export type OpenNear = 'entrance' | 'middle' | 'far';
+export type Fixture = 'table' | 'case' | 'stand';
 
 /** A spot where items are picked up. */
 export interface Spot {

@@ -1,5 +1,5 @@
-import { exactKey, footprint } from './geometry';
-import type { AisleLabel, AislePos, AisleSide, Clue, Dept, Point, Product, Shelf, StoreLayout } from './types';
+import { exactKey, exactSpotAt, footprint } from './geometry';
+import type { AisleLabel, AislePos, AisleSide, Clue, Dept, OpenNear, Place, Point, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Plain-language item locations ("aisle 7, left, middle", "Produce"): what
@@ -35,6 +35,9 @@ export function aisleNumber(aisle: string): number {
 
 const POS_WORD: Record<AislePos, string> = { front: 'front', middle: 'middle', back: 'back' };
 const SIDE_WORD: Record<AisleSide, string> = { L: 'left', R: 'right' };
+export const WALL_WORD: Record<Wall, string> = { left: 'Left', back: 'Back', right: 'Right' };
+export const NEAR_WORD: Record<OpenNear, string> = { entrance: 'near the door', middle: 'in the middle', far: 'on the far side' };
+const FIXTURE_WORD = { table: 'Table', case: 'Case', stand: 'Stand' } as const;
 
 /** "Aisle 7 · left · middle", "Produce", "Freezer, aisle 14", "End of aisle 7 (front)". */
 export function describeClue(c: Clue): string {
@@ -43,8 +46,19 @@ export function describeClue(c: Clue): string {
     const d = detail(side, pos);
     return d ? `${head} · ${d}` : head;
   };
+  const cold = (t?: Temp) => (t === 'frozen' ? 'Freezer, ' : t === 'chilled' ? 'Fridge, ' : '');
   switch (c.kind) {
-    case 'aisle': return withDetail(`Aisle ${c.aisle}`, c.side, c.pos);
+    case 'aisle': return withDetail(c.temp ? `${cold(c.temp)}aisle ${c.aisle}` : `Aisle ${c.aisle}`, c.side, c.pos);
+    case 'wall': {
+      const head = `${WALL_WORD[c.wall]} wall${c.part && c.part !== 'middle' ? ` · ${c.part}` : c.part ? ' · middle' : ''}`;
+      return c.temp ? `${cold(c.temp)}${head.toLowerCase()}` : head;
+    }
+    case 'open': {
+      const what = c.fixture ? FIXTURE_WORD[c.fixture] : 'Out in the open';
+      const where = c.aisle ? `by aisle ${c.aisle}` : c.near ? NEAR_WORD[c.near] : '';
+      const head = [what, where].filter(Boolean).join(' ');
+      return c.temp ? `${cold(c.temp)}${head[0].toLowerCase()}${head.slice(1)}` : head;
+    }
     case 'dept': return deptOf(c.dept).name;
     case 'freezer': return c.aisle ? withDetail(`Freezer, aisle ${c.aisle}`, c.side, c.pos) : 'Freezer wall';
     case 'endcap': return `End of aisle ${c.aisle} (${c.end})`;
@@ -63,6 +77,12 @@ const FRONT: Partial<Record<Dept, number>> = { produce: 0, floral: 1, bakery: 2,
 const BACK: Partial<Record<Dept, number>> = { meat: 9000, seafood: 9001, dairy: 9002, frozen: 9003, pharmacy: 9500 };
 const deptRank = (d: Dept) => FRONT[d] ?? BACK[d] ?? 9400;
 const POS_RANK: Record<AislePos, number> = { front: 2, middle: 4, back: 6 };
+const WALL_ORDER: Record<Wall, number> = { left: 0, back: 1, right: 2 };
+/** Going round the walls: up the left wall (front first), along the back left to right, down the right wall. */
+const partRank = (w: Wall, p?: WallPart) => {
+  const along = p === 'front' || p === 'left' ? 0 : p === 'back' || p === 'right' ? 2 : 1;
+  return w === 'right' ? 2 - along : along;
+};
 
 export function clueRank(c: Clue): number {
   const aisle = (a: string, offset: number) => {
@@ -74,6 +94,9 @@ export function clueRank(c: Clue): number {
     case 'freezer':
       return c.aisle ? aisle(c.aisle, POS_RANK[c.pos ?? 'middle']) : 8800;
     case 'endcap': return aisle(c.aisle, c.end === 'front' ? 1 : 7);
+    // Walls: after the aisles, round from the left wall's front to the right wall's front.
+    case 'wall': return 9100 + WALL_ORDER[c.wall] * 10 + partRank(c.wall, c.part);
+    case 'open': return c.aisle ? aisle(c.aisle, 0) : c.near === 'entrance' ? 5 : c.near === 'far' ? 8700 : 4900;
     case 'display': return c.aisle ? aisle(c.aisle, 4) : c.dept ? deptRank(c.dept) + 0.5 : 8900;
     case 'dept': return deptRank(c.dept);
     case 'checkout': return 9999;
@@ -151,10 +174,112 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
     case 'aisle': return inAisle(c.aisle, c.side, ALONG[c.pos ?? 'middle']);
     case 'freezer': return c.aisle ? inAisle(c.aisle, c.side, ALONG[c.pos ?? 'middle']) : findDept(l, 'frozen', product?.categoryId);
     case 'endcap': return inAisle(c.aisle, undefined, c.end === 'front' ? 0.02 : 0.98);
+    case 'wall': return onWall(l, c.wall, c.part, c.temp);
+    case 'open': return c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
     case 'display': return c.aisle ? inAisle(c.aisle, undefined, 0.5) : c.dept ? findDept(l, c.dept, product?.categoryId) : undefined;
     case 'dept': return findDept(l, c.dept, product?.categoryId);
     case 'checkout': return l.places.find((p) => /checkout/i.test(p.label))?.id;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Walls and open floor, as you face into the store from the entrance
+
+/**
+ * The store seen from the entrance: `toMap(u, v)` turns "across" (u: 0 left
+ * wall → 1 right wall) and "deep" (v: 0 front → 1 back) into map squares.
+ * The front is the edge of the map nearest the entrance.
+ */
+export function storeFrame(l: StoreLayout) {
+  const W = l.width;
+  const H = l.height;
+  const e = l.entrance;
+  const edges = [
+    { front: 'bottom', d: H - 1 - e.y },
+    { front: 'top', d: e.y },
+    { front: 'left', d: e.x },
+    { front: 'right', d: W - 1 - e.x },
+  ].sort((a, b) => a.d - b.d);
+  const front = edges[0].front;
+  const toMap = (u: number, v: number): Point => {
+    switch (front) {
+      case 'top': return { x: (1 - u) * W, y: v * H };
+      case 'left': return { x: v * W, y: u * H };
+      case 'right': return { x: (1 - v) * W, y: (1 - u) * H };
+      default: return { x: u * W, y: (1 - v) * H };
+    }
+  };
+  const toStore = (p: Point) => {
+    switch (front) {
+      case 'top': return { u: 1 - p.x / W, v: p.y / H };
+      case 'left': return { u: p.y / H, v: p.x / W };
+      case 'right': return { u: 1 - p.y / H, v: 1 - p.x / W };
+      default: return { u: p.x / W, v: 1 - p.y / H };
+    }
+  };
+  /** How far (squares) a rectangle is from a wall. */
+  const fromWall = (r: Rect, wall: Wall) => {
+    const corners = [toStore({ x: r.x, y: r.y }), toStore({ x: r.x + r.w, y: r.y + r.h })];
+    const across = front === 'left' || front === 'right' ? H : W;
+    const deep = front === 'left' || front === 'right' ? W : H;
+    if (wall === 'left') return Math.min(...corners.map((c) => c.u)) * across;
+    if (wall === 'right') return (1 - Math.max(...corners.map((c) => c.u))) * across;
+    return (1 - Math.max(...corners.map((c) => c.v))) * deep;
+  };
+  return { front, toMap, toStore, fromWall };
+}
+
+/** Where on a wall a part is, in store terms (u across, v deep). */
+function wallTarget(wall: Wall, part?: WallPart): { u: number; v: number } {
+  const along = part === 'front' || part === 'left' ? 0.2 : part === 'back' || part === 'right' ? 0.8 : 0.5;
+  if (wall === 'left') return { u: 0, v: along };
+  if (wall === 'right') return { u: 1, v: along };
+  return { u: along, v: 1 };
+}
+
+/** Squares from a point to the nearest square of a rectangle. */
+const gap = (p: Point, r: Rect) => Math.hypot(Math.max(r.x - p.x, 0, p.x - (r.x + r.w)), Math.max(r.y - p.y, 0, p.y - (r.y + r.h)));
+/** Prefer a matching fridge/freezer; anything else costs extra. */
+const tempCost = (p: Place, t?: Temp) => (t && p.temp !== t ? 25 : 0);
+/** Places within this many squares of a wall are "along" it. */
+export const WALL_REACH = 6;
+
+function nearest(target: Point, places: Place[], t?: Temp): string | undefined {
+  let best: Place | undefined;
+  let bestCost = Infinity;
+  for (const p of places) {
+    const cost = gap(target, footprint(p)) + tempCost(p, t);
+    if (cost < bestCost) { best = p; bestCost = cost; }
+  }
+  if (!best) return undefined;
+  const f = footprint(best);
+  const x = Math.max(f.x, Math.min(f.x + f.w, target.x));
+  const y = Math.max(f.y, Math.min(f.y + f.h, target.y));
+  return exactKey(best.id, exactSpotAt(best, x, y));
+}
+
+/** The place along a wall nearest the part said (a matching fridge or freezer if there is one). */
+function onWall(l: StoreLayout, wall: Wall, part?: WallPart, t?: Temp): string | undefined {
+  const frame = storeFrame(l);
+  const tgt = wallTarget(wall, part);
+  const along = l.places.filter((p) => frame.fromWall(footprint(p), wall) <= WALL_REACH && !/checkout/i.test(p.label));
+  return nearest(frame.toMap(tgt.u, tgt.v), along, t);
+}
+
+/** A table, case or stand out on the floor (not along a wall) nearest the spot said. */
+function inOpen(l: StoreLayout, near?: OpenNear, t?: Temp): string | undefined {
+  const frame = storeFrame(l);
+  const door = frame.toStore(l.entrance);
+  const target = near === 'entrance' ? frame.toMap(door.u, 0.15)
+    : near === 'far' ? frame.toMap(1 - door.u, 0.15)
+      : frame.toMap(0.5, 0.5);
+  const walls: Wall[] = ['left', 'back', 'right'];
+  const open = l.places.filter((p) => {
+    const f = footprint(p);
+    const short = p.kind === 'area' || p.length <= 8;
+    return short && walls.every((w) => frame.fromWall(f, w) > 3) && !/checkout/i.test(p.label);
+  });
+  return nearest(target, open, t);
 }
 
 /** Aisle numbers used in this store's clues, most used first (for quick picks). */

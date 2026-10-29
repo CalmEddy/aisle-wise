@@ -32,6 +32,8 @@ interface AisleModel {
   /** Mentioned in an answer (otherwise it's a guess filling a gap). */
   seen: boolean;
   freezer: boolean;
+  /** Fridges along it (and not freezers). */
+  chilled?: boolean;
   /** Categories on each side, with how far along (for ordering). */
   sides: { L: { categoryId: string; pos: AislePos }[]; R: { categoryId: string; pos: AislePos }[] };
 }
@@ -68,11 +70,13 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
           break;
         }
         const a = aisle(c.aisle);
-        if (c.kind === 'freezer') a.freezer = true;
+        if (c.kind === 'freezer' || c.temp === 'frozen') a.freezer = true;
+        else if (c.kind === 'aisle' && c.temp === 'chilled') a.chilled = true;
         if (p.categoryId) a.sides[c.side ?? 'L'].push({ categoryId: p.categoryId, pos: c.pos ?? 'middle' });
         break;
       }
       case 'endcap': aisle(c.aisle); break;
+      case 'wall': if (c.temp === 'frozen') freezerWall = true; break;
       case 'display':
         if (c.aisle) aisle(c.aisle);
         if (c.dept) depts.add(c.dept);
@@ -106,7 +110,7 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
     ...(settings.aisleOne === 'far' && { a1: 'far' }),
     ...(settings.produce === 'far' && { p: 'far' }),
     ...(settings.backWall === 'reversed' && { b: 'rev' }),
-    a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : 0, cats(a, 'L'), cats(a, 'R')]),
+    a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : a.chilled ? 2 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
     c: model.checkout,
   });
@@ -145,7 +149,7 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
       const shelf: Shelf = {
         kind: 'shelf', id: `g-shelf-${a.label}-${side}`, label: `${a.label}${side}`,
         orientation: 'vertical', x, y: yShelf, length: L, categories: cats(a, side), ...(a.seen ? {} : { guess: true }),
-        ...(a.freezer && { temp: 'frozen' as const }),
+        ...(a.freezer ? { temp: 'frozen' as const } : a.chilled ? { temp: 'chilled' as const } : {}),
       };
       places.push(shelf);
     }

@@ -78,3 +78,51 @@ describe('plain-language locations', () => {
     expect(g.unplaced.map((i) => i.name)).toEqual(['Mystery']);
   });
 });
+
+describe('walls and open floor', () => {
+  // Entrance front right; Bread and Produce up the right wall; fridges along the back; a freezer case and a produce table in the open.
+  const l: StoreLayout = {
+    id: 'w', name: 'W', width: 40, height: 30, entrance: { x: 37, y: 29 }, checkout: { x: 20, y: 29 },
+    places: [
+      { kind: 'area', id: 'bread', label: 'Bread', x: 35, y: 3, w: 4, h: 8, categories: ['bakery'] },
+      { kind: 'area', id: 'produce', label: 'Produce', x: 35, y: 12, w: 4, h: 12, categories: ['fruit'] },
+      { kind: 'shelf', id: 'fridge', label: 'Refrigerated', orientation: 'horizontal', x: 10, y: 0, length: 25, back: -1, categories: [], temp: 'chilled' },
+      { kind: 'shelf', id: 'meat', label: 'Meat', orientation: 'horizontal', x: 1, y: 0, length: 8, back: -1, categories: ['meat'] },
+      { kind: 'shelf', id: 'lfridge', label: 'Fridge', orientation: 'vertical', x: 0, y: 3, length: 12, back: -1, categories: [], temp: 'chilled' },
+      { kind: 'shelf', id: 'lfreezer', label: 'Freezer', orientation: 'vertical', x: 0, y: 17, length: 8, back: -1, categories: [], temp: 'frozen' },
+      { kind: 'shelf', id: 'a1', label: '1', orientation: 'vertical', x: 10, y: 4, length: 12, categories: [] },
+      { kind: 'area', id: 'case', label: 'Freezer case', x: 9, y: 19, w: 2, h: 4, categories: [], temp: 'frozen' },
+      { kind: 'area', id: 'table', label: 'Produce table', x: 28, y: 19, w: 3, h: 2, categories: ['fruit'] },
+    ],
+  };
+  const at = (c: Clue) => resolveClue(c, l)?.split('@')[0];
+
+  it('finds the place along the wall said, as you face in from the entrance', () => {
+    expect(at({ kind: 'wall', wall: 'right', part: 'back' })).toBe('bread');
+    expect(at({ kind: 'wall', wall: 'right', part: 'front' })).toBe('produce');
+    expect(at({ kind: 'wall', wall: 'back', part: 'left' })).toBe('meat');
+    expect(at({ kind: 'wall', wall: 'back' })).toBe('fridge');
+    expect(at({ kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' })).toBe('lfreezer');
+    // A fridge asked for: the fridge, even if the freezer is nearer the part said.
+    expect(at({ kind: 'wall', wall: 'left', part: 'front', temp: 'chilled' })).toBe('lfridge');
+  });
+
+  it('finds tables and cases out on the floor', () => {
+    expect(at({ kind: 'open', near: 'entrance' })).toBe('table');
+    expect(at({ kind: 'open', near: 'far', temp: 'frozen' })).toBe('case');
+    expect(at({ kind: 'open', near: 'middle', temp: 'frozen' })).toBe('case');
+  });
+
+  it('describes and sorts them', () => {
+    expect(describeClue({ kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' })).toBe('Freezer, left wall · front');
+    expect(describeClue({ kind: 'wall', wall: 'back' })).toBe('Back wall');
+    expect(describeClue({ kind: 'open', fixture: 'table', near: 'entrance' })).toBe('Table near the door');
+    expect(describeClue({ kind: 'open', fixture: 'case', temp: 'frozen' })).toBe('Freezer, case');
+    expect(describeClue({ kind: 'open', aisle: '4' })).toBe('Out in the open by aisle 4');
+    expect(describeClue({ kind: 'aisle', aisle: '7', temp: 'chilled', side: 'L' })).toBe('Fridge, aisle 7 · left');
+    expect(clueRank({ kind: 'open', near: 'entrance' })).toBeLessThan(clueRank({ kind: 'aisle', aisle: '1' }));
+    expect(clueRank({ kind: 'wall', wall: 'left', part: 'front' })).toBeLessThan(clueRank({ kind: 'wall', wall: 'back', part: 'left' }));
+    expect(clueRank({ kind: 'wall', wall: 'back', part: 'right' })).toBeLessThan(clueRank({ kind: 'wall', wall: 'right', part: 'back' }));
+    expect(clueRank({ kind: 'wall', wall: 'right', part: 'back' })).toBeLessThan(clueRank({ kind: 'wall', wall: 'right', part: 'front' }));
+  });
+});
