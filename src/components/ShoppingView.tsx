@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Usual } from '../core/trips';
 import type { LayoutQuestion } from '../core/learn';
 import { LayoutQuestionCard } from './LayoutQuestionCard';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
@@ -38,6 +39,8 @@ interface Props {
   onListsClose: () => void;
   /** Show the how-it-works hint (toggled by ⓘ in the header). */
   showHint: boolean;
+  /** Things bought before, most likely wanted again first. */
+  usuals: Usual[];
   layout: StoreLayout;
   floor: Floor;
   catalog: Catalog;
@@ -422,6 +425,15 @@ export function ShoppingView(props: Props) {
     () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
     [items, catalog],
   );
+  /** "Buy again": things bought before that are in the master list, best first. */
+  const buyAgain = useMemo(() => {
+    const out: Product[] = [];
+    for (const u of props.usuals) {
+      const p = (u.productId && catalog.productById.get(u.productId)) || catalog.match(u.name);
+      if (p && !out.includes(p)) out.push(p);
+    }
+    return out;
+  }, [props.usuals, catalog]);
 
   const done = items.filter((i) => i.done);
   const here = placeAt(layout, position);
@@ -593,6 +605,7 @@ export function ShoppingView(props: Props) {
           whereText={(p) => whereText(p, layout, catalog)}
           iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
           onAdd={addNames}
+          buyAgain={buyAgain}
           onUndo={props.undo}
           onClose={() => setAdding(false)}
         />

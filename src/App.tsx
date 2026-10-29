@@ -15,7 +15,7 @@ import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle } from './core/aisles';
-import { recordPick, startTrip, TRIP_GAP, unrecordPick, type Trip } from './core/trips';
+import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { BACK_WALL, buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
 import { DEPTS } from './core/clues';
@@ -385,6 +385,8 @@ export default function App() {
   const [trips, setTrips] = usePersistentState<Trip[]>('aw.trips', []);
 
   // ---- Learning how the store is arranged from the trips ----
+  /** Things bought before, for "Buy again" in the add window. */
+  const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
   const learned = useMemo(() => learnArrangement(layout, products, trips, catalog), [layout, products, trips, catalog]);
   /** Updates the generated map with what these trips clearly show. */
@@ -832,6 +834,7 @@ export default function App() {
           key={listId}
           listsOpen={listsOpen}
           showHint={showHint}
+          usuals={buyAgain}
           onListsClose={() => setListsOpen(false)}
           lists={{
             all: lists, current: listId, counts: listCounts, switchTo: setActiveListId,

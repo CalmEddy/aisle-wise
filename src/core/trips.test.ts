@@ -33,3 +33,22 @@ describe('trip log', () => {
     expect(t[0].start).toBe(5 * (TRIP_GAP + 1));
   });
 });
+
+describe('buy again', () => {
+  it('puts things bought often and lately first', async () => {
+    const { usuals } = await import('./trips');
+    const trip = (start: number, names: string[]) => ({ layoutId: 'a', start, picks: names.map((name, i) => ({ productId: name.toLowerCase(), name, at: start + i })) });
+    const trips = [
+      trip(1, ['Milk', 'Bread', 'Eggs']),
+      trip(2, ['Milk', 'Bread']),
+      trip(3, ['Milk', 'Bread']),
+      trip(4, ['Milk']),
+      trip(5, ['Milk', 'Candles']),
+      { layoutId: 'b', start: 6, picks: [{ name: 'Tea', at: 6 }] },
+    ];
+    const u = usuals(trips);
+    expect(u.map((x) => x.name)).toEqual(['Milk', 'Bread', 'Tea', 'Candles', 'Eggs']);
+    expect(u[0]).toMatchObject({ productId: 'milk', count: 5, last: 5 });
+    expect(usuals(trips, 2)).toHaveLength(2);
+  });
+});

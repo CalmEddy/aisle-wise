@@ -791,3 +791,8 @@ main { padding-bottom: 110px; }
 .stepper .icon { width: 2.5rem; height: 2.5rem; font-size: 1.2rem; }
 .stepper-value { min-width: 1.75rem; text-align: center; font-weight: 700; }
 .note-input { flex: 1; min-width: 0; }
+
+/* ---- Buy again (add window) ---- */
+.buy-again h3 { margin: 0.25rem 0 0.35rem; font-weight: 600; }
+.buy-again .chips { margin-bottom: 0.5rem; flex-wrap: wrap; overflow: visible; }
+.chip.again { border-style: dashed; }

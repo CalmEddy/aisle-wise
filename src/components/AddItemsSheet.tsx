@@ -10,7 +10,7 @@ import type { Product } from '../core/types';
  * put things on the list or straight in the cart. Stays open for more; what
  * was added shows at the bottom with Undo.
  */
-export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, onUndo, onClose }: {
+export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose }: {
   listName: string;
   catalog: Catalog;
   /** Master-list items already waiting on the list. */
@@ -21,9 +21,12 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   iconOf: (categoryId?: string) => string | undefined;
   /** Adds names to the list or cart. Returns what happened (for Undo). */
   onAdd: (names: string[], mode: 'list' | 'cart') => QuickAddResult | undefined;
+  /** Things bought before, best first (shown before anything is typed). */
+  buyAgain?: Product[];
   onUndo: (snapshot: QuickAddResult['snapshot']) => void;
   onClose: () => void;
 }) {
+  const again = buyAgain.filter((p) => !onList.has(p.id)).slice(0, 16);
   const [text, setText] = useState('');
   const [browse, setBrowse] = useState<string>();
   const [added, setAdded] = useState<{ id: number; names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }[]>([]);
@@ -95,7 +98,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           <button type="submit" disabled={!typed}>+ List</button>
         </form>
         <p className="muted small add-sheet-hint">
-          {typed ? <>Enter adds to the list · 🛒 puts it straight in your cart{hereLabel ? <> (at {hereLabel})</> : null}. “2 milk” or “flour (big bag)” adds an amount or note.</> : <>Or browse by category:</>}
+          {typed ? <>Enter adds to the list · 🛒 puts it straight in your cart{hereLabel ? <> (at {hereLabel})</> : null}. “2 milk” or “flour (big bag)” adds an amount or note.</> : again.length > 0 && browse === undefined ? null : <>Or browse by category:</>}
         </p>
 
         {typed ? (
@@ -115,6 +118,19 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           </ul>
         ) : (
           <>
+            {again.length > 0 && browse === undefined && (
+              <section className="buy-again" aria-label="Buy again">
+                <h3 className="muted small">Buy again · tap to add</h3>
+                <div className="chips">
+                  {again.map((p) => (
+                    <button key={p.id} className="chip again" onClick={() => add([p.name], 'list')}>
+                      <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
+                    </button>
+                  ))}
+                </div>
+                <h3 className="muted small">Browse by category</h3>
+              </section>
+            )}
             <div className={`chips add-cats${browse !== undefined ? ' one-line' : ''}`} role="group" aria-label="Categories">
               {categories.map((c) => (
                 <button key={c.id} className={browse === c.id ? 'chip active' : 'chip'} aria-pressed={browse === c.id}
