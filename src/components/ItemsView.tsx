@@ -6,7 +6,7 @@ import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
 import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import type { Category, Product, StoreLayout } from '../core/types';
-import { whereText } from './ShoppingView';
+import { whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker, byName } from './CategoryPicker';
 import { SwipeRow } from './SwipeRow';
