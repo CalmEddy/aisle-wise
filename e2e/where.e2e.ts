@@ -198,37 +198,45 @@ test('no question when the map already knows the category; or all at checkout in
   await expect(list.getByRole('checkbox')).toBeChecked();
 });
 
-test('where’s the Bakery? tap a spot on the mini-map, see the preview, place it', async ({ page }) => {
+test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
+  const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');
   await tick(page, 'Apples');
   await page.locator('.where-bar').getByRole('button', { name: 'Right wall →' }).click();
   await tick(page, 'Bread');
-  await page.locator('.where-bar .btn.primary').click(); // Bakery: a department, but where?
-  const card = page.getByRole('group', { name: 'Where’s Bakery?' });
-  await expect(card).toBeVisible();
-  // Tap the numbered spot on the mini-map for "behind Produce".
-  const labels = await card.locator('.placement-options .chip').allInnerTexts();
-  const n = labels.findIndex((t) => t.includes('behind Produce')) + 1;
-  await card.locator('.map-ghost.next', { hasText: String(n) }).click();
-  await expect(card).toContainText('Like this?');
-  await expect(card.locator('svg.map .place.changed')).toHaveCount(1); // Bakery outlined in the preview
-  await card.getByRole('button', { name: 'Place here' }).click();
-  await expect(card).toHaveCount(0);
-  await expect.poll(async () => {
-    const c = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
-    const f = (id: string) => c.places.find((x: any) => x.id === id);
-    return f('g-dept-bakery') && f('g-dept-produce') ? f('g-dept-produce').y - f('g-dept-bakery').y : -1;
-  }).toBeGreaterThan(0);
-  const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
-  expect(l.gen.placements).toEqual({ 'sec:bakery': { of: 'sec:produce', side: 'after' } });
-  const p = (id: string) => l.places.find((x: any) => x.id === id);
-  expect(p('g-dept-bakery').x).toBe(p('g-dept-produce').x);
-  expect(p('g-dept-bakery').y).toBeLessThan(p('g-dept-produce').y);
-  // Undo puts it back to the guess, and asks again.
-  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
-  await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toBeVisible();
-  await page.getByRole('button', { name: /Not sure/ }).click();
+  await page.locator('.where-bar .btn.primary').click(); // Bakery: a department, but where? Not asked one by one any more.
   await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toHaveCount(0);
+  // The trip's done: offered the departments screen.
+  await page.getByRole('button', { name: /departments are along the walls/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Departments on the walls' });
+  const left = sheet.getByRole('group', { name: 'Left wall' });
+  const back = sheet.getByRole('group', { name: 'Back wall' });
+  // Drag Bakery to the left wall.
+  const bakery = sheet.getByRole('button', { name: 'Bakery', exact: true });
+  const from = (await bakery.boundingBox())!;
+  const to = (await left.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 30, from.y + 20, { steps: 4 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height - 10, { steps: 6 });
+  await page.mouse.up();
+  await expect(left.getByRole('button', { name: 'Bakery' })).toBeVisible();
+  // Tap Meat in the tray, then the back wall.
+  await sheet.getByRole('button', { name: 'Meat', exact: true }).click();
+  await back.click({ position: { x: 4, y: 4 } });
+  await expect(back.getByRole('button', { name: 'Meat' })).toBeVisible();
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /departments are along the walls/ })).toHaveCount(0);
+  const corner = async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  await expect.poll(async () => (await corner()).places.find((x: any) => x.id === 'g-dept-bakery')?.x ?? 99).toBeLessThan(5);
+  const l = await corner();
+  expect(l.gen.wallOrder).toEqual({ left: ['bakery'], back: ['meat'], right: ['produce'] });
+  expect(l.gen.wallsOffered).toBe(true);
+  // Undo puts Bakery back.
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(async () => (await corner()).gen.wallOrder).toBeUndefined();
+  ok();
 });
 
 test('a store that labels shelves like B12: set up by example, one-tap next shelves, place a new section', async ({ page }) => {

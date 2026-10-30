@@ -75,15 +75,7 @@ export function pendingPlacements(layout: StoreLayout, products: Product[], mode
   const locked = new Set(gen.locked);
   const onMap = new Set(layout.places.map((p) => p.id));
   const out: PlacementSubject[] = [];
-  for (const sec of model.sections) {
-    const ref = `sec:${sec.key}`;
-    const id = sectionId(sec);
-    if (done.has(ref) || locked.has(id) || !onMap.has(id)) continue;
-    // Guessed: no wall said, or a wall but not where along it (and something else is on that wall).
-    const guessed = !sec.wall || (sec.along === undefined && model.sections.some((o) => o !== sec && o.wall === sec.wall));
-    if (guessed) out.push({ ref, name: sectionName(sec), placeId: id });
-  }
-  // Sections of labelled shelves after the first one heard: where are they from the others?
+  // Departments and other wall sections aren't asked about one by one: the departments screen places them all.
   // The section with the most answers (where shopping started, usually) is the one the others are placed from.
   const seenBlocks = model.blocks.filter((b) => b.seen);
   const anchor = [...seenBlocks].sort((a, b) => b.count - a.count)[0];

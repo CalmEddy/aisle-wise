@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildModel, regenerate } from './generate';
-import { pendingPlacements, placementOptions } from './placement';
+import { pendingPlacements, placementOptions, type PlacementSubject } from './placement';
 import type { Product, StoreLayout } from './types';
 
 const p = (id: string, categoryId: string | undefined, clue: object): Product => ({ id, name: id, ...(categoryId && { categoryId }), clues: { s: clue as never } });
@@ -15,13 +15,13 @@ const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: 
 const store = regenerate(blank, buildModel(products, 's'));
 
 describe('placing new things relative to what’s on the map', () => {
-  it('asks about things the map has only guessed', () => {
+  it('asks about things the map has only guessed (departments are set out on the departments screen instead)', () => {
     const pending = pendingPlacements(store, products);
-    expect(pending.map((s) => [s.ref, s.name])).toEqual([['sec:bakery', 'Bakery'], ['isl:middle-table-room', 'Produce table']]);
+    expect(pending.map((s) => [s.ref, s.name])).toEqual([['isl:middle-table-room', 'Produce table']]);
   });
 
   it('offers spots next to what’s there, each with a preview', () => {
-    const bakery = pendingPlacements(store, products)[0];
+    const bakery: PlacementSubject = { ref: 'sec:bakery', name: 'Bakery', placeId: 'g-dept-bakery' };
     const opts = placementOptions(store, products, bakery);
     const labels = opts.map((o) => o.label);
     expect(labels).toEqual(expect.arrayContaining(['Right wall, in front of Produce', 'Right wall, behind Produce', 'Left wall', 'Back wall']));
@@ -46,7 +46,7 @@ describe('placing new things relative to what’s on the map', () => {
   });
 
   it('places a table by an aisle', () => {
-    const table = pendingPlacements(store, products)[1];
+    const table = pendingPlacements(store, products)[0];
     const opts = placementOptions(store, products, table);
     const by3 = opts.find((o) => o.label === 'By aisle 3')!;
     const aisle3 = by3.preview.aisles!.find((a) => a.id === 'g-aisle-3')!;

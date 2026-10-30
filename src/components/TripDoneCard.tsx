@@ -6,7 +6,7 @@ import { LayoutQuestionCard } from './LayoutQuestionCard';
  * Everything's in the cart: how the trip went, what to get elsewhere, any
  * "ask later" items to place, the layout question, and clearing the cart.
  */
-export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, question, onAnswer, onClear, door }: {
+export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, question, onAnswer, onClear, door, walls }: {
   inCart: number;
   /** First to last check-off, if known. */
   minutes?: number;
@@ -20,6 +20,8 @@ export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, qu
   onClear: () => void;
   /** "Where's the door?", asked once per store. */
   door?: ReactNode;
+  /** Offer the departments screen (once a few departments are known). */
+  walls?: () => void;
 }) {
   return (
     <section className="card trip-done-card" aria-label="Trip done">
@@ -36,6 +38,7 @@ export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, qu
       )}
       {question && <LayoutQuestionCard compact question={question} onAnswer={onAnswer} />}
       {door}
+      {walls && <button className="btn wide" onClick={walls}>🧱 Show where the departments are along the walls</button>}
       <button className="btn primary wide" onClick={onClear}>Clear cart · start next trip</button>
       {elsewhere.length > 0 && <p className="muted small">Things to get elsewhere stay on your list.</p>}
     </section>

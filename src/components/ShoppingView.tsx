@@ -46,6 +46,8 @@ import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
 import { DoorCard } from './DoorCard';
+import { DeptWallsSheet } from './DeptWallsSheet';
+import { offerWalls } from '../core/walls';
 
 interface Props {
   /** The household's lists; this view shows the current one. */
@@ -703,6 +705,8 @@ export function ShoppingView(props: Props) {
   /** The store's sections of labelled shelves (from the map), in order. */
   const storeSections = useMemo(() => [...new Set(layout.places.map((p) => /^g-sec-(.+)-\d+$/.exec(p.id)?.[1]).filter((x): x is string => !!x))].sort(), [layout.places]);
   /** Setting up the store's shelf labels, from a label just typed (and the item it's for). */
+  /** The departments screen is open (from the trip-done card: closing it means don't offer again). */
+  const [wallsOpen, setWallsOpen] = useState<'trip' | 'settings' | null>(null);
   const [labelSetup, setLabelSetup] = useState<{ code?: string; item?: ListItem } | null>(null);
   /**
    * Worth asking about: no saved place and no answer for this store, and the
@@ -1028,6 +1032,7 @@ export function ShoppingView(props: Props) {
                 }}
                 onSkip={() => props.where.setDoor(undefined)} />
             )}
+            walls={offerWalls(layout) ? () => setWallsOpen('trip') : undefined}
           />
         )}
 
@@ -1300,6 +1305,7 @@ export function ShoppingView(props: Props) {
               layout={layout}
               store={props.build.store}
               onLabels={() => setLabelSetup({})}
+              onWalls={() => setWallsOpen('settings')}
               problems={problems}
               onNewStore={() => {
                 props.build.startBlankStore();
@@ -1357,6 +1363,24 @@ export function ShoppingView(props: Props) {
           onSave={(clue) => saveWhere(whereBarFor, clue)}
           onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
+        />
+      )}
+      {wallsOpen && (
+        <DeptWallsSheet
+          layout={layout}
+          onClose={() => {
+            if (wallsOpen === 'trip') props.build.store.setGen({ wallsOffered: true });
+            setWallsOpen(null);
+          }}
+          onSave={(wallOrder) => {
+            // The walls follow this order now, even parts that were moved by hand.
+            const locked = (props.build.store.gen?.locked ?? []).filter((id) => !/^g-(dept|wall)-/.test(id));
+            const snapshot = props.build.store.setGen({ wallOrder, wallsOffered: true, locked });
+            setWallsOpen(null);
+            const note = 'Departments set out along the walls. Changes are outlined.';
+            if (building) setNote({ kind: 'message', text: note, snapshot });
+            else setToast({ snapshot, added: [], mode: 'list', note });
+          }}
         />
       )}
       {labelSetup && (

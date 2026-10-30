@@ -114,7 +114,7 @@ function GenChoice({ store, setting, label, options, note, onUndoable }: {
 }
 
 /** The collapsible "Store settings" section of the build panel. */
-export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace, onUndoable, onLabels }: {
+export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace, onUndoable, onLabels, onWalls }: {
   layout: StoreLayout;
   store: StoreApi;
   /** Plain-language problems with the layout. */
@@ -126,6 +126,8 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
   onUndoable: (text: string, snapshot: Snapshot) => void;
   /** Set up how the store labels its shelves. */
   onLabels?: () => void;
+  /** Open the departments screen (what's along each wall). */
+  onWalls?: () => void;
 }) {
   return (
     <>
@@ -189,6 +191,12 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
                   options={[['usual', store.layoutHas.backWall[0]], ['reversed', store.layoutHas.backWall[1]]]} />
               )}
               <p className="muted small">The back of the store is the top of the map, with the entrance in the middle of the front. Trips teach the map which way round things are; what you pick here stays put.</p>
+              {onWalls && (
+                <div className="gen-choice">
+                  <span className="gen-choice-label">Departments on the walls</span>
+                  <button className="btn" onClick={onWalls}>{store.gen.wallOrder ? 'Change…' : 'Set out…'}</button>
+                </div>
+              )}
               <div className="store-actions">
                 {store.gen.locked.length > 0 && (
                   <button className="btn" onClick={() => onUndoable('Edited parts will be rebuilt from the answers.', store.setGen({ locked: [] }))}>

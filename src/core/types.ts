@@ -111,6 +111,13 @@ export interface GeneratedMap extends Arrangement {
   placementsSkipped?: string[];
   /** Runs of aisles drawn as their own block ("aisles:7" = aisles 7 to 10), e.g. running side to side below the rest. */
   aisleGroups?: { from: string; to: string }[];
+  /**
+   * What the shopper put on each wall, in order (side walls front to back, the back wall left to
+   * right), by section key ("produce", "left-chilled"). Departments not heard of yet can be here too.
+   */
+  wallOrder?: Record<Wall, string[]>;
+  /** The shopper's been offered the departments screen and closed it: not offered again. */
+  wallsOffered?: boolean;
   /** Where the door is along the front, 0 (left) to 1 (right); unset: the middle. */
   door?: number;
   /** Which way each block's shelves run ("block:C", "aisles:7"); unset: up and down (aisle groups: side to side). */

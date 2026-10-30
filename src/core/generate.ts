@@ -230,7 +230,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
 }
 
 /** What a map is generated with: the entrance corner and the arrangement. */
-export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions' | 'door'> & { labels?: LabelStyle };
+export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions' | 'door' | 'wallOrder'> & { labels?: LabelStyle };
 
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
@@ -243,6 +243,7 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
     ...(settings.placements && Object.keys(settings.placements).length && { pl: settings.placements }),
     ...(settings.aisleGroups?.length && { ag: settings.aisleGroups }),
     ...(settings.door !== undefined && { door: settings.door }),
+    ...(settings.wallOrder && { wo: settings.wallOrder }),
     ...(settings.directions && Object.keys(settings.directions).length && { dr: settings.directions }),
     a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : a.chilled ? 2 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
@@ -264,7 +265,7 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; door?: number } = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; door?: number; wallOrder?: Record<Wall, string[]> } = {}) {
   const placements = arrangement.placements ?? {};
   const L = AISLE_LENGTH;
   // Blocks of shelving: the numbered aisles, runs of aisles the shopper made into their own block,
@@ -404,6 +405,7 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   if (arrangement.backWall === 'reversed') back.reverse();
   const right = RIGHT_WALL.filter((d) => model.depts.includes(d));
   const placed: { sec: SectionModel; wall: Wall; along: number }[] = [];
+  const onAWall = (key: string) => (['left', 'back', 'right'] as Wall[]).some((w) => arrangement.wallOrder?.[w]?.includes(key));
   const corners: Dept[] = [];
   for (const sec of model.sections) {
     let wall = sec.wall;
@@ -414,17 +416,26 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
       else if (d === 'frozen') wall = produceFar ? 'right' : 'left';
       else if (d && right.includes(d)) { wall = 'right'; along ??= 0.45 + (0.5 * (right.indexOf(d) + 0.5)) / right.length; }
       else if (d && back.includes(d)) { wall = 'back'; along ??= (back.indexOf(d) + 0.5) / back.length; }
-      else if (d && (FRONT_RIGHT.includes(d) || FRONT_LEFT.includes(d)) && !placements[`sec:${sec.key}`]) { corners.push(d); continue; }
+      else if (d && (FRONT_RIGHT.includes(d) || FRONT_LEFT.includes(d)) && !placements[`sec:${sec.key}`] && !onAWall(sec.key)) { corners.push(d); continue; }
       else wall = 'back';
     }
     placed.push({ sec, wall, along: along ?? 0.5 });
+  }
+  // The walls as the shopper arranged them (the departments screen): their order wins.
+  for (const wall of ['left', 'back', 'right'] as Wall[]) {
+    const keys = (arrangement.wallOrder?.[wall] ?? []).filter((k) => placed.some((p) => p.sec.key === k));
+    keys.forEach((k, i) => {
+      const p = placed.find((x) => x.sec.key === k)!;
+      p.wall = wall;
+      p.along = (i + 0.5) / keys.length;
+    });
   }
   // Where the shopper placed sections: next to another one (just before or after it), or on a wall.
   // Placements can refer to each other, so settle them a few times over.
   for (let pass = 0; pass < 4; pass++) {
     for (const p of placed) {
       const pl = placements[`sec:${p.sec.key}`];
-      if (!pl) continue;
+      if (!pl || onAWall(p.sec.key)) continue;
       if (pl.of.startsWith('wall:')) {
         const w = pl.of.slice(5) as Wall;
         if (p.wall !== w) { p.wall = w; p.along = pl.side === 'before' ? 0 : pl.side === 'after' ? 1 : 0.5; }

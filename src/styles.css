@@ -938,3 +938,19 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .where-bar-sections { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .where-bar-sections .key { min-width: 40px; padding: 8px 10px; font-weight: 700; }
 .where-bar-sections .key.active { background: var(--accent); color: #fff; }
+
+/* The departments screen: the store's walls as a box. */
+.dept-walls-sheet { max-height: 92vh; overflow-y: auto; }
+.dept-store { border: 2px solid var(--border, #ccc); border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 6px; }
+.dept-wall { display: flex; gap: 4px; min-height: 40px; padding: 4px; border-radius: 8px; background: color-mix(in srgb, currentColor 6%, transparent); }
+.dept-wall-back { flex-wrap: wrap; }
+.dept-wall-left, .dept-wall-right { flex-direction: column; width: 40%; min-height: 140px; }
+.dept-sides { display: flex; gap: 6px; align-items: stretch; }
+.dept-floor { flex: 1; display: grid; place-items: center; border: 1px dashed var(--border, #ccc); border-radius: 6px; }
+.dept-front { text-align: center; }
+.dept-wall-empty { margin: auto; }
+.dept-chip { touch-action: none; user-select: none; -webkit-user-select: none; }
+.dept-wall-left .dept-chip, .dept-wall-right .dept-chip { width: 100%; justify-content: flex-start; }
+.dept-chip.dragging { opacity: 0.35; }
+.dept-tray { min-height: 40px; }
+.dept-ghost { position: fixed; transform: translate(-50%, -120%); pointer-events: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
