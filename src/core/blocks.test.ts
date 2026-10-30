@@ -82,3 +82,29 @@ describe('areas that cut through shelves', () => {
     expect(floor.reachable(l.entrance, { x: area.x, y: area.y })).toBe(true);
   });
 });
+
+describe('placing the first section next to a later one', () => {
+  it('offers every side, and the shopper’s placement wins over the usual order', async () => {
+    const style: LabelStyle = { example: 'B12', roles: ['section', 'shelf'], pairing: 'backToBack' };
+    const mk = (id: string, code: string): Product => { const p = parseLabel(style, code)!; return { id, name: id, clues: { s: { kind: 'shelf', code, section: p.section, shelf: p.shelf } } }; };
+    const ps = [mk('a', 'B3'), mk('b', 'B4'), mk('c', 'A2')];
+    const l = regenerate({ ...blank, labels: style }, buildModel(ps, 's'));
+    const sub = pendingPlacements(l, ps).find((x) => x.name === 'Section A')!;
+    const labels = placementOptions(l, ps, sub).map((o) => o.label);
+    expect(labels).toEqual(expect.arrayContaining(['Left of section B', 'Right of section B', 'Behind section B', 'In front of section B']));
+  });
+});
+
+describe('naming each spot after what it’s really next to', () => {
+  it('offers "Left of section B", not "Left of section A" pushed past B', async () => {
+    const style: LabelStyle = { example: 'B12', roles: ['section', 'shelf'], pairing: 'backToBack' };
+    const mk = (id: string, code: string): Product => { const p = parseLabel(style, code)!; return { id, name: id, clues: { s: { kind: 'shelf', code, section: p.section, shelf: p.shelf } } }; };
+    const ps = [mk('a', 'B3'), mk('b', 'B4'), mk('c', 'A2'), mk('d', 'C5')];
+    const base = regenerate({ ...blank, labels: style }, buildModel(ps, 's'));
+    const l = regenerate({ ...base, gen: { ...base.gen!, placements: { 'block:A': { of: 'block:B', side: 'right' } } } }, buildModel(ps, 's'));
+    const sub = pendingPlacements(l, ps).find((x) => x.name === 'Section C')!;
+    const labels = placementOptions(l, ps, sub).map((o) => o.label);
+    expect(labels).toContain('Left of section B');
+    expect(labels).not.toContain('Left of section A');
+  });
+});

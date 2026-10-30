@@ -161,17 +161,49 @@ export function placementOptions(layout: StoreLayout, products: Product[], subje
     candidates.push({ placement: { of: 'wall:left' }, label: 'Left side, in front of the aisles' });
     candidates.push({ placement: { of: 'wall:right' }, label: 'Right side, in front of the aisles' });
   }
-  const seen = new Set<string>();
-  const out: PlacementOption[] = [];
+  // Same map, same spot (whatever was asked): offered once, named after what it's really next to.
+  const byMap = new Map<string, { option: PlacementOption; touching: boolean }>();
   for (const c of candidates) {
     const preview = regenerate({ ...layout, gen: { ...gen, placements: { ...gen.placements, [subject.ref]: c.placement } } }, model);
     const ghost = subjectRect(preview, subject);
     if (!ghost) continue;
-    // Same map, same spot (whatever was asked): offer it once.
     const key = preview.places.map((p) => `${p.id}:${p.x},${p.y}`).join('|');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ ...c, ghost, preview });
+    const touching = isBlock(subject) ? nextTo(preview, c.placement, ghost) : true;
+    const had = byMap.get(key);
+    if (!had || (touching && !had.touching)) byMap.set(key, { option: { ...c, ghost, preview }, touching });
   }
+  const out = [...byMap.values()].map((x) => x.option);
   return out;
+}
+
+/** The rectangle of a block's shelves on a map ("block:B", "aisles:main", "aisles:7"). */
+function blockRect(l: StoreLayout, ref: string): Rect | undefined {
+  const grouped = l.gen?.aisleGroups ?? [];
+  const shelves = l.places.filter((p) => {
+    if (ref.startsWith('block:')) return p.id.startsWith(`g-sec-${ref.slice(6)}-`);
+    const m = /^g-shelf-([^-]+)-[LR]/.exec(p.id);
+    if (!m) return false;
+    const n = aisleNumber(m[1]);
+    const g = grouped.find((x) => n >= aisleNumber(x.from) && n <= aisleNumber(x.to));
+    return ref === 'aisles:main' ? !g : !!g && `aisles:${g.from}` === ref;
+  });
+  if (!shelves.length) return undefined;
+  const rs = shelves.map(footprint);
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+}
+
+/** Whether a block ended up right next to what it was placed by (not pushed further along). */
+function nextTo(l: StoreLayout, p: Placement, me: Rect): boolean {
+  const t = blockRect(l, p.of);
+  if (!t) return false;
+  const near = (a: number, b: number) => Math.abs(a - b) <= 1;
+  switch (p.side) {
+    case 'left': return near(me.x + me.w + 2, t.x);
+    case 'right': return near(t.x + t.w + 2, me.x);
+    case 'above': return near(me.y + me.h + 2, t.y);
+    case 'below': return near(t.y + t.h + 2, me.y);
+    default: return true;
+  }
 }

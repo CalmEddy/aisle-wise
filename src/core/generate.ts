@@ -624,7 +624,18 @@ export function arrangeBlocks(items: BlockItem[], placements: Record<string, Pla
   const out: { ref: string; rect: Rect }[] = [];
   const gap = 2;
   const clash = (r: Rect, self: string) => out.some((o) => o.ref !== self && r.x < o.rect.x + o.rect.w + gap && o.rect.x < r.x + r.w + gap && r.y < o.rect.y + o.rect.h + gap && o.rect.y < r.y + r.h + gap);
-  const rule = (it: BlockItem) => placements[it.ref] ?? it.default;
+  // What each block is placed next to: the shopper's placement, else where it usually goes, unless
+  // that would go round in a circle (B left of A by default, A placed right of B): the shopper's wins.
+  const explicit = (ref: string) => placements[ref];
+  const leadsTo = (from: string | undefined, to: string, seen = new Set<string>()): boolean => {
+    if (!from || seen.has(from)) return false;
+    if (from === to) return true;
+    seen.add(from);
+    const it = items.find((x) => x.ref === from);
+    const next = explicit(from)?.of ?? it?.default?.of;
+    return leadsTo(next, to, seen);
+  };
+  const rule = (it: BlockItem) => explicit(it.ref) ?? (it.default && !leadsTo(explicit(it.default.of)?.of, it.ref) ? it.default : undefined);
   // A block placed next to another goes after it (so it's there to be next to).
   const order: BlockItem[] = [];
   const left = [...items];
