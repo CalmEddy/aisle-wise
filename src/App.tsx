@@ -285,8 +285,10 @@ export default function App() {
     const model = buildModel(products, layout.id);
     if (modelKey(model, { ...gen, labels: layout.labels }) === gen.key) return;
     const after = regenerate({ ...layout, gen }, model);
-    // Outline what changed, until the next trip (or it's tapped in Edit map).
-    const changed = changedParts(layout, after);
+    // Outline what changed, until the next trip (or it's tapped in Edit map) – but not on a store's
+    // first map, where everything is new and outlines would just cover it.
+    const first = !layout.places.some((p) => p.id.startsWith('g-'));
+    const changed = first ? [] : changedParts(layout, after);
     setLayouts((prev) => prev.map((l) => (l.id === layout.id ? after : l)));
     if (changed.length) setMapChanges((prev) => ({ ...prev, [layout.id]: [...new Set([...(prev[layout.id] ?? []), ...changed])] }));
     // eslint-disable-next-line react-hooks/exhaustive-deps

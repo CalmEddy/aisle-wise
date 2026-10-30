@@ -124,8 +124,10 @@ test('answers change the map straight away, outlined until the next trip', async
   await addItems(page, 'Apples, Cereal');
   await tick(page, 'Apples');
   await page.locator('.where-bar .btn.primary').click(); // Produce
-  await expect(page.locator('svg.map .place.changed')).not.toHaveCount(0);
-  const before = await page.locator('svg.map .change-frame').count();
+  // The store's first map: everything's new, so nothing is outlined.
+  await expect(page.locator('.map-wrap svg.map .place')).not.toHaveCount(0);
+  await expect(page.locator('svg.map .change-frame')).toHaveCount(0);
+  const before = 0;
   await tick(page, 'Cereal');
   await page.locator('.where-bar').getByRole('button', { name: /Other|Aisle \/ department/ }).click();
   await page.getByLabel('Aisle number').fill('4');
