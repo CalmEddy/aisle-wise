@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Floor } from './floor';
 import { buildModel, regenerate } from './generate';
 import { parseLabel, type LabelStyle } from './labels';
-import { pendingPlacements, placementOptions } from './placement';
+import { blockSubject, pendingPlacements, placementOptions } from './placement';
 import type { Product, Shelf, StoreLayout } from './types';
 
 const aisle = (n: number): Product => ({ id: `p${n}`, name: `P${n}`, categoryId: 'snacks', clues: { s: { kind: 'aisle', aisle: String(n), side: 'L' } } });
@@ -89,7 +89,7 @@ describe('placing the first section next to a later one', () => {
     const mk = (id: string, code: string): Product => { const p = parseLabel(style, code)!; return { id, name: id, clues: { s: { kind: 'shelf', code, section: p.section, shelf: p.shelf } } }; };
     const ps = [mk('a', 'B3'), mk('b', 'B4'), mk('c', 'A2')];
     const l = regenerate({ ...blank, labels: style }, buildModel(ps, 's'));
-    const sub = pendingPlacements(l, ps).find((x) => x.name === 'Section A')!;
+    const sub = blockSubject(l, 'block:A')!;
     const labels = placementOptions(l, ps, sub).map((o) => o.label);
     expect(labels).toEqual(expect.arrayContaining(['Left of section B', 'Right of section B', 'Behind section B', 'In front of section B']));
   });
@@ -102,7 +102,7 @@ describe('naming each spot after what it’s really next to', () => {
     const ps = [mk('a', 'B3'), mk('b', 'B4'), mk('c', 'A2'), mk('d', 'C5')];
     const base = regenerate({ ...blank, labels: style }, buildModel(ps, 's'));
     const l = regenerate({ ...base, gen: { ...base.gen!, placements: { 'block:A': { of: 'block:B', side: 'right' } } } }, buildModel(ps, 's'));
-    const sub = pendingPlacements(l, ps).find((x) => x.name === 'Section C')!;
+    const sub = blockSubject(l, 'block:C')!;
     const labels = placementOptions(l, ps, sub).map((o) => o.label);
     expect(labels).toContain('Left of section B');
     expect(labels).not.toContain('Left of section A');

@@ -67,6 +67,16 @@ const sectionId = (sec: SectionModel) => (sec.dept ? `g-dept-${sec.dept}` : `g-w
 const sectionName = (sec: SectionModel) =>
   sec.dept ? deptName(sec.dept) : sec.temp === 'frozen' ? 'Freezers' : sec.temp === 'chilled' ? 'Fridges' : 'Wall shelves';
 
+/** A block of shelving to place on request ("block:C" → Section C, "aisles:7" → that run of aisles). */
+export function blockSubject(layout: StoreLayout, ref: string): PlacementSubject | undefined {
+  if (ref.startsWith('block:')) {
+    const sec = ref.slice(6);
+    return layout.places.some((p) => p.id.startsWith(`g-sec-${sec}-`)) ? { ref, name: `Section ${sec}`, placeId: `g-sec-${sec}-`, group: true } : undefined;
+  }
+  const g = layout.gen?.aisleGroups?.find((x) => `aisles:${x.from}` === ref);
+  return g ? { ref, name: `Aisles ${g.from}–${g.to}`, placeId: '', group: true, aisles: g } : undefined;
+}
+
 /** Things the map has only guessed the place of, that the shopper hasn't placed or skipped. */
 export function pendingPlacements(layout: StoreLayout, products: Product[], model: StoreModel = buildModel(products, layout.id)): PlacementSubject[] {
   const gen = layout.gen;
@@ -76,14 +86,8 @@ export function pendingPlacements(layout: StoreLayout, products: Product[], mode
   const onMap = new Set(layout.places.map((p) => p.id));
   const out: PlacementSubject[] = [];
   // Departments and other wall sections aren't asked about one by one: the departments screen places them all.
-  // The section with the most answers (where shopping started, usually) is the one the others are placed from.
-  const seenBlocks = model.blocks.filter((b) => b.seen);
-  const anchor = [...seenBlocks].sort((a, b) => b.count - a.count)[0];
-  for (const b of seenBlocks.filter((x) => x !== anchor)) {
-    const ref = `block:${b.section}`;
-    if (done.has(ref) || !layout.places.some((p) => p.id.startsWith(`g-sec-${b.section}-`))) continue;
-    out.push({ ref, name: `Section ${b.section}`, placeId: `g-sec-${b.section}-`, group: true });
-  }
+  // Sections of labelled shelves aren't asked about either: they're assumed to run in letter order
+  // (A on the right, like aisle 1), and any can be placed from Store settings (blockSubject).
   // Runs of aisles made into their own block: where are they?
   for (const g of gen.aisleGroups ?? []) {
     const ref = `aisles:${g.from}`;

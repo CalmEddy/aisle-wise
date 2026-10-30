@@ -77,17 +77,18 @@ describe('a store built from shelf labels', () => {
 });
 
 describe('placing a new section', () => {
-  it('asks where section C is, with spots around A and B', async () => {
-    const { pendingPlacements, placementOptions } = await import('./placement');
+  it('doesn’t ask: C goes left of A (letter order, B between); placed on request with spots around A', async () => {
+    const { blockSubject, pendingPlacements, placementOptions } = await import('./placement');
     const b12s: LabelStyle = { example: 'B12', roles: ['section', 'shelf'], pairing: 'backToBack' };
     const mk = (id: string, code: string): Product => { const p = parseLabel(b12s, code)!; return { id, name: id, clues: { s: { kind: 'shelf', code, section: p.section, shelf: p.shelf } } }; };
     const products = [mk('x', 'A2'), mk('y', 'C3')];
     const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
       gen: { enabled: true, entrance: 'left', locked: [] }, labels: b12s };
     const l = regenerate(blank, buildModel(products, 's'));
-    const pending = pendingPlacements(l, products);
-    expect(pending.map((p) => p.name)).toEqual(['Section C']);
-    const opts = placementOptions(l, products, pending[0]);
+    expect(pendingPlacements(l, products)).toEqual([]);
+    const at = (label: string) => l.places.find((p) => p.label === label)!;
+    expect(at('C1').x).toBeLessThan(at('A1').x);
+    const opts = placementOptions(l, products, blockSubject(l, 'block:C')!);
     expect(opts.map((o) => o.label)).toEqual(expect.arrayContaining(['In front of section A', 'Behind section A', 'Right of section A']));
     const below = opts.find((o) => o.label === 'In front of section A')!;
     const a1 = below.preview.places.find((p) => p.label === 'A1')!;
@@ -96,16 +97,15 @@ describe('placing a new section', () => {
 });
 
 describe('placing a section from the one you started in', () => {
-  it('asks about the newer section and draws it where placed, even if it comes first alphabetically', async () => {
+  it('puts A right of B by itself (letter order), without asking', async () => {
     const { pendingPlacements } = await import('./placement');
     const style: LabelStyle = { example: 'B12', roles: ['section', 'shelf'], pairing: 'backToBack' };
     const mk = (id: string, code: string): Product => { const p = parseLabel(style, code)!; return { id, name: id, clues: { s: { kind: 'shelf', code, section: p.section, shelf: p.shelf } } }; };
     const products = [mk('x', 'B4'), mk('y', 'B5'), mk('z', 'A2')];
     const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
       gen: { enabled: true, entrance: 'left', locked: [] }, labels: style };
-    let l = regenerate(blank, buildModel(products, 's'));
-    expect(pendingPlacements(l, products).map((p) => p.name)).toEqual(['Section A']);
-    l = regenerate({ ...l, gen: { ...l.gen!, placements: { 'block:A': { of: 'block:B', side: 'right' } } } }, buildModel(products, 's'));
+    const l = regenerate(blank, buildModel(products, 's'));
+    expect(pendingPlacements(l, products)).toEqual([]);
     const p = (label: string) => l.places.find((x) => x.label === label)!;
     expect(p('A1').x).toBeGreaterThan(p('B1').x);
   });

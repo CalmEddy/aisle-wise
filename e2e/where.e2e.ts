@@ -268,6 +268,15 @@ test('a store that labels shelves like B12: set up by example, one-tap next shel
   await bar.getByRole('button', { name: '123' }).click();
   await bar.getByRole('button', { name: '4', exact: true }).click();
   await bar.getByRole('button', { name: 'Save' }).click();
+  // Not asked: C goes left of B by itself (letter order).
+  await expect(page.getByRole('group', { name: 'Where’s Section C?' })).toHaveCount(0);
+  const corner0 = async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  await expect.poll(async () => { const c = await corner0(); const f = (lb: string) => c.places.find((x: any) => x.label === lb); return f('C1') && f('B1') ? f('B1').x - f('C1').x : -1; }).toBeGreaterThan(0);
+  // In front of B instead: Store settings → Blocks of shelving → Section C → Place….
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await page.locator('.build-sheet').getByRole('tab', { name: /^Store/ }).click();
+  await page.locator('.store-settings summary').click();
+  await page.locator('.gen-choice', { hasText: 'Section C' }).getByRole('button', { name: 'Place…' }).click();
   const card = page.getByRole('group', { name: 'Where’s Section C?' });
   await card.locator('.placement-options .chip', { hasText: 'In front of section B' }).click();
   await card.getByRole('button', { name: 'Place here' }).click();

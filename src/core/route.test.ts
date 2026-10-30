@@ -6,7 +6,7 @@ import { Catalog } from './catalog';
 import { defaultCategories, defaultProducts } from './categories';
 import { groupIntoStops, locateItem, normalize, type Location } from './locate';
 import { planGroupedRoute, planRoute, routeLength } from './route';
-import type { ListItem, Shelf, StoreLayout } from './types';
+import type { ListItem, Point, Shelf, StoreLayout } from './types';
 import { checkLayout } from './validate';
 
 const item = (name: string): ListItem => ({ id: name, name, done: false });
@@ -215,5 +215,38 @@ describe('planGroupedRoute', () => {
     const many = Array.from({ length: 14 }, (_, i) => stop(`s${i}`, `p${i}`, i, i % 5));
     const planned = planGroupedRoute({ x: 0, y: 19 }, many, { x: 19, y: 19 }, new Floor({ ...layout, places: [] }).distance, along);
     expect(new Set(planned.map((s) => s.id)).size).toBe(14);
+  });
+});
+
+describe('long trips (more places than are solved exactly)', () => {
+  // A seeded random store: places scattered on a grid, walked with city-block distance.
+  const rand = (seed: number) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const manhattan = (a: Point, b: Point) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+  const along = (s: { point: Point }) => s.point.y;
+  const len = (start: Point, route: { point: Point }[], end: Point) => routeLength(start, route, end, manhattan);
+
+  it('comes within a few percent of the best route, and never doubles back badly', () => {
+    let worst = 0;
+    for (let seed = 1; seed <= 12; seed++) {
+      const r = rand(seed);
+      const stops = Array.from({ length: 11 }, (_, i) => ({ id: `s${i}`, placeId: `p${i}`, point: { x: Math.floor(r() * 50), y: Math.floor(r() * 30) } }));
+      const start = { x: 25, y: 30 };
+      const end = { x: 10, y: 30 };
+      const exact = len(start, planGroupedRoute(start, stops, end, manhattan, along), end);
+      const quick = len(start, planGroupedRoute(start, stops, end, manhattan, along, 0), end);
+      worst = Math.max(worst, quick / exact);
+    }
+    expect(worst).toBeLessThan(1.05);
+  });
+
+  it('aisles 7, 9 and 11: visits them in order instead of 9, 11, back to 7', () => {
+    // Shelves up and down, items halfway along; you come from the right along the back.
+    const aisle = (n: number, y: number) => ({ id: `a${n}`, placeId: `a${n}`, point: { x: 60 - n * 4, y } });
+    const stops = [aisle(9, 10), aisle(11, 18), aisle(7, 15), aisle(3, 12), aisle(5, 14)];
+    const start = { x: 50, y: 30 };
+    const end = { x: 10, y: 30 };
+    const route = planGroupedRoute(start, stops, end, manhattan, along, 0).map((s) => s.id);
+    const exact = planGroupedRoute(start, stops, end, manhattan, along).map((s) => s.id);
+    expect(len(start, route.map((id) => stops.find((s) => s.id === id)!), end)).toBe(len(start, exact.map((id) => stops.find((s) => s.id === id)!), end));
   });
 });

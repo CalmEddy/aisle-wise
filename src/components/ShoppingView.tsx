@@ -40,7 +40,7 @@ import { WhereList } from './WhereList';
 import { PlacementCard } from './PlacementCard';
 import { LabelStyleSheet } from './LabelStyleSheet';
 import { parseLabel, type LabelStyle } from '../core/labels';
-import { isBlock, pendingPlacements } from '../core/placement';
+import { blockSubject, isBlock, pendingPlacements } from '../core/placement';
 import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves, runsUp, selectionRect } from '../core/aisles';
@@ -750,7 +750,10 @@ export function ShoppingView(props: Props) {
   // In the editor, only blocks are asked about (made with "New block").
   const pending = useMemo(() => pendingPlacements(layout, catalog.products).filter((sub) => !building || isBlock(sub)), [layout, catalog.products, building]);
   const [placeLater, setPlaceLater] = useState<string[]>([]);
-  const placing = pending.find((sub) => !placeLater.includes(sub.ref));
+  /** A block the shopper asked to place (Store settings → Place…). */
+  const [placeAsked, setPlaceAsked] = useState<string>();
+  const asked = placeAsked ? blockSubject(layout, placeAsked) : undefined;
+  const placing = asked ?? pending.find((sub) => !placeLater.includes(sub.ref));
   const laterHere = (askLater[layout.id] ?? [])
     .map((id) => items.find((i) => i.id === id))
     .filter((i): i is ListItem => !!i && isUnknownHere(i));
@@ -1328,6 +1331,7 @@ export function ShoppingView(props: Props) {
               store={props.build.store}
               onLabels={() => setLabelSetup({})}
               onWalls={() => setWallsOpen('settings')}
+              onPlaceBlock={(ref) => { setPlaceAsked(ref); setSheetOpen(false); }}
               problems={problems}
               onNewStore={() => {
                 props.build.startBlankStore();
@@ -1444,10 +1448,11 @@ export function ShoppingView(props: Props) {
           look={props.mapLook}
           onPlace={(placement, label, dir) => {
             const snapshot = props.where.place(placing.ref, placement, dir);
+            setPlaceAsked(undefined);
             setToast({ snapshot, added: [], mode: 'list', note: `${placing.name}: ${label}` });
           }}
-          onNotSure={() => props.where.skipPlacement(placing.ref)}
-          onLater={() => setPlaceLater((l) => [...l, placing.ref])}
+          onNotSure={() => { if (asked) setPlaceAsked(undefined); else props.where.skipPlacement(placing.ref); }}
+          onLater={() => { if (asked) setPlaceAsked(undefined); else setPlaceLater((l) => [...l, placing.ref]); }}
         />
       )}
       {listOpen && !whereFor && (

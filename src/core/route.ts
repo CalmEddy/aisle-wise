@@ -152,7 +152,7 @@ export function groupVisits<T extends { placeId: string }>(route: T[]): Visit<T>
 }
 
 /** Above this many places, grouped routes use a heuristic instead of an exact solve. */
-const EXACT_GROUPS = 10;
+const EXACT_GROUPS = 12;
 
 /**
  * Plans a route that never splits a place: all the stops on one shelf (or in
@@ -163,6 +163,8 @@ const EXACT_GROUPS = 10;
  */
 export function planGroupedRoute<T extends { point: Point; placeId: string }>(
   start: Point, stops: T[], end: Point, d: Distance, along: (stop: T) => number,
+  /** Most places to solve exactly (tests compare the quick way with the exact one). */
+  exactUpTo = EXACT_GROUPS,
 ): T[] {
   const byPlace = new Map<string, T[]>();
   for (const s of stops) byPlace.set(s.placeId, [...(byPlace.get(s.placeId) ?? []), s]);
@@ -175,10 +177,10 @@ export function planGroupedRoute<T extends { point: Point; placeId: string }>(
   const last = (i: number, o: number) => (o ? paths[i][0] : paths[i][paths[i].length - 1]).point;
   const walk = (order: [number, number][]) => order.flatMap(([i, o]) => (o ? [...paths[i]].reverse() : paths[i]));
 
-  if (n > EXACT_GROUPS) {
+  if (n > exactUpTo) {
     // Nearest place next, entering at whichever end is closer.
     const left = new Set(paths.map((_, i) => i));
-    const order: [number, number][] = [];
+    let order: [number, number][] = [];
     let here = start;
     while (left.size) {
       let best: [number, number] = [-1, 0];
@@ -195,6 +197,44 @@ export function planGroupedRoute<T extends { point: Point; placeId: string }>(
       order.push(best);
       left.delete(best[0]);
       here = last(best[0], best[1]);
+    }
+    // Then tidy it: nearest-next strands things (aisle 9, 11, then back to 7). Reverse a stretch,
+    // or move a stretch of one to three places elsewhere (either way round), whenever the walk gets shorter.
+    const length = (o: [number, number][]) => {
+      let total = 0;
+      let at = start;
+      for (const [i, w] of o) { total += d(at, first(i, w)); at = last(i, w); }
+      return total + d(at, end);
+    };
+    const flip = (seg: [number, number][]) => seg.reverse().map(([i, w]) => [i, 1 - w] as [number, number]);
+    let best = length(order);
+    for (let round = 0; round < 50; round++) {
+      let improved = false;
+      for (let a = 0; a < n - 1; a++) {
+        for (let b = a + 1; b < n; b++) {
+          const next = [...order.slice(0, a), ...flip(order.slice(a, b + 1)), ...order.slice(b + 1)];
+          const len = length(next);
+          if (len < best - 1e-9) { order = next; best = len; improved = true; }
+        }
+      }
+      for (let k = 1; k <= 3; k++) {
+        for (let a = 0; a + k <= n; a++) {
+          const seg = order.slice(a, a + k);
+          const rest = [...order.slice(0, a), ...order.slice(a + k)];
+          for (let at = 0; at <= rest.length; at++) {
+            if (at === a) continue;
+            for (const piece of [seg, flip([...seg])]) {
+              const next = [...rest.slice(0, at), ...piece, ...rest.slice(at)];
+              const len = length(next);
+              if (len < best - 1e-9) { order = next; best = len; improved = true; break; }
+            }
+            if (improved) break;
+          }
+          if (improved) break;
+        }
+        if (improved) break;
+      }
+      if (!improved) break;
     }
     return walk(order);
   }

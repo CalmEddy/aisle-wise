@@ -114,7 +114,7 @@ function GenChoice({ store, setting, label, options, note, onUndoable }: {
 }
 
 /** The collapsible "Store settings" section of the build panel. */
-export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace, onUndoable, onLabels, onWalls }: {
+export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace, onUndoable, onLabels, onWalls, onPlaceBlock }: {
   layout: StoreLayout;
   store: StoreApi;
   /** Plain-language problems with the layout. */
@@ -128,6 +128,8 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
   onLabels?: () => void;
   /** Open the departments screen (what's along each wall). */
   onWalls?: () => void;
+  /** Place a block of shelving on the mini-map (next to, in front of or behind another). */
+  onPlaceBlock?: (ref: string) => void;
 }) {
   return (
     <>
@@ -221,6 +223,7 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
                           </button>
                         ))}
                       </div>
+                      {onPlaceBlock && <button className="link" onClick={() => onPlaceBlock(b.ref)}>Place…</button>}
                       {b.group && (
                         <button className="link" onClick={() => {
                           const { [b.ref]: _gone, ...placements } = store.gen!.placements ?? {};
