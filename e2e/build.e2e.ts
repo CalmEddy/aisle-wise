@@ -6,9 +6,16 @@ const layout = async (page: Page, name?: string) => {
   return name ? all.find((l) => l.name.startsWith(name)) : all[0];
 };
 
+/** Opens the editor's bottom sheet on a tab ('Store', 'List'), or on the current tool/selection. */
+async function openSheet(page: Page, tab?: string) {
+  if (tab) await page.locator('.build-sheet').getByRole('tab', { name: new RegExp(`^${tab}`) }).click();
+  else await page.locator('.build-sheet-peek').click();
+}
+
 async function blankStore(page: Page) {
   await fresh(page);
   await page.getByRole('button', { name: 'Build mode' }).click();
+  await openSheet(page, 'Store');
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'New store' }).click();
   await page.locator('.toast .icon').click().catch(() => {});
@@ -39,6 +46,7 @@ test('a shelf can be a fridge or freezer, shown on the map', async ({ page }) =>
   await fresh(page);
   await page.getByRole('button', { name: 'Build mode' }).click();
   await page.locator('svg.map g.place.shelf').nth(3).click({ force: true });
+  await openSheet(page);
   await page.getByRole('button', { name: '❄ Freezer' }).click();
   await expect(page.locator('svg.map g.place.shelf.frozen')).toHaveCount(1);
   expect((await layout(page)).places.filter((p: any) => p.temp === 'frozen')).toHaveLength(1);
@@ -48,6 +56,7 @@ test('aisle labels: tap to edit, rename, remove with undo', async ({ page }) => 
   await fresh(page, cornerStore());
   await page.getByRole('button', { name: 'Build mode' }).click();
   await page.locator('svg.map .aisle-label', { hasText: /AISLE 3/i }).locator('text').first().click({ force: true });
+  await openSheet(page);
   await expect(page.locator('.aisle-edit h3')).toHaveText('Aisle label');
   await page.locator('.aisle-edit input').fill('Breakfast aisle');
   await expect(page.locator('.aisle-label text', { hasText: 'Breakfast aisle' })).toHaveCount(1);
@@ -188,4 +197,34 @@ test('bumping a shelf away from its aisle widens the aisle; it won’t go onto t
   await page.getByRole('toolbar', { name: 'Change a2' }).getByRole('button', { name: 'Longer' }).click();
   l = await layout(page);
   expect(l.places.find((p: any) => p.id === 'a2').length).toBe(11);
+});
+
+test('the editor: map fills the screen, zoom, list in the sheet, undo in the top bar', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, threeAisles());
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  // Map first: most of the screen, no page scrolling.
+  const mapH = await page.locator('.build-map').evaluate((e) => e.getBoundingClientRect().height);
+  expect(mapH / 760).toBeGreaterThan(0.6);
+  expect(await page.evaluate(() => document.querySelector('.build-screen')!.scrollHeight <= window.innerHeight)).toBe(true);
+  // Zoom in and out.
+  const vb = () => page.locator('svg.map').getAttribute('viewBox');
+  const whole = await vb();
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  expect(await vb()).not.toBe(whole);
+  await page.getByRole('button', { name: 'Show the whole store' }).click();
+  expect(await vb()).toBe(whole);
+  // Move a shelf with the map bar, then Undo from the top bar.
+  await page.locator('svg.map g.place.shelf').first().click({ force: true });
+  await page.getByRole('toolbar', { name: 'Change a1' }).getByRole('button', { name: 'Delete shelf' }).click();
+  expect((await layout(page)).places).toHaveLength(5);
+  await page.locator('.build-top').getByRole('button', { name: 'Undo' }).click();
+  expect((await layout(page)).places).toHaveLength(6);
+  // The list is a tab of the sheet.
+  await page.locator('.build-sheet').getByRole('tab', { name: /^List/ }).click();
+  await expect(page.locator('.build-sheet-body main')).toBeVisible();
+  // Done leaves the editor.
+  await page.locator('.build-top').getByRole('button', { name: 'Done' }).click();
+  await expect(page.locator('.build-screen')).toHaveCount(0);
+  ok();
 });

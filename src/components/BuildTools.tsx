@@ -11,7 +11,7 @@ import type { Category, GeneratedMap } from '../core/types';
 /** What tapping or dragging on the map does in build mode. */
 export type BuildTool = 'walk' | 'select' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'cut' | 'area' | 'entrance' | 'checkout';
 
-const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
+export const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
   { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
   { id: 'select', icon: '⬚', label: 'Select aisles', hint: 'Drag a box over aisles to select them, or tap an aisle to add it or take it out. Then turn, move or delete them together.' },
   { id: 'brush', icon: '🖌', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
@@ -28,8 +28,10 @@ const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
 /** The tools shown until "more" is opened: enough to lay out most stores. */
 const MAIN_TOOLS: BuildTool[] = ['walk', 'select', 'brush', 'block', 'area'];
 
-export function BuildToolbar({ tool, setTool, more, setMore }: {
+export function BuildToolbar({ tool, setTool, more, setMore, rail }: {
   tool: BuildTool;
+  /** A slim column of icons on the map (no hint line). */
+  rail?: boolean;
   setTool: (t: BuildTool) => void;
   /** Showing every tool. */
   more: boolean;
@@ -39,7 +41,7 @@ export function BuildToolbar({ tool, setTool, more, setMore }: {
   // A tool in use stays visible even when the extra ones are hidden.
   const shown = TOOLS.filter((t) => more || MAIN_TOOLS.includes(t.id) || t.id === tool);
   return (
-    <div className="build-toolbar">
+    <div className={`build-toolbar${rail ? ' rail' : ''}`}>
       <div className="toolbar tool-icons" role="toolbar" aria-label="Build tools">
         {shown.map((t) => (
           <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} aria-pressed={tool === t.id}
@@ -52,7 +54,7 @@ export function BuildToolbar({ tool, setTool, more, setMore }: {
           {more ? '‹' : '⋯'}
         </button>
       </div>
-      <p className="muted small tool-hint"><b>{current.label}:</b> {current.hint}</p>
+      {!rail && <p className="muted small tool-hint"><b>{current.label}:</b> {current.hint}</p>}
     </div>
   );
 }

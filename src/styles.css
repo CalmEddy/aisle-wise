@@ -872,3 +872,39 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .where-list .where-bar { position: static; transform: none; width: auto; max-width: none; margin: 0 0 10px; box-shadow: none; border-color: var(--line); }
 .where-list-mode { margin-top: 8px; }
 .where-bar-checkout { font-size: 0.85rem; padding: 4px 2px; }
+
+/* ---- The map editor: full screen, map first ---- */
+.build-screen {
+  position: fixed; inset: 0; z-index: 19; display: flex; flex-direction: column;
+  background: var(--bg); padding-top: env(safe-area-inset-top);
+}
+.build-top { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.build-top .btn { padding: 7px 12px; }
+.build-top .btn.warn { color: #b45309; border-color: #f59e0b; }
+.build-top-name { flex: 1; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.build-map { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: var(--floor); }
+.build-map .map-wrap { position: absolute; inset: 0; }
+.build-map svg.map { width: 100%; height: 100%; border: 0; border-radius: 0; background: transparent; }
+.build-toolbar.rail { position: absolute; left: 6px; top: 6px; margin: 0; z-index: 4; }
+.build-toolbar.rail .tool-icons { flex-direction: column; gap: 4px; overflow: visible; }
+.build-toolbar.rail .tool-icons .chip { width: 40px; height: 40px; min-width: 0; flex: none; padding: 0; background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
+.build-toolbar.rail .tool-icons .chip.active { background: var(--accent); color: #fff; }
+.zoom-buttons { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 4; }
+.zoom-buttons .map-tool { width: 40px; height: 40px; background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
+.build-sheet {
+  display: flex; flex-direction: column; max-height: 62vh; background: var(--surface);
+  border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 16px rgb(0 0 0 / 10%);
+  padding: 8px 10px calc(env(safe-area-inset-bottom) + 4px);
+}
+.build-sheet-head { display: flex; align-items: center; gap: 6px; }
+.build-sheet-head .segmented { flex: 1; }
+.build-sheet-head .segmented button { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sheet-toggle { width: 36px; height: 36px; }
+.build-sheet-peek { margin: 6px 2px 2px; cursor: pointer; }
+.build-sheet-body { overflow-y: auto; min-height: 0; margin-top: 6px; padding-bottom: 10px; }
+.build-sheet-body .card, .build-sheet-body .build-edit { margin-left: 0; margin-right: 0; }
+.build-sheet-body main { padding-bottom: 20px; }
+.map-tools { flex-direction: row; gap: 3px; padding: 4px; border-radius: 10px; }
+.map-tools .map-tool { min-width: 32px; height: 32px; padding: 0 4px; font-size: 0.95rem; }
+.build-toolbar.rail .tool-icons .chip { width: 36px; height: 36px; font-size: 0.9rem; }
+.zoom-buttons .map-tool { width: 36px; height: 36px; }

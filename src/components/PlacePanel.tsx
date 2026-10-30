@@ -2,17 +2,14 @@ import { footprint } from '../core/geometry';
 import type { Area, Category, Place, Point, Shelf } from '../core/types';
 import { CategoryPicker } from './CategoryPicker';
 
-/** Editing one shelf or area: label, what's stocked there, direction, size, position. */
-export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categories, looks }: {
+/** Editing one shelf or area: label, what's stocked there, which side it's stocked from, fridge or freezer. (Turning, size, position and deleting are on the map.) */
+export function PlacePanel({ place, onChange, usedElsewhere, categories, looks }: {
   place: Place;
   onChange: (patch: Partial<Shelf> | Partial<Area>) => void;
-  onDelete: () => void;
   usedElsewhere: (categoryId: string) => string | undefined;
   categories: Category[];
   looks: Map<string, { color: string; icon: string }>;
 }) {
-  const f = footprint(place);
-  const move = (dx: number, dy: number) => onChange({ x: place.x + dx, y: place.y + dy });
   const isShelf = place.kind === 'shelf';
   const order = isShelf
     ? (place.orientation === 'vertical' ? 'top to bottom' : 'left to right')
@@ -37,18 +34,8 @@ export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categorie
         />
       </div>
 
-      {place.kind === 'shelf' ? (
+      {place.kind === 'shelf' && (
         <>
-          <div className="segmented" role="group" aria-label="Direction">
-            {(['vertical', 'horizontal'] as const).map((o) => (
-              <button key={o} className={place.orientation === o ? 'active' : ''} onClick={() => onChange({ orientation: o })}>
-                {o === 'vertical' ? '↕ Up & down' : '↔ Side to side'}
-              </button>
-            ))}
-          </div>
-          <div className="field-row">
-            <NumberField label="Length" value={place.length} min={2} onChange={(length) => onChange({ length })} />
-          </div>
           <div className="field">
             <span>Stocked from</span>
             <div className="segmented" role="group" aria-label="Stocked from">
@@ -66,11 +53,6 @@ export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categorie
             </div>
           </div>
         </>
-      ) : (
-        <div className="field-row">
-          <NumberField label="Width" value={place.w} min={1} onChange={(w) => onChange({ w })} />
-          <NumberField label="Depth" value={place.h} min={1} onChange={(h) => onChange({ h })} />
-        </div>
       )}
 
       <div className="field">
@@ -84,15 +66,7 @@ export function PlacePanel({ place, onChange, onDelete, usedElsewhere, categorie
         </div>
       </div>
 
-      <div className="field-row nudge">
-        <span className="muted small">Position {place.x}, {place.y} · {f.w}×{f.h}</span>
-        <button className="btn" onClick={() => move(-1, 0)} aria-label="Move left">←</button>
-        <button className="btn" onClick={() => move(0, -1)} aria-label="Move up">↑</button>
-        <button className="btn" onClick={() => move(0, 1)} aria-label="Move down">↓</button>
-        <button className="btn" onClick={() => move(1, 0)} aria-label="Move right">→</button>
-      </div>
-
-      <button className="btn danger" onClick={onDelete}>Delete {isShelf ? 'shelf' : 'area'}</button>
+      <p className="muted small">Turn, resize, move or delete it with the buttons on the map.</p>
     </section>
   );
 }

@@ -15,7 +15,7 @@ import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, ListItem, Place, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
-import { BrushPanel, BuildToolbar, StoreSettings, type BuildTool, type StoreApi } from './BuildTools';
+import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
 import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
 import { nextAisleLabel, walkwayAt } from '../core/aisles';
 import { contains } from '../core/geometry';
@@ -38,6 +38,7 @@ import { typicalWhere, whereText } from './whereText';
 import { AisleEditor } from './AisleEditor';
 import { WhereList } from './WhereList';
 import { MapTools, type MapAction } from './MapTools';
+import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
 
@@ -234,6 +235,7 @@ export function ShoppingView(props: Props) {
     cutDrag.clear();
     setCutWidth(undefined);
     setBrushSteps([]);
+    if (t === 'brush' || t === 'block' || t === 'cut') { setSheetTab('tool'); setSheetOpen(true); }
     if (t === 'block' || t === 'cut' || t === 'select') {
       setEditingId(undefined);
       setNote(null);
@@ -342,6 +344,33 @@ export function ShoppingView(props: Props) {
 
   // Walk tool: drag the selected shelf/area (or its resize handle), or the entrance/checkout markers.
   const svgRef = useRef<SVGSVGElement>(null);
+  // ---- The editor screen: zoom, the bottom sheet, Undo ----
+  const zoom = useMapZoom(svgRef, layout.width, layout.height, {
+    canPan: () => tool === 'walk' && !mapDrag.current,
+    onGesture: () => { mapDrag.current = null; block.reset(); selectDrag.clear(); cutDrag.clear(); },
+    onPanned: () => { ignoreTap.current = true; setTimeout(() => { ignoreTap.current = false; }, 0); },
+  });
+  const [sheetTab, setSheetTab] = useState<'tool' | 'list' | 'store'>('tool');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  /** What Undo in the editor's top bar steps back through (most recent last). */
+  const [undoStack, setUndoStack] = useState<Snapshot[]>([]);
+  const pushed = useRef<unknown>();
+  useEffect(() => {
+    const snap = (note && 'snapshot' in note ? note.snapshot : undefined) ?? (toast?.snapshot as Snapshot | undefined);
+    if (!building || !snap || snap === pushed.current) return;
+    pushed.current = snap;
+    setUndoStack((st) => [...st.slice(-29), snap]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note, toast, building]);
+  const dropFromUndo = (snap: unknown) => setUndoStack((st) => st.filter((x) => x !== snap));
+  function undoLast() {
+    const snap = undoStack[undoStack.length - 1];
+    if (!snap) return;
+    props.undo(snap);
+    setUndoStack((st) => st.slice(0, -1));
+    setNote(null);
+    setToast(null);
+  }
   const mapDrag = useRef<MapDrag | null>(null);
   const ignoreTap = useRef(false);
   const cellOf = (e: React.PointerEvent): Point => {
@@ -738,56 +767,19 @@ export function ShoppingView(props: Props) {
     <button type="button" className="toggle add-toggle" onClick={() => setAdding(true)} aria-label="Add items" title="Add items">＋</button>
   );
 
-  return (
-    <>
-      {props.listsOpen && (
-        <ListsSheet
-          lists={props.lists}
-          onClose={props.onListsClose}
-          onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
-        />
-      )}
-      {whereFor && (
-        <WherePanel
-          key={whereFor.id}
-          itemName={whereFor.name}
-          categoryId={productFor(whereFor, catalog)?.categoryId}
-          storeName={layout.name}
-          recentAisles={aislesUsed(catalog.products, layout.id)}
-          lastClue={lastClue}
-          queued={reviewing ? Math.max(0, laterHere.filter((i) => i.id !== whereFor.id).length) : undefined}
-          onSave={(clue) => saveWhere(whereFor, clue)}
-          onLater={reviewing ? undefined : () => { setLaterHere((ids) => [...ids.filter((id) => id !== whereFor.id), whereFor.id]); setWhereFor(null); }}
-          onSkip={() => nextWhere(whereFor)}
-          onStopAsking={() => { props.where.setAsk(false); setWhereFor(null); setReviewing(false); }}
-        />
-      )}
-      {adding && (
-        <AddItemsSheet
-          listName={props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
-          catalog={catalog}
-          onList={onList}
-          hereLabel={hereLabel}
-          whereText={(p) => whereText(p, layout, catalog)}
-          iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
-          onAdd={addNames}
-          buyAgain={buyAgain}
-          onUndo={props.undo}
-          onClose={() => setAdding(false)}
-        />
-      )}
+  const toolInfo = TOOLS.find((t) => t.id === tool)!;
+  const toolTitle = editing ? (editing.label || (editing.kind === 'shelf' ? 'Shelf' : 'Area'))
+    : editingAisle ? (editingAisle.label || 'Aisle')
+      : chosenAisles.length ? `${chosenAisles.length} aisle${chosenAisles.length === 1 ? '' : 's'}`
+        : toolInfo.label;
+  const toolHint = editing || editingAisle ? 'Name, what’s stocked, fridge or freezer: tap to open.' : toolInfo.hint;
 
-      {!(items.length > 0 || building) && (
-        <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode']} lead={addButton} />
-      )}
-      {(items.length > 0 || building) && (
-        <>
-          {(building || layout.places.length > 0) && (
-          <div className="map-wrap">
+  const storeMap = (
           <StoreMap
             layout={layout}
             you={position}
-            focus={mapStrip ? (changeFocus ? stripFocus(layout, changeFocus.a, changeFocus.b) : stripFocus(layout, position, route[0]?.point)) : undefined}
+            view={building ? zoom.rect : undefined}
+            focus={!building && mapStrip ? (changeFocus ? stripFocus(layout, changeFocus.a, changeFocus.b) : stripFocus(layout, position, route[0]?.point)) : undefined}
             dots={mapDots}
             pins={pins}
             ghosts={ghosts}
@@ -839,141 +831,8 @@ export function ShoppingView(props: Props) {
               );
             })()}
           </StoreMap>
-          {building && mapTools && <MapTools svgRef={svgRef} {...mapTools} />}
-          </div>
-          )}
-          {building && (
-            <BuildToolbar tool={tool} setTool={setTool} more={!!props.display.buildMoreTools}
-              setMore={(more) => props.setDisplay((d) => ({ ...d, buildMoreTools: more }))} />
-          )}
-          <DisplayToggles
-            display={props.display}
-            setDisplay={props.setDisplay}
-            show={['groupList', 'buildMode']}
-            lead={addButton}
-            extra={(
-              <>
-                {!building && (
-                  <button type="button" className="toggle icon-only action" aria-pressed={!mapStrip} onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
-                    aria-label={mapStrip ? 'Show the whole map' : 'Smaller map'} title={mapStrip ? 'Show the whole map' : 'Smaller map'}>🗺</button>
-                )}
-                <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
-                  aria-label="View settings" title="View settings">⚙</button>
-              </>
-            )}
-          />
-          {viewOpen && (
-            <div className="view-menu" role="group" aria-label="View settings">
-              <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors', 'listIcons']} />
-              <span className="muted small">🎨 category colours · 🍎 category icons</span>
-            </div>
-          )}
-          {editingAisle && (
-            <AisleEditor aisle={editingAisle} api={props.build.aisles} onDone={() => setEditingAisleId(undefined)} onNote={setNote} />
-          )}
-          {editing && (
-            <div className="build-edit">
-              <div className="build-edit-head">
-                <h3>Editing “{editing.label || (editing.kind === 'shelf' ? 'shelf' : 'area')}”</h3>
-                <button className="btn primary" onClick={() => setEditingId(undefined)}>Done</button>
-              </div>
-              <PlacePanel
-                place={editing}
-                onChange={(patch) => props.build.updatePlace(editing.id, patch as Partial<Place>)}
-                onDelete={() => {
-                  if (!confirm(`Delete “${editing.label || 'this ' + editing.kind}”?`)) return;
-                  props.build.deletePlace(editing.id);
-                  setEditingId(undefined);
-                }}
-                usedElsewhere={(catId) => layout.places.find((p) => p.id !== editing.id && p.categories.includes(catId))?.label}
-                categories={catalog.categories}
-                looks={props.looks}
-              />
-            </div>
-          )}
-          {blocking && (
-            <ShelfBlockPanel
-              rect={block.drag.rect}
-              shelves={block.shelves}
-              orientation={block.orientation}
-              setOrientation={block.setOrientation}
-              double={double}
-              setDouble={setDouble}
-              lane={lane}
-              setLane={(n) => props.setDisplay((x) => ({ ...x, blockLane: n }))}
-              onAdd={() => { stampShelves(block.shelves, false); setTool('walk'); }}
-              onCancel={() => setTool('walk')}
-            />
-          )}
-          {cutting && (
-            <CutPanel
-              box={cutBox}
-              shelves={cut?.shelves.length ?? 0}
-              aisles={cut?.aisles.map((a) => a.label) ?? []}
-              nextNumber={Math.max(0, ...(layout.aisles ?? []).map((a) => parseInt(a.label.replace(/^\D*/, ''), 10)).filter((n) => !Number.isNaN(n))) + 1}
-              width={cutBox ? (cutsVertical(cutBox) ? cutBox.h : cutBox.w) : 2}
-              setWidth={setCutWidth}
-              numbers={cutNumbers}
-              setNumbers={setCutNumbers}
-              onCut={() => {
-                if (!cutBox) return;
-                const r = props.build.aisles.cut(cutBox, cutNumbers);
-                setTool('walk');
-                setNote({ kind: 'message', snapshot: r.snapshot,
-                  text: r.renamed.length ? `Cut ${r.cut} shelves. New aisles: ${r.renamed.join(', ')}.` : `Cut ${r.cut} shelves; the aisles carry on past the break.` });
-              }}
-              onCancel={() => setTool('walk')}
-            />
-          )}
-          {building && tool === 'brush' && (
-            <BrushPanel
-              brush={brush}
-              categories={catalog.categories}
-              iconOf={(id) => props.looks.get(id)?.icon}
-              nextAisle={nextAisleLabel(layout)}
-              setBrush={setBrush}
-              dir={brushDir}
-              onStep={brushStepTo}
-              onNudge={(d) => { setBrushDir(d); props.build.stepTo(d); }}
-              canBack={brushSteps.length > 0}
-              onBack={brushBackUp}
-              lastResult={brushResult}
-            />
-          )}
-          {building && !blocking && !cutting && tool !== 'brush' && (
-            <BuildPanel
-              layout={layout}
-              position={position}
-              target={props.display.buildArea ? 'area' : 'shelf'}
-              setTarget={(t) => props.setDisplay((d) => ({ ...d, buildArea: t === 'area' }))}
-              build={props.build}
-              preview={buildPreview!}
-              turnId={baseShelf?.id}
-              nextOptions={nextOptions}
-              onNext={(shelves) => stampShelves(shelves, false)}
-              aisleAction={aisleAction}
-              double={double}
-              setDouble={setDouble}
-              onNote={setNote}
-            />
-          )}
-          {building && (
-            <StoreSettings
-              layout={layout}
-              store={props.build.store}
-              problems={problems}
-              onNewStore={() => {
-                props.build.startBlankStore();
-                setEditingId(undefined);
-                setNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
-              }}
-              onPickPlace={(id) => { setToolState('walk'); setEditingId(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-              onUndoable={(text, snapshot) => setNote({ kind: 'message', text, snapshot })}
-            />
-          )}
-        </>
-      )}
-
+  );
+  const listMain = (
       <main>
         {laterHere.length > 0 && !tripDone && (
           <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => setListOpen(true)}>
@@ -1125,6 +984,284 @@ export function ShoppingView(props: Props) {
           </details>
         )}
       </main>
+  );
+
+  return (
+    <>
+      {props.listsOpen && (
+        <ListsSheet
+          lists={props.lists}
+          onClose={props.onListsClose}
+          onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+        />
+      )}
+      {whereFor && (
+        <WherePanel
+          key={whereFor.id}
+          itemName={whereFor.name}
+          categoryId={productFor(whereFor, catalog)?.categoryId}
+          storeName={layout.name}
+          recentAisles={aislesUsed(catalog.products, layout.id)}
+          lastClue={lastClue}
+          queued={reviewing ? Math.max(0, laterHere.filter((i) => i.id !== whereFor.id).length) : undefined}
+          onSave={(clue) => saveWhere(whereFor, clue)}
+          onLater={reviewing ? undefined : () => { setLaterHere((ids) => [...ids.filter((id) => id !== whereFor.id), whereFor.id]); setWhereFor(null); }}
+          onSkip={() => nextWhere(whereFor)}
+          onStopAsking={() => { props.where.setAsk(false); setWhereFor(null); setReviewing(false); }}
+        />
+      )}
+      {adding && (
+        <AddItemsSheet
+          listName={props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
+          catalog={catalog}
+          onList={onList}
+          hereLabel={hereLabel}
+          whereText={(p) => whereText(p, layout, catalog)}
+          iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
+          onAdd={addNames}
+          buyAgain={buyAgain}
+          onUndo={props.undo}
+          onClose={() => setAdding(false)}
+        />
+      )}
+
+      {!building && items.length === 0 && (
+        <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode']} lead={addButton} />
+      )}
+      {!building && items.length > 0 && (
+        <>
+          {layout.places.length > 0 && <div className="map-wrap">{storeMap}</div>}
+          <DisplayToggles
+            display={props.display}
+            setDisplay={props.setDisplay}
+            show={['groupList', 'buildMode']}
+            lead={addButton}
+            extra={(
+              <>
+                {!building && (
+                  <button type="button" className="toggle icon-only action" aria-pressed={!mapStrip} onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
+                    aria-label={mapStrip ? 'Show the whole map' : 'Smaller map'} title={mapStrip ? 'Show the whole map' : 'Smaller map'}>🗺</button>
+                )}
+                <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
+                  aria-label="View settings" title="View settings">⚙</button>
+              </>
+            )}
+          />
+          {viewOpen && (
+            <div className="view-menu" role="group" aria-label="View settings">
+              <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors', 'listIcons']} />
+              <span className="muted small">🎨 category colours · 🍎 category icons</span>
+            </div>
+          )}
+        </>
+      )}
+      {building && (
+        <div className="build-screen" role="region" aria-label="Edit map">
+          <div className="build-top">
+            <button className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: false }))}>Done</button>
+            <span className="build-top-name">{layout.name}</span>
+            <button className="btn" onClick={undoLast} disabled={!undoStack.length} aria-label="Undo">↶ Undo</button>
+            {problems.length > 0 && !layout.gen?.enabled && (
+              <button className="btn warn" onClick={() => { setSheetTab('store'); setSheetOpen(true); }} aria-label={`${problems.length} things to check`}>⚠ {problems.length}</button>
+            )}
+          </div>
+          <div className="build-map" {...zoom.handlers}>
+            <div className="map-wrap">
+          <StoreMap
+              layout={layout}
+              you={position}
+              view={building ? zoom.rect : undefined}
+              focus={!building && mapStrip ? (changeFocus ? stripFocus(layout, changeFocus.a, changeFocus.b) : stripFocus(layout, position, route[0]?.point)) : undefined}
+              dots={mapDots}
+              pins={pins}
+              ghosts={ghosts}
+              look={props.mapLook}
+              showGrid={building}
+              highlightId={here?.id}
+              selectedId={editing?.id}
+              selectedAisleId={editingAisle?.id}
+              selectedAisleIds={chosenAisles}
+              changedIds={props.mapChanges}
+              onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
+              ref={svgRef}
+              onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+              onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
+                if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
+              } : undefined}
+              svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : selecting ? {
+                className: 'map drawing',
+                onPointerDown: selectDrag.down, onPointerMove: selectDrag.move, onPointerUp: finishSelect, onPointerCancel: finishSelect,
+              } : cutting ? {
+                className: 'map drawing',
+                onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => { setCutWidth(undefined); cutDrag.down(e); },
+                onPointerMove: cutDrag.move, onPointerUp: cutDrag.up, onPointerCancel: cutDrag.up,
+              } : building ? {
+                className: `map tappable${tool !== 'walk' || editing ? ' build-editing' : ''}`,
+                onPointerMove: onMapDragMove,
+                onPointerUp: endMapDrag,
+                onPointerCancel: endMapDrag,
+              } : mapStrip ? { className: 'map strip tappable' } : undefined}
+            >
+              {selecting && selectDrag.rect && (
+                <rect className="map-select-outline" x={selectDrag.rect.x} y={selectDrag.rect.y} width={selectDrag.rect.w} height={selectDrag.rect.h} />
+              )}
+              {cutting && cutBox && (
+                <rect className="map-cut-outline" x={cutBox.x} y={cutBox.y} width={cutBox.w} height={cutBox.h} />
+              )}
+              {blocking && block.drag.rect && (
+                <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
+              )}
+              {building && tool === 'walk' && (['entrance', 'checkout'] as const).map((which) => (
+                <rect key={which} className="marker-hit" x={layout[which].x - 0.5} y={layout[which].y - 0.5} width={2} height={2}
+                  onPointerDown={(e) => beginMapDrag({ mode: which, start: cellOf(e), snapshot: props.build.snapshot(), moved: false }, e)} />
+              ))}
+              {building && tool === 'walk' && editing && (() => {
+                const h = handlePoint(editing);
+                return (
+                  <circle className="resize-handle" cx={h.x} cy={h.y} r={1.2} aria-label="Resize"
+                    onPointerDown={(e) => beginMapDrag({ mode: 'resize', id: editing.id, start: cellOf(e), orig: editing, snapshot: props.build.snapshot(), moved: false }, e)} />
+                );
+              })()}
+            </StoreMap>
+              {mapTools && <MapTools svgRef={svgRef} viewKey={zoom.rect ? `${zoom.rect.x},${zoom.rect.y},${zoom.rect.w}` : 'all'} {...mapTools} />}
+            </div>
+            <BuildToolbar rail tool={tool} setTool={setTool} more={!!props.display.buildMoreTools}
+              setMore={(more) => props.setDisplay((d) => ({ ...d, buildMoreTools: more }))} />
+            <div className="zoom-buttons" role="group" aria-label="Zoom">
+              <button className="map-tool" onClick={() => zoom.zoomIn(mapTools ? { x: mapTools.anchor.x + mapTools.anchor.w / 2, y: mapTools.anchor.y + mapTools.anchor.h / 2 } : undefined)} aria-label="Zoom in" disabled={zoom.scale >= MAX_ZOOM}>＋</button>
+              <button className="map-tool" onClick={zoom.zoomOut} aria-label="Zoom out" disabled={zoom.scale <= 1}>－</button>
+              <button className="map-tool" onClick={zoom.fit} aria-label="Show the whole store" disabled={zoom.scale <= 1}>⤢</button>
+            </div>
+          </div>
+          <section className={`build-sheet${sheetOpen ? ' open' : ''}`} aria-label="Editor details">
+            <div className="build-sheet-head">
+              <div className="segmented mini-seg" role="tablist" aria-label="Editor">
+                {([['tool', toolTitle], ['list', `List${items.filter((i) => !i.done).length ? ` (${items.filter((i) => !i.done).length})` : ''}`], ['store', 'Store']] as const).map(([t, text]) => (
+                  <button key={t} role="tab" aria-selected={sheetTab === t} className={sheetTab === t ? 'active' : ''}
+                    onClick={() => { if (sheetTab === t) setSheetOpen((o) => !o); else { setSheetTab(t); setSheetOpen(true); } }}>{text}</button>
+                ))}
+              </div>
+              <button className="icon sheet-toggle" onClick={() => setSheetOpen((o) => !o)} aria-expanded={sheetOpen} aria-label={sheetOpen ? 'Smaller' : 'Bigger'}>{sheetOpen ? '▾' : '▴'}</button>
+            </div>
+            {!sheetOpen && <p className="build-sheet-peek muted small" onClick={() => setSheetOpen(true)}>{toolHint}</p>}
+            {sheetOpen && (
+              <div className="build-sheet-body">
+                {sheetTab === 'tool' && (
+                  <>
+          {editingAisle && (
+            <AisleEditor aisle={editingAisle} api={props.build.aisles} onDone={() => setEditingAisleId(undefined)} onNote={setNote} />
+          )}
+          {editing && (
+            <div className="build-edit">
+              <div className="build-edit-head">
+                <h3>Editing “{editing.label || (editing.kind === 'shelf' ? 'shelf' : 'area')}”</h3>
+                <button className="btn primary" onClick={() => setEditingId(undefined)}>Done</button>
+              </div>
+              <PlacePanel
+                place={editing}
+                onChange={(patch) => props.build.updatePlace(editing.id, patch as Partial<Place>)}
+                usedElsewhere={(catId) => layout.places.find((p) => p.id !== editing.id && p.categories.includes(catId))?.label}
+                categories={catalog.categories}
+                looks={props.looks}
+              />
+            </div>
+          )}
+          {blocking && (
+            <ShelfBlockPanel
+              rect={block.drag.rect}
+              shelves={block.shelves}
+              orientation={block.orientation}
+              setOrientation={block.setOrientation}
+              double={double}
+              setDouble={setDouble}
+              lane={lane}
+              setLane={(n) => props.setDisplay((x) => ({ ...x, blockLane: n }))}
+              onAdd={() => { stampShelves(block.shelves, false); setTool('walk'); }}
+              onCancel={() => setTool('walk')}
+            />
+          )}
+          {cutting && (
+            <CutPanel
+              box={cutBox}
+              shelves={cut?.shelves.length ?? 0}
+              aisles={cut?.aisles.map((a) => a.label) ?? []}
+              nextNumber={Math.max(0, ...(layout.aisles ?? []).map((a) => parseInt(a.label.replace(/^\D*/, ''), 10)).filter((n) => !Number.isNaN(n))) + 1}
+              width={cutBox ? (cutsVertical(cutBox) ? cutBox.h : cutBox.w) : 2}
+              setWidth={setCutWidth}
+              numbers={cutNumbers}
+              setNumbers={setCutNumbers}
+              onCut={() => {
+                if (!cutBox) return;
+                const r = props.build.aisles.cut(cutBox, cutNumbers);
+                setTool('walk');
+                setNote({ kind: 'message', snapshot: r.snapshot,
+                  text: r.renamed.length ? `Cut ${r.cut} shelves. New aisles: ${r.renamed.join(', ')}.` : `Cut ${r.cut} shelves; the aisles carry on past the break.` });
+              }}
+              onCancel={() => setTool('walk')}
+            />
+          )}
+          {building && tool === 'brush' && (
+            <BrushPanel
+              brush={brush}
+              categories={catalog.categories}
+              iconOf={(id) => props.looks.get(id)?.icon}
+              nextAisle={nextAisleLabel(layout)}
+              setBrush={setBrush}
+              dir={brushDir}
+              onStep={brushStepTo}
+              onNudge={(d) => { setBrushDir(d); props.build.stepTo(d); }}
+              canBack={brushSteps.length > 0}
+              onBack={brushBackUp}
+              lastResult={brushResult}
+            />
+          )}
+          {building && !blocking && !cutting && tool !== 'brush' && (
+            <BuildPanel
+              layout={layout}
+              position={position}
+              target={props.display.buildArea ? 'area' : 'shelf'}
+              setTarget={(t) => props.setDisplay((d) => ({ ...d, buildArea: t === 'area' }))}
+              build={props.build}
+              preview={buildPreview!}
+              turnId={baseShelf?.id}
+              nextOptions={nextOptions}
+              onNext={(shelves) => stampShelves(shelves, false)}
+              aisleAction={aisleAction}
+              double={double}
+              setDouble={setDouble}
+              onNote={setNote}
+            />
+          )}
+                  </>
+                )}
+                {sheetTab === 'list' && listMain}
+                {sheetTab === 'store' && (
+                  <>
+          {building && (
+            <StoreSettings
+              layout={layout}
+              store={props.build.store}
+              problems={problems}
+              onNewStore={() => {
+                props.build.startBlankStore();
+                setEditingId(undefined);
+                setNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
+              }}
+              onPickPlace={(id) => { setToolState('walk'); setEditingId(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+              onUndoable={(text, snapshot) => setNote({ kind: 'message', text, snapshot })}
+            />
+          )}
+                    <div className="view-menu" role="group" aria-label="View settings">
+                      <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors', 'listIcons']} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+      {!building && listMain}
 
       {note && !drag && (
         <BuildBanner
@@ -1134,7 +1271,7 @@ export function ShoppingView(props: Props) {
           layout={layout}
           catalog={catalog}
           build={props.build}
-          onUndo={(snap) => { props.undo(snap); setNote(null); }}
+          onUndo={(snap) => { props.undo(snap); dropFromUndo(snap); setNote(null); }}
           onNote={setNote}
           onClose={() => setNote(null)}
         />
@@ -1185,7 +1322,7 @@ export function ShoppingView(props: Props) {
           toast={toast}
           layout={layout}
           catalog={catalog}
-          onUndo={() => { props.undo(toast.snapshot); setToast(null); }}
+          onUndo={() => { props.undo(toast.snapshot); dropFromUndo(toast.snapshot); setToast(null); }}
           onChange={(a) => setPicking({ productId: a.productId, name: a.name })}
           onMoveHere={(a) => {
             props.setProductLocation(a.productId, a.conflict!.hereKey);

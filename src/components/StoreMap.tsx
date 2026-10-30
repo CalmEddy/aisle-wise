@@ -41,6 +41,8 @@ interface Props {
   selectedAisleIds?: string[];
   /** Places and aisles the map just added or changed (outlined so they're easy to spot). */
   changedIds?: string[];
+  /** The part of the store to show, when zoomed in (the editor); unlike `focus`, the map keeps its size. */
+  view?: Rect;
   /** Zoom in on this rectangle (grid units). */
   focus?: Rect;
   /** Colours and icons for category sections. */
@@ -77,11 +79,11 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
-  const box = focus ?? { x: 0, y: 0, w: layout.width, h: layout.height };
+  const box = focus ?? view ?? { x: 0, y: 0, w: layout.width, h: layout.height };
   // Selected aisles show their shelves selected too (they move and turn with them).
   const chosen = new Set([...(selectedAisleIds ?? []), ...(selectedAisleId ? [selectedAisleId] : [])]);
   const selectedAisles = (layout.aisles ?? []).filter((a) => chosen.has(a.id));
