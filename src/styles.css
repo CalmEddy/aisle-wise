@@ -908,3 +908,4 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .map-tools .map-tool { min-width: 32px; height: 32px; padding: 0 4px; font-size: 0.95rem; }
 .build-toolbar.rail .tool-icons .chip { width: 36px; height: 36px; font-size: 0.9rem; }
 .zoom-buttons .map-tool { width: 36px; height: 36px; }
+.build-toolbar.rail { max-height: calc(100% - 12px); overflow-y: auto; scrollbar-width: none; }
