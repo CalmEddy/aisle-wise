@@ -131,3 +131,39 @@ test('answers change the map straight away, outlined until the next trip', async
   await page.locator('.trip-done-card').getByRole('button', { name: 'Clear cart · start next trip' }).click();
   await expect(page.locator('svg.map .change-frame')).toHaveCount(0);
 });
+
+test('quick bar: next aisles in one tap, number buttons, walls, fridge/freezer', async ({ page }) => {
+  await addItems(page, 'Cereal, Pasta, Chips, Bread, Ice cream, Hummus');
+  const bar = page.locator('.where-bar');
+  // A first aisle on the number buttons (no keyboard).
+  await tick(page, 'Cereal');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: '1', exact: true }).click();
+  await bar.getByRole('button', { name: 'Delete' }).click();
+  await bar.getByRole('button', { name: '3', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  // Then the next aisles are offered: one tap.
+  await tick(page, 'Pasta');
+  await expect(bar.locator('.btn').first()).toHaveText('Aisle 3');
+  await bar.getByRole('button', { name: 'Aisle 5', exact: true }).click();
+  await tick(page, 'Chips');
+  await expect(bar.getByRole('button', { name: 'Aisle 7', exact: true })).toBeVisible(); // going up by 2
+  await bar.getByRole('button', { name: 'Aisle 7', exact: true }).click();
+  // A wall in one tap.
+  await tick(page, 'Bread');
+  await bar.getByRole('button', { name: 'Right wall →' }).click();
+  // Freezer switched on by the category; the aisle chips carry it.
+  await tick(page, 'Ice cream');
+  await expect(bar.getByRole('button', { name: 'In a freezer' })).toHaveAttribute('aria-pressed', 'true');
+  await bar.getByRole('button', { name: '❄ Aisle 9', exact: true }).click();
+  // Fridge chosen by hand, on a wall.
+  await tick(page, 'Hummus');
+  await bar.getByRole('button', { name: 'In a fridge' }).click();
+  await bar.getByRole('button', { name: '🧊 ← Left wall' }).click();
+  const products = await saved<any[]>(page, 'products');
+  const clue = (n: string) => Object.values(products.find((p) => p.name === n).clues)[0];
+  expect([clue('Cereal'), clue('Pasta'), clue('Chips'), clue('Bread'), clue('Ice cream'), clue('Hummus')]).toEqual([
+    { kind: 'aisle', aisle: '3' }, { kind: 'aisle', aisle: '5' }, { kind: 'aisle', aisle: '7' },
+    { kind: 'wall', wall: 'right' }, { kind: 'aisle', aisle: '9', temp: 'frozen' }, { kind: 'wall', wall: 'left', temp: 'chilled' },
+  ]);
+});

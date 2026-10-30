@@ -629,6 +629,8 @@ export function ShoppingView(props: Props) {
   // Items to ask about later (per store), and the last answer (for "Same as last").
   const [askLater, setAskLater] = usePersistentState<Record<string, string[]>>('aw.askLater', {});
   const [lastClue, setLastClue] = useState<Clue>();
+  /** Aisle numbers answered this trip, in order (to guess the next one). */
+  const [aisleTrail, setAisleTrail] = useState<string[]>([]);
   /** No saved place and no answer for this store. */
   function isUnknownHere(item: ListItem) {
     const p = productFor(item, catalog);
@@ -651,6 +653,7 @@ export function ShoppingView(props: Props) {
     if (whereBarFor?.id === item.id) setWhereBarFor(null);
     const snapshot = props.where.setClue(item, clue);
     setLastClue(clue);
+    if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
     setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
     nextWhere(item);
   }
@@ -671,6 +674,7 @@ export function ShoppingView(props: Props) {
     const n = items.filter((i) => i.done).length;
     props.where.newTrip();
     setWhereBarFor(null); // its item is leaving with the cart
+    setAisleTrail([]);
     setItems((prev) => prev.filter((i) => !i.done));
     setPosition(layout.entrance);
     setToast({ snapshot, added: [], mode: 'list', note: `Cart cleared (${n} item${n === 1 ? '' : 's'}). Ready for next time.` });
@@ -1129,6 +1133,7 @@ export function ShoppingView(props: Props) {
           categoryId={productFor(whereBarFor, catalog)?.categoryId}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
+          trail={aisleTrail}
           onSave={(clue) => saveWhere(whereBarFor, clue)}
           onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}

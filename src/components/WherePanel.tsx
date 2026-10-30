@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DEPTS, describeClue, guessDept, NEAR_WORD } from '../core/clues';
+import { guessTemp } from './WhereBar';
 import type { AislePos, AisleSide, Clue, Dept, Fixture, OpenNear, Temp, Wall, WallPart } from '../core/types';
 
 type Tab = 'aisle' | 'wall' | 'open' | 'dept' | 'endcap' | 'checkout';
@@ -12,13 +13,6 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'endcap', label: 'End-cap' },
   { id: 'checkout', label: 'Checkout' },
 ];
-
-/** Cold or not, as a first guess from the category. */
-function guessTemp(categoryId?: string): Temp | undefined {
-  if (categoryId === 'frozen' || categoryId === 'icecream') return 'frozen';
-  if (categoryId === 'dairy' || categoryId === 'eggs') return 'chilled';
-  return undefined;
-}
 
 /** Which tab an existing answer opens on. */
 function tabFor(c: Clue): Tab {

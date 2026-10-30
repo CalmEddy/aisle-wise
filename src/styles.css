@@ -762,7 +762,7 @@ button.store-pick { border: 0; background: none; padding: 0; color: var(--muted)
 }
 .where-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .where-bar-head .link { padding: 0 4px; }
-.where-bar-choices { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.where-bar-choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .where-bar-choices .btn { flex: none; padding: 9px 12px; white-space: nowrap; }
 main { padding-bottom: 110px; }
 
@@ -857,3 +857,12 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .aisle-label.changed .aisle-area { stroke: #f59e0b; stroke-width: 0.3; animation: change-pulse 0.9s ease-in-out 4; }
 @keyframes change-pulse { 0%, 100% { stroke-opacity: 1; stroke-width: 0.3; } 50% { stroke-opacity: 0.35; stroke-width: 0.6; } }
 @media (prefers-reduced-motion: reduce) { .change-frame, .aisle-label.changed .aisle-area { animation: none; } }
+
+/* ---- Quick bar: fridge/freezer switch and number buttons ---- */
+.where-bar-head { flex-wrap: wrap; }
+.where-bar-temp { display: inline-flex; gap: 4px; margin-left: auto; }
+.chip.mini { padding: 3px 8px; font-size: 0.85rem; min-height: 0; }
+.where-bar-pad-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.where-bar-pad-value { flex: 1; font-size: 1.1rem; }
+.where-bar-keys { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.where-bar-keys .key { padding: 10px 0; font-size: 1.1rem; }
