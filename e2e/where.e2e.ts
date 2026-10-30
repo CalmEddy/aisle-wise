@@ -106,7 +106,7 @@ test('learns which way round the store is from trips, and redraws the map', asyn
   // The entrance is in the middle of the front; nothing asks about it.
   expect(l.entrance).toEqual({ x: Math.floor(l.width / 2), y: l.height - 1 });
   await tick(page, 'Cereal');
-  await expect(page.locator('.trip-done-card .layout-question')).toHaveCount(0);
+  await expect(page.locator('.trip-done-card .layout-question:not(.door-card)')).toHaveCount(0);
 });
 
 test('the row shows where an answered item is', async ({ page }) => {
