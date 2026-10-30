@@ -1,3 +1,4 @@
+import type { LabelStyle } from './labels';
 /** A square on the store's floor grid. x runs left→right, y runs top→bottom. */
 export interface Point {
   x: number;
@@ -64,6 +65,8 @@ export interface StoreLayout {
   checkout: Point;
   /** Named walkways ("Aisle 5"), drawn along the space between shelves. */
   aisles?: AisleLabel[];
+  /** How this store labels its shelves, when not by aisle number ("B12"). */
+  labels?: LabelStyle;
   /** Map generated from shoppers' aisle answers ("Where was it?"). */
   gen?: GeneratedMap;
   /** Where the store is (for picking it automatically when you walk in). */
@@ -115,9 +118,10 @@ export interface GeneratedMap extends Arrangement {
  * in the open by an aisle ("aisle:5").
  */
 export interface Placement {
-  /** "sec:<section>", "wall:left|back|right" or "aisle:<label>". */
+  /** "sec:<wall section>", "block:<shelf section>", "wall:left|back|right" or "aisle:<label>". */
   of: string;
-  side?: 'before' | 'after';
+  /** Along a wall: before or after it; shelf sections: left of, right of, above (behind) or below (in front of) it. */
+  side?: 'before' | 'after' | 'left' | 'right' | 'above' | 'below';
 }
 
 /** A label for a walkway: the rectangle of floor it names. */
@@ -198,6 +202,8 @@ export type Clue =
   | { kind: 'wall'; wall: Wall; part?: WallPart; temp?: Temp }
   /** Out in the open: a table, case or stand on the floor, not against a wall or in an aisle. */
   | { kind: 'open'; near?: OpenNear; aisle?: string; fixture?: Fixture; temp?: Temp }
+  /** A labelled shelf in a store that labels shelves, not aisles ("B12": section B, shelf 12). */
+  | { kind: 'shelf'; code: string; section: string; shelf?: number; temp?: Temp }
   /** Older answers: a freezer case in an aisle, or along a wall (no aisle). */
   | { kind: 'freezer'; aisle?: string; side?: AisleSide; pos?: AislePos }
   /** The display at the end of an aisle. */

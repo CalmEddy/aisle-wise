@@ -1,17 +1,21 @@
 import type { Clue, ListItem } from '../core/types';
 import { WhereBar } from './WhereBar';
+import type { LabelStyle } from '../core/labels';
 
 /**
  * "Where were these?": everything waiting to be placed, in one list, each
  * with the quick bar's one-tap answers. Used at checkout (or whenever the
  * shopper reviews what they left for later).
  */
-export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
+export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, onNeedLabels, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
   items: ListItem[];
   categoryOf: (item: ListItem) => string | undefined;
   recentAisles: string[];
   lastClue?: Clue;
   trail: string[];
+  labels?: LabelStyle;
+  shelfTrail: { section: string; shelf?: number }[];
+  onNeedLabels: (item: ListItem, code: string) => void;
   /** This store asks at checkout instead of at each check-off. */
   askAtCheckout: boolean;
   onSave: (item: ListItem, clue: Clue) => void;
@@ -38,6 +42,9 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, as
             recentAisles={recentAisles}
             lastClue={lastClue}
             trail={trail}
+            labels={labels}
+            shelfTrail={shelfTrail}
+            onNeedLabels={(code) => onNeedLabels(item, code)}
             laterLabel="Skip"
             onSave={(clue) => onSave(item, clue)}
             onOther={() => onOther(item)}

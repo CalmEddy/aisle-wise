@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DEPTS, describeClue, guessDept, NEAR_WORD } from '../core/clues';
 import { guessTemp } from './WhereBar';
+import { looksLikeShelfCode, parseLabel, type LabelStyle } from '../core/labels';
 import type { AislePos, AisleSide, Clue, Dept, Fixture, OpenNear, Temp, Wall, WallPart } from '../core/types';
 
 type Tab = 'aisle' | 'wall' | 'open' | 'dept' | 'endcap' | 'checkout';
@@ -19,6 +20,7 @@ function tabFor(c: Clue): Tab {
   switch (c.kind) {
     case 'freezer': return c.aisle ? 'aisle' : 'wall';
     case 'display': return 'open';
+    case 'shelf': return 'aisle';
     default: return c.kind;
   }
 }
@@ -28,10 +30,14 @@ function tabFor(c: Clue): Tab {
  * checked off. Most answers take one or two taps: a department, or an aisle
  * number (recent ones are chips) with optional side and how far along.
  */
-export function WherePanel({ itemName, categoryId, storeName, recentAisles, lastClue, current, onSave, onLater, onSkip, onStopAsking, queued }: {
+export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabels, recentAisles, lastClue, current, onSave, onLater, onSkip, onStopAsking, queued }: {
   itemName: string;
   categoryId?: string;
   storeName: string;
+  /** How this store labels its shelves ("B12"), if not by aisle number. */
+  labels?: LabelStyle;
+  /** A shelf label was typed in a store not set up for them. */
+  onNeedLabels?: (code: string) => void;
   /** Aisle numbers already used in this store, most used first. */
   recentAisles: string[];
   /** The last answer given, for "Same as last". */
@@ -62,6 +68,8 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
   const coldWord = temp === 'frozen' ? 'Freezer' : temp === 'chilled' ? 'Fridge' : '';
 
   const aisleOk = aisle.trim().length > 0;
+  // A shelf label in this store's style ("B12")?
+  const shelf = labels && aisleOk ? parseLabel(labels, aisle) : undefined;
   const deptChips = (onPick: (d: Dept) => void, highlight?: Dept) => (
     <div className="where-depts">
       {[...DEPTS].sort((a, b) => (a.id === highlight ? -1 : b.id === highlight ? 1 : 0)).map((d) => (
@@ -78,7 +86,7 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
         {recentAisles.slice(0, 6).map((a) => (
           <button key={a} className={`chip${aisle === a ? ' active' : ''}`} onClick={() => setAisle(a)}>{a}</button>
         ))}
-        <input className="where-num" value={aisle} onChange={(e) => setAisle(e.target.value.slice(0, 5))} inputMode="text"
+        <input className="where-num" value={aisle} onChange={(e) => setAisle(e.target.value.slice(0, 8))} inputMode="text"
           placeholder="#" aria-label="Aisle number" />
       </div>
     </div>
@@ -147,10 +155,20 @@ export function WherePanel({ itemName, categoryId, storeName, recentAisles, last
               {aislePicker()}
               {sidePos}
               {tempRow}
-              <button className="btn primary wide" disabled={!aisleOk}
-                onClick={() => onSave({ kind: 'aisle', aisle: aisle.trim(), ...(side && { side }), ...(pos && { pos }), ...withTemp })}>
-                Save{aisleOk ? ` · ${coldWord ? `${coldWord}, aisle` : 'Aisle'} ${aisle.trim()}` : ''}
-              </button>
+              {shelf ? (
+                <button className="btn primary wide" onClick={() => onSave({ kind: 'shelf', code: aisle.trim().toUpperCase(), section: shelf.section, ...(shelf.shelf !== undefined && { shelf: shelf.shelf }), ...withTemp })}>
+                  Save · {coldWord ? `${coldWord}, shelf` : 'Shelf'} {aisle.trim().toUpperCase()}
+                </button>
+              ) : aisleOk && looksLikeShelfCode(aisle) && onNeedLabels ? (
+                <button className="btn primary wide" onClick={() => onNeedLabels(aisle.trim().toUpperCase())}>
+                  Labels like “{aisle.trim().toUpperCase()}”? Set them up…
+                </button>
+              ) : (
+                <button className="btn primary wide" disabled={!aisleOk}
+                  onClick={() => onSave({ kind: 'aisle', aisle: aisle.trim(), ...(side && { side }), ...(pos && { pos }), ...withTemp })}>
+                  Save{aisleOk ? ` · ${coldWord ? `${coldWord}, aisle` : 'Aisle'} ${aisle.trim()}` : ''}
+                </button>
+              )}
             </>
           )}
           {tab === 'wall' && (

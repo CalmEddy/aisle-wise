@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { placementOptions, type PlacementSubject } from '../core/placement';
+import { placementOptions, subjectPlaces, type PlacementSubject } from '../core/placement';
 import type { Placement, Product, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { StoreMap, type MapGhost } from './StoreMap';
@@ -22,7 +22,10 @@ export function PlacementCard({ layout, products, subject, look, onPlace, onNotS
   const [chosen, setChosen] = useState<number>();
   const pick = chosen !== undefined ? options[chosen] : undefined;
   // The map as it is, without the thing being placed, and a numbered marker on each spot.
-  const without = useMemo(() => ({ ...layout, places: layout.places.filter((p) => p.id !== subject.placeId) }), [layout, subject]);
+  const without = useMemo(() => {
+    const mine = new Set(subjectPlaces(layout, subject).map((p) => p.id));
+    return { ...layout, places: layout.places.filter((p) => !mine.has(p.id)) };
+  }, [layout, subject]);
   const ghosts: MapGhost[] = options.map((o, i) => ({
     rect: { x: o.ghost.x + o.ghost.w / 2 - 1.1, y: o.ghost.y + o.ghost.h / 2 - 1.1, w: 2.2, h: 2.2 },
     kind: 'next', label: String(i + 1), onTap: () => setChosen(i),
@@ -36,7 +39,7 @@ export function PlacementCard({ layout, products, subject, look, onPlace, onNotS
       </div>
       <div className="placement-map">
         {pick
-          ? <StoreMap layout={pick.preview} look={look} changedIds={[subject.placeId]} />
+          ? <StoreMap layout={pick.preview} look={look} changedIds={subjectPlaces(pick.preview, subject).map((p) => p.id)} />
           : <StoreMap layout={without} look={look} ghosts={ghosts} />}
       </div>
       {pick ? (

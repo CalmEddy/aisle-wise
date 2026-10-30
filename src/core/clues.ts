@@ -49,6 +49,7 @@ export function describeClue(c: Clue): string {
   const cold = (t?: Temp) => (t === 'frozen' ? 'Freezer, ' : t === 'chilled' ? 'Fridge, ' : '');
   switch (c.kind) {
     case 'aisle': return withDetail(c.temp ? `${cold(c.temp)}aisle ${c.aisle}` : `Aisle ${c.aisle}`, c.side, c.pos);
+    case 'shelf': return c.temp ? `${cold(c.temp)}shelf ${c.code}` : `Shelf ${c.code}`;
     case 'wall': {
       const head = `${WALL_WORD[c.wall]} wall${c.part && c.part !== 'middle' ? ` · ${c.part}` : c.part ? ' · middle' : ''}`;
       return c.temp ? `${cold(c.temp)}${head.toLowerCase()}` : head;
@@ -77,6 +78,12 @@ const FRONT: Partial<Record<Dept, number>> = { produce: 0, floral: 1, bakery: 2,
 const BACK: Partial<Record<Dept, number>> = { meat: 9000, seafood: 9001, dairy: 9002, frozen: 9003, pharmacy: 9500 };
 const deptRank = (d: Dept) => FRONT[d] ?? BACK[d] ?? 9400;
 const POS_RANK: Record<AislePos, number> = { front: 2, middle: 4, back: 6 };
+/** A section's place in order: A=1, B=2…, or its number. */
+export function sectionNumber(section: string): number {
+  const first = section.split('-')[0];
+  if (/^\d+$/.test(first)) return Number(first);
+  return [...first].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
+}
 const WALL_ORDER: Record<Wall, number> = { left: 0, back: 1, right: 2 };
 /** Going round the walls: up the left wall (front first), along the back left to right, down the right wall. */
 const partRank = (w: Wall, p?: WallPart) => {
@@ -94,6 +101,7 @@ export function clueRank(c: Clue): number {
     case 'freezer':
       return c.aisle ? aisle(c.aisle, POS_RANK[c.pos ?? 'middle']) : 8800;
     case 'endcap': return aisle(c.aisle, c.end === 'front' ? 1 : 7);
+    case 'shelf': return 100 + sectionNumber(c.section) * 10 + Math.min(c.shelf ?? 0, 99) / 10;
     // Walls: after the aisles, round from the left wall's front to the right wall's front.
     case 'wall': return 9100 + WALL_ORDER[c.wall] * 10 + partRank(c.wall, c.part);
     case 'open': return c.aisle ? aisle(c.aisle, 0) : c.near === 'entrance' ? 5 : c.near === 'far' ? 8700 : 4900;
@@ -187,6 +195,7 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
     case 'freezer': return c.aisle ? inAisle(c.aisle, c.side, ALONG[c.pos ?? 'middle']) : findDept(l, 'frozen', product?.categoryId);
     case 'endcap': return inAisle(c.aisle, undefined, c.end === 'front' ? 0.02 : 0.98);
     case 'wall': return onWall(l, c.wall, c.part, c.temp);
+    case 'shelf': return labelledShelf(l, c.code, c.section, c.shelf);
     case 'open': return c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
     case 'display': return c.aisle ? inAisle(c.aisle, undefined, 0.5) : c.dept ? findDept(l, c.dept, product?.categoryId) : undefined;
     case 'dept': return findDept(l, c.dept, product?.categoryId);
@@ -273,6 +282,25 @@ function inOpen(l: StoreLayout, near?: OpenNear, t?: Temp): string | undefined {
     return short && walls.every((w) => frame.fromWall(f, w) > 3) && !/checkout/i.test(p.label);
   });
   return nearest(target, open, t);
+}
+
+/**
+ * A shelf by its label ("B12"): the place with that label, or else the
+ * nearest-numbered shelf of the same section that's on the map.
+ */
+function labelledShelf(l: StoreLayout, code: string, section: string, shelf?: number): string | undefined {
+  const norm = (t: string) => t.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const want = norm(code);
+  const exact = l.places.find((p) => norm(p.label) === want);
+  const centre = (p: Place) => exactKey(p.id, p.kind === 'shelf' ? { u: 0.5, v: 0.5 } : { u: 0.5, v: 0.5 });
+  if (exact) return centre(exact);
+  if (shelf === undefined) return undefined;
+  const sec = norm(section);
+  const same = l.places
+    .map((p) => ({ p, m: /^([A-Z]+|\d+)(\d+)$/.exec(norm(p.label)) }))
+    .filter((x) => x.m && x.m[1] === sec)
+    .sort((a, b) => Math.abs(Number(a.m![2]) - shelf) - Math.abs(Number(b.m![2]) - shelf));
+  return same[0] ? centre(same[0].p) : undefined;
 }
 
 /** Aisle numbers used in this store's clues, most used first (for quick picks). */

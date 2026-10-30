@@ -223,3 +223,45 @@ test('where’s the Bakery? tap a spot on the mini-map, see the preview, place i
   await page.getByRole('button', { name: /Not sure/ }).click();
   await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toHaveCount(0);
 });
+
+test('a store that labels shelves like B12: set up by example, one-tap next shelves, place a new section', async ({ page }) => {
+  await addItems(page, 'Cereal, Oats, Chips');
+  const bar = page.locator('.where-bar');
+  // Type "B12" on the bar's buttons.
+  await tick(page, 'Cereal');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: 'ABC' }).click();
+  await bar.getByRole('button', { name: 'B', exact: true }).click();
+  await bar.getByRole('button', { name: '123' }).click();
+  await bar.getByRole('button', { name: '1', exact: true }).click();
+  await bar.getByRole('button', { name: '2', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  // Not set up yet: teach it with this label.
+  const sheet = page.getByRole('dialog', { name: 'Shelf labels' });
+  await expect(sheet.getByLabel('Example label')).toHaveValue('B12');
+  await expect(sheet).toContainText('Read as section B, shelf 12');
+  await sheet.getByRole('radio', { name: /Facing pairs/ }).click();
+  await sheet.getByRole('button', { name: 'Save' }).click();
+  // The next shelves are one tap.
+  await tick(page, 'Oats');
+  await bar.getByRole('button', { name: 'B13', exact: true }).click();
+  // A new section: C.
+  await tick(page, 'Chips');
+  await bar.getByRole('button', { name: '# Shelf…' }).click();
+  await bar.getByRole('button', { name: 'ABC' }).click();
+  await bar.getByRole('button', { name: 'C', exact: true }).click();
+  await bar.getByRole('button', { name: '123' }).click();
+  await bar.getByRole('button', { name: '4', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  const card = page.getByRole('group', { name: 'Where’s Section C?' });
+  await card.locator('.placement-options .chip', { hasText: 'In front of section B' }).click();
+  await card.getByRole('button', { name: 'Place here' }).click();
+  const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  expect(l.labels).toMatchObject({ example: 'B12', roles: ['section', 'shelf'], pairing: 'facing' });
+  const labels = l.places.filter((p: any) => p.id.startsWith('g-sec-')).map((p: any) => p.label);
+  expect(labels).toEqual(expect.arrayContaining(['B1', 'B12', 'B13', 'C1', 'C4']));
+  const p = (label: string) => l.places.find((x: any) => x.label === label);
+  expect(p('C1').y).toBeGreaterThan(p('B1').y + 9); // in front of B
+  const products = await saved<any[]>(page, 'products');
+  expect(Object.values(products.find((x) => x.name === 'Oats').clues)[0]).toEqual({ kind: 'shelf', code: 'B13', section: 'B', shelf: 13 });
+});

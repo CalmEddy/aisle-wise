@@ -38,6 +38,8 @@ import { typicalWhere, whereText } from './whereText';
 import { AisleEditor } from './AisleEditor';
 import { WhereList } from './WhereList';
 import { PlacementCard } from './PlacementCard';
+import { LabelStyleSheet } from './LabelStyleSheet';
+import { parseLabel, type LabelStyle } from '../core/labels';
 import { pendingPlacements } from '../core/placement';
 import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
@@ -87,6 +89,8 @@ interface Props {
     place: (ref: string, placement: Placement) => Snapshot;
     /** Not sure where it goes: stop asking. */
     skipPlacement: (ref: string) => void;
+    /** Sets how this store labels its shelves ("B12"), or back to aisle numbers. Returns what Undo restores. */
+    setLabels: (style: LabelStyle | undefined) => Snapshot;
   };
   position: Point;
   setPosition: (p: Point) => void;
@@ -669,6 +673,14 @@ export function ShoppingView(props: Props) {
   const [lastClue, setLastClue] = useState<Clue>();
   /** Aisle numbers answered this trip, in order (to guess the next one). */
   const [aisleTrail, setAisleTrail] = useState<string[]>([]);
+  /** Shelves answered this trip ("B12" → section B, shelf 12), to guess the next. */
+  const [shelfTrail, setShelfTrail] = useState<{ section: string; shelf?: number }[]>([]);
+  const noteTrail = (clue: Clue) => {
+    if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
+    if (clue.kind === 'shelf') setShelfTrail((t) => [...t.slice(-5), { section: clue.section, shelf: clue.shelf }]);
+  };
+  /** Setting up the store's shelf labels, from a label just typed (and the item it's for). */
+  const [labelSetup, setLabelSetup] = useState<{ code?: string; item?: ListItem } | null>(null);
   /**
    * Worth asking about: no saved place and no answer for this store, and the
    * map can't already place it (its category isn't stocked in exactly one place).
@@ -706,7 +718,7 @@ export function ShoppingView(props: Props) {
     if (whereBarFor?.id === item.id) setWhereBarFor(null);
     const snapshot = props.where.setClue(item, clue);
     setLastClue(clue);
-    if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
+    noteTrail(clue);
     setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
     nextWhere(item);
   }
@@ -728,6 +740,7 @@ export function ShoppingView(props: Props) {
     props.where.newTrip();
     setWhereBarFor(null); // its item is leaving with the cart
     setAisleTrail([]);
+    setShelfTrail([]);
     setItems((prev) => prev.filter((i) => !i.done));
     setPosition(layout.entrance);
     setToast({ snapshot, added: [], mode: 'list', note: `Cart cleared (${n} item${n === 1 ? '' : 's'}). Ready for next time.` });
@@ -1011,6 +1024,8 @@ export function ShoppingView(props: Props) {
           itemName={whereFor.name}
           categoryId={productFor(whereFor, catalog)?.categoryId}
           storeName={layout.name}
+          labels={layout.labels}
+          onNeedLabels={(code) => setLabelSetup({ code, item: whereFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
           queued={reviewing ? Math.max(0, laterHere.filter((i) => i.id !== whereFor.id).length) : undefined}
@@ -1251,6 +1266,7 @@ export function ShoppingView(props: Props) {
             <StoreSettings
               layout={layout}
               store={props.build.store}
+              onLabels={() => setLabelSetup({})}
               problems={problems}
               onNewStore={() => {
                 props.build.startBlankStore();
@@ -1292,6 +1308,9 @@ export function ShoppingView(props: Props) {
           key={whereBarFor.id}
           itemName={whereBarFor.name}
           categoryId={productFor(whereBarFor, catalog)?.categoryId}
+          labels={layout.labels}
+          shelfTrail={shelfTrail}
+          onNeedLabels={(code) => setLabelSetup({ code, item: whereBarFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
           trail={aisleTrail}
@@ -1304,6 +1323,36 @@ export function ShoppingView(props: Props) {
           onSave={(clue) => saveWhere(whereBarFor, clue)}
           onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
+        />
+      )}
+      {labelSetup && (
+        <LabelStyleSheet
+          initial={labelSetup.code}
+          current={layout.labels}
+          onClose={() => setLabelSetup(null)}
+          onAisles={layout.labels ? () => {
+            const snapshot = props.where.setLabels(undefined);
+            setLabelSetup(null);
+            setToast({ snapshot, added: [], mode: 'list', note: `${layout.name} uses aisle numbers.` });
+          } : undefined}
+          onSave={(style) => {
+            const snapshot = props.where.setLabels(style);
+            const { code, item } = labelSetup;
+            setLabelSetup(null);
+            const r = code ? parseLabel(style, code) : undefined;
+            if (item && code && r) {
+              const clue: Clue = { kind: 'shelf', code, section: r.section, ...(r.shelf !== undefined && { shelf: r.shelf }) };
+              if (whereBarFor?.id === item.id) setWhereBarFor(null);
+              if (whereFor?.id === item.id) setWhereFor(null);
+              props.where.setClue(item, clue);
+              setLastClue(clue);
+              noteTrail(clue);
+              setLaterHere((ids) => ids.filter((id) => id !== item.id));
+              setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
+            } else {
+              setToast({ snapshot, added: [], mode: 'list', note: `Shelf labels set up for ${layout.name}.` });
+            }
+          }}
         />
       )}
       {placing && !whereBarFor && !whereFor && !adding && !listOpen && !menuFor && (!askAtCheckout || tripDone) && (
@@ -1328,11 +1377,14 @@ export function ShoppingView(props: Props) {
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
           trail={aisleTrail}
+          labels={layout.labels}
+          shelfTrail={shelfTrail}
+          onNeedLabels={(item, code) => setLabelSetup({ code, item })}
           askAtCheckout={askAtCheckout}
           onSave={(item, clue) => {
             const snapshot = props.where.setClue(item, clue);
             setLastClue(clue);
-            if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
+            noteTrail(clue);
             setLaterHere((ids) => ids.filter((id) => id !== item.id));
             setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
           }}

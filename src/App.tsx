@@ -19,6 +19,7 @@ import { addAisle, clipAisles, removeAisle, renameAisle, aislesIn, deleteAisles,
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
+import { parseLabel, type LabelStyle } from './core/labels';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
 import { DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
@@ -282,7 +283,7 @@ export default function App() {
     const gen = layout.gen ?? { enabled: true, entrance: 'left' as const, locked: [] };
     if (!gen.enabled) return;
     const model = buildModel(products, layout.id);
-    if (modelKey(model, gen) === gen.key) return;
+    if (modelKey(model, { ...gen, labels: layout.labels }) === gen.key) return;
     const after = regenerate({ ...layout, gen }, model);
     // Outline what changed, until the next trip (or it's tapped in Edit map).
     const changed = changedParts(layout, after);
@@ -426,6 +427,21 @@ export default function App() {
     setNotice(`Map updated from your trips: ${describeArrangement(learned.apply, buildModel(products, layout.id))}. Changes are outlined.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [learnedKey, layout.id]);
+  /** How this store labels its shelves ("B12"), or back to aisle numbers. Earlier shelf answers are read again in the new style. */
+  function setLabels(style: LabelStyle | undefined): Snapshot {
+    const snapshot = snapshotNow();
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? { ...l, labels: style } : l)));
+    if (style) {
+      setProducts((prev) => prev.map((p) => {
+        const c = p.clues?.[layout.id];
+        if (c?.kind !== 'shelf') return p;
+        const r = parseLabel(style, c.code);
+        if (!r) return p;
+        return { ...p, clues: { ...p.clues, [layout.id]: { ...c, section: r.section, ...(r.shelf !== undefined ? { shelf: r.shelf } : { shelf: undefined }) } } };
+      }));
+    }
+    return snapshot;
+  }
   /** Which arrangement settings this store's map has (for Store settings). */
   const layoutHas = useMemo(() => {
     const m = buildModel(products, layout.id);
@@ -928,7 +944,8 @@ export default function App() {
           setItemCategory={setItemCategory}
           where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip,
             place: (ref, placement) => setGen({ placements: { ...layout.gen?.placements, [ref]: placement } }),
-            skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); } }}
+            skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); },
+            setLabels }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

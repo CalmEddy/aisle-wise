@@ -18,8 +18,23 @@ export interface PlacementSubject {
   ref: string;
   /** What it is, in words ("Bakery", "Freezer case"). */
   name: string;
-  /** Its id on the generated map. */
+  /** Its id on the generated map (for a section of shelves: the start of its shelves' ids). */
   placeId: string;
+  /** A whole section of shelves: every place whose id starts with `placeId`. */
+  group?: boolean;
+}
+
+/** The places that make up a subject on a map. */
+export const subjectPlaces = (l: StoreLayout, s: PlacementSubject) =>
+  l.places.filter((p) => (s.group ? p.id.startsWith(s.placeId) : p.id === s.placeId));
+
+/** The rectangle around a subject's places. */
+function subjectRect(l: StoreLayout, s: PlacementSubject): Rect | undefined {
+  const rs = subjectPlaces(l, s).map(footprint);
+  if (!rs.length) return undefined;
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
 }
 
 export interface PlacementOption {
@@ -52,6 +67,15 @@ export function pendingPlacements(layout: StoreLayout, products: Product[], mode
     // Guessed: no wall said, or a wall but not where along it (and something else is on that wall).
     const guessed = !sec.wall || (sec.along === undefined && model.sections.some((o) => o !== sec && o.wall === sec.wall));
     if (guessed) out.push({ ref, name: sectionName(sec), placeId: id });
+  }
+  // Sections of labelled shelves after the first one heard: where are they from the others?
+  // The section with the most answers (where shopping started, usually) is the one the others are placed from.
+  const seenBlocks = model.blocks.filter((b) => b.seen);
+  const anchor = [...seenBlocks].sort((a, b) => b.count - a.count)[0];
+  for (const b of seenBlocks.filter((x) => x !== anchor)) {
+    const ref = `block:${b.section}`;
+    if (done.has(ref) || !layout.places.some((p) => p.id.startsWith(`g-sec-${b.section}-`))) continue;
+    out.push({ ref, name: `Section ${b.section}`, placeId: `g-sec-${b.section}-`, group: true });
   }
   for (const isl of model.islands) {
     const ref = `isl:${isl.key}`;
@@ -96,6 +120,14 @@ export function placementOptions(layout: StoreLayout, products: Product[], subje
     for (const wall of ['left', 'back', 'right'] as Wall[]) {
       if (!used.has(wall)) candidates.push({ placement: { of: `wall:${wall}` }, label: WALL_NAME[wall] });
     }
+  } else if (subject.ref.startsWith('block:')) {
+    const me = subject.ref.slice(6);
+    const SIDE = { left: 'Left of', right: 'Right of', above: 'Behind', below: 'In front of' } as const;
+    for (const b of model.blocks.filter((x) => x.section !== me && (x.seen || layout.places.some((p) => p.id.startsWith(`g-sec-${x.section}-`))))) {
+      for (const side of ['left', 'right', 'above', 'below'] as const) {
+        candidates.push({ placement: { of: `block:${b.section}`, side }, label: `${SIDE[side]} section ${b.section}` });
+      }
+    }
   } else {
     for (const a of model.aisles) candidates.push({ placement: { of: `aisle:${a.label}` }, label: `By aisle ${a.label}` });
     candidates.push({ placement: { of: 'wall:left' }, label: 'Left side, in front of the aisles' });
@@ -105,9 +137,8 @@ export function placementOptions(layout: StoreLayout, products: Product[], subje
   const out: PlacementOption[] = [];
   for (const c of candidates) {
     const preview = regenerate({ ...layout, gen: { ...gen, placements: { ...gen.placements, [subject.ref]: c.placement } } }, model);
-    const place = preview.places.find((p) => p.id === subject.placeId);
-    if (!place) continue;
-    const ghost = footprint(place);
+    const ghost = subjectRect(preview, subject);
+    if (!ghost) continue;
     const key = `${ghost.x},${ghost.y},${ghost.w},${ghost.h}`;
     if (seen.has(key)) continue;
     seen.add(key);

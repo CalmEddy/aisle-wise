@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { aisleNumber, DEPTS, describeClue, guessDept } from '../core/clues';
 import type { Clue, Temp, Wall } from '../core/types';
+import { formatLabel, looksLikeShelfCode, nextShelves, parseLabel, type LabelStyle } from '../core/labels';
 
 /** Cold or not, as a first guess from the category. */
 export function guessTemp(categoryId?: string): Temp | undefined {
@@ -37,13 +38,19 @@ const WALLS: { wall: Wall; label: string }[] = [
  * buttons right here; "Other…" opens the full panel; ignoring it (checking
  * the next thing off) asks later.
  */
-export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], laterLabel = 'Later', onAskAtCheckout, onSave, onOther, onLater }: {
+export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onOther, onLater }: {
   itemName: string;
   categoryId?: string;
   recentAisles: string[];
   lastClue?: Clue;
   /** Aisle numbers answered this trip, in order. */
   trail?: string[];
+  /** How this store labels its shelves ("B12"), if not by aisle number. */
+  labels?: LabelStyle;
+  /** Shelves answered this trip, in order. */
+  shelfTrail?: { section: string; shelf?: number }[];
+  /** A shelf label was typed but the store's style isn't set up: set it up from this example. */
+  onNeedLabels?: (code: string) => void;
   /** The "not now" link's text. */
   laterLabel?: string;
   /** Offer "ask me at checkout" (stop asking as you go at this store). */
@@ -54,11 +61,27 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
 }) {
   const [temp, setTemp] = useState<Temp | undefined>(guessTemp(categoryId));
   const [typing, setTyping] = useState<string>();
+  const [letters, setLetters] = useState(false);
   const dept = guessDept(categoryId);
   const d = dept && DEPTS.find((x) => x.id === dept);
   const cold = temp === 'frozen' ? '❄ ' : temp === 'chilled' ? '🧊 ' : '';
   const withTemp = temp ? { temp } : {};
   const aisleClue = (aisle: string): Clue => ({ kind: 'aisle', aisle, ...withTemp });
+  const shelfClue = (code: string): Clue | undefined => {
+    const r = labels && parseLabel(labels, code);
+    return r ? { kind: 'shelf', code: code.trim().toUpperCase(), section: r.section, ...(r.shelf !== undefined && { shelf: r.shelf }), ...withTemp } : undefined;
+  };
+  /** Saves what was typed on the buttons: a shelf label, an aisle, or (a label in a store not set up for them) set up labels first. */
+  function saveTyped(v: string) {
+    const shelf = shelfClue(v);
+    if (shelf) onSave(shelf);
+    else if (looksLikeShelfCode(v) && onNeedLabels) onNeedLabels(v.trim().toUpperCase());
+    else onSave(aisleClue(v));
+  }
+  const shelfChips = labels ? nextShelves(shelfTrail).map((x, i) => {
+    const code = formatLabel(labels, x.section, x.shelf);
+    return { key: `s-${code}`, label: `${cold}${code}`, clue: shelfClue(code)!, primary: !d && i === 0 };
+  }).filter((x) => x.clue) : [];
 
   const quick: { key: string; label: string; clue: Clue; primary?: boolean }[] = [];
   const predicted = nextAisles(trail);
@@ -66,8 +89,8 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   const aisleChips = aisles.map((a, i) => ({ key: `a-${a}`, label: `${cold}Aisle ${a}`, clue: aisleClue(a), primary: !d && i === 0 }));
   const wallChips = (d || temp) ? WALLS.map((w) => ({ key: `w-${w.wall}`, label: `${cold}${w.label}`, clue: { kind: 'wall', wall: w.wall, ...withTemp } as Clue })) : [];
   if (d) quick.push({ key: `d-${d.id}`, label: `${d.icon} ${d.name}`, clue: { kind: 'dept', dept: d.id }, primary: true });
-  if (d) quick.push(...wallChips, ...aisleChips);
-  else quick.push(...aisleChips, ...wallChips);
+  if (d) quick.push(...wallChips, ...shelfChips, ...aisleChips.map((a) => ({ ...a, primary: false })));
+  else quick.push(...shelfChips, ...aisleChips.map((a) => ({ ...a, primary: a.primary && !shelfChips.length })), ...wallChips);
   const lastIsListed = lastClue && quick.some((q) => describeClue(q.clue) === describeClue(lastClue));
   if (lastClue && !lastIsListed) quick.push({ key: 'last', label: `Same as last: ${describeClue(lastClue)}`, clue: lastClue });
 
@@ -90,24 +113,22 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
           {quick.map((q) => (
             <button key={q.key} className={`btn${q.primary ? ' primary' : ''}`} onClick={() => onSave(q.clue)}>{q.label}</button>
           ))}
-          <button className="btn" onClick={() => setTyping('')}># Aisle…</button>
+          <button className="btn" onClick={() => setTyping('')}>{labels ? '# Shelf…' : '# Aisle…'}</button>
           <button className="btn" onClick={onOther}>Other…</button>
           {onAskAtCheckout && <button className="link where-bar-checkout" onClick={onAskAtCheckout}>Ask me at checkout</button>}
         </div>
       ) : (
-        <div className="where-bar-pad" role="group" aria-label="Aisle number">
+        <div className="where-bar-pad" role="group" aria-label={labels ? 'Shelf label' : 'Aisle number'}>
           <div className="where-bar-pad-head">
             <button className="link" onClick={() => setTyping(undefined)} aria-label="Back">‹</button>
-            <span className="where-bar-pad-value" aria-live="polite">{cold}Aisle <b>{typing || '_'}</b></span>
-            <button className="btn primary" disabled={!typing} onClick={() => typing && onSave(aisleClue(typing))}>Save</button>
+            <span className="where-bar-pad-value" aria-live="polite">{cold}{labels ? 'Shelf' : 'Aisle'} <b>{typing || '_'}</b></span>
+            <button className="btn primary" disabled={!typing} onClick={() => typing && saveTyped(typing)}>Save</button>
           </div>
           <div className="where-bar-keys">
-            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].map((k) => (
-              <button key={k} className="btn key" onClick={() => setTyping((v) => ((v ?? '') + k).replace(/^0+/, '').slice(0, 3))}>{k}</button>
+            {(letters ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ-'.split('') : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-']).map((k) => (
+              <button key={k} className="btn key" onClick={() => setTyping((v) => ((v ?? '') + k).replace(/^0+(?=\d)/, '').slice(0, 8))}>{k}</button>
             ))}
-            {['A', 'B'].map((k) => (
-              <button key={k} className="btn key" disabled={!typing || /[A-Z]$/.test(typing)} onClick={() => setTyping((v) => `${v}${k}`)}>{k}</button>
-            ))}
+            <button className={`btn key${letters ? ' active' : ''}`} aria-pressed={letters} onClick={() => setLetters((x) => !x)}>{letters ? '123' : 'ABC'}</button>
             <button className="btn key" aria-label="Delete" disabled={!typing} onClick={() => setTyping((v) => (v ?? '').slice(0, -1))}>⌫</button>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import type { Snapshot } from '../App';
 import type { LayoutQuestion } from '../core/learn';
+import { PAIRINGS } from '../core/labels';
 import { LayoutQuestionCard } from './LayoutQuestionCard';
 import type { Direction } from '../core/build';
 import { BRUSH_LENGTH, BRUSH_PRESETS, MAX_AISLE, MIN_AISLE, type Brush, type SideKind } from '../core/brush';
@@ -111,7 +112,7 @@ function GenChoice({ store, setting, label, options, note, onUndoable }: {
 }
 
 /** The collapsible "Store settings" section of the build panel. */
-export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace, onUndoable }: {
+export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace, onUndoable, onLabels }: {
   layout: StoreLayout;
   store: StoreApi;
   /** Plain-language problems with the layout. */
@@ -121,6 +122,8 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
   onPickPlace: (placeId: string) => void;
   /** Something changed that can be undone. */
   onUndoable: (text: string, snapshot: Snapshot) => void;
+  /** Set up how the store labels its shelves. */
+  onLabels?: () => void;
 }) {
   return (
     <>
@@ -136,6 +139,17 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
           <span>Store name</span>
           <input value={layout.name} onChange={(e) => store.renameStore(e.target.value)} />
         </label>
+        {onLabels && (
+          <div className="field">
+            <span>Shelf labels</span>
+            <div className="store-actions">
+              <span className="muted small" style={{ flex: 1 }}>
+                {layout.labels ? `Like “${layout.labels.example}” · ${PAIRINGS.find((p) => p.id === layout.labels!.pairing)?.name.toLowerCase()}` : 'Aisle numbers'}
+              </span>
+              <button className="btn" onClick={onLabels}>{layout.labels ? 'Change…' : 'Labels like B12…'}</button>
+            </div>
+          </div>
+        )}
         <div className="field-row">
           <NumberField label="Width" value={layout.width} min={10} onChange={(v) => store.resizeStore(v, layout.height)} />
           <NumberField label="Depth" value={layout.height} min={10} onChange={(v) => store.resizeStore(layout.width, v)} />

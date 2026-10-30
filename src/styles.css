@@ -919,3 +919,18 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .placement-card .where-bar-choices { margin-top: 8px; }
 .placement-map .map-ghost.next rect:not(.hit) { fill: var(--accent); stroke: #fff; stroke-width: 0.15; stroke-dasharray: none; rx: 1.1; }
 .placement-map .map-ghost.next text { fill: #fff; font-weight: 800; font-size: 1.3px; }
+
+/* ---- Shelf labels set up by example ---- */
+.label-sheet { max-height: 90vh; overflow-y: auto; }
+.label-parts { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.label-part { display: flex; align-items: center; gap: 8px; }
+.label-token { min-width: 3rem; text-align: center; font-size: 1.3rem; font-weight: 800; padding: 4px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.label-part .segmented { flex: 1; }
+.pairing-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pairing-option { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--text); text-align: left; }
+.pairing-option.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.pairing-pic { width: 100%; height: 54px; margin-bottom: 4px; }
+.pic-shelf { fill: var(--shelf); }
+.pairing-option.active .pic-shelf { fill: var(--accent); }
+.pic-num { font-weight: 800; fill: var(--text); }
+.pairing-option.active .pic-num:not(.under) { fill: #fff; }
