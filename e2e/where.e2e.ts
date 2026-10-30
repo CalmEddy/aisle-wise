@@ -333,3 +333,21 @@ test('shelf codes in 2–3 taps: the section is already in, known sections are o
   const code = (n: string) => (Object.values(products.find((x) => x.name === n).clues)[0] as any).code;
   expect([code('Cereal'), code('Coffee'), code('Batteries')]).toEqual(['B7', 'B8', 'A2']);
 });
+
+test('where’s the door? asked once at the end of a trip, with the likely spot', async ({ page }) => {
+  await addItems(page, 'Apples, Cereal, Milk');
+  const bar = page.locator('.where-bar');
+  await tick(page, 'Apples');
+  await bar.getByRole('button', { name: 'Right wall →' }).click();
+  await tick(page, 'Cereal');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: '3', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  await tick(page, 'Milk');
+  await bar.getByRole('button', { name: '← Left wall' }).first().click();
+  const door = page.getByRole('group', { name: 'Where’s the door?' });
+  await expect(door).toContainText('Your trips start near 5');
+  await door.getByRole('button', { name: 'Door: Right end' }).click();
+  await expect.poll(async () => { const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner'); return l.entrance.x / l.width; }).toBeGreaterThan(0.8);
+  await expect(door).toHaveCount(0);
+});

@@ -45,6 +45,7 @@ import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
+import { DoorCard } from './DoorCard';
 
 interface Props {
   /** The household's lists; this view shows the current one. */
@@ -89,6 +90,10 @@ interface Props {
     place: (ref: string, placement: Placement, dir?: Orientation) => Snapshot;
     /** Not sure where it goes: stop asking. */
     skipPlacement: (ref: string) => void;
+    /** "Where's the door?" (once per store), with the likely spot. */
+    door?: { guess: number };
+    /** The door's spot along the front (0 left – 1 right), or undefined for not sure. Returns what Undo restores. */
+    setDoor: (f: number | undefined) => Snapshot | undefined;
     /** Sets how this store labels its shelves ("B12"), or back to aisle numbers. Returns what Undo restores. */
     setLabels: (style: LabelStyle | undefined) => Snapshot;
   };
@@ -1015,6 +1020,14 @@ export function ShoppingView(props: Props) {
             question={props.where.question}
             onAnswer={(o) => props.where.answer(props.where.question!, o)}
             onClear={newTrip}
+            door={props.where.door && (
+              <DoorCard layout={layout} guess={props.where.door.guess}
+                onPick={(f) => {
+                  const snapshot = props.where.setDoor(f);
+                  if (snapshot) setToast({ snapshot, added: [], mode: 'list', note: 'Door moved: the next trip starts there.' });
+                }}
+                onSkip={() => props.where.setDoor(undefined)} />
+            )}
           />
         )}
 

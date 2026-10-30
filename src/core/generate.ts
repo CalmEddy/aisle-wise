@@ -230,7 +230,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
 }
 
 /** What a map is generated with: the entrance corner and the arrangement. */
-export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions'> & { labels?: LabelStyle };
+export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions' | 'door'> & { labels?: LabelStyle };
 
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
@@ -242,6 +242,7 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
     ...(settings.backWall === 'reversed' && { b: 'rev' }),
     ...(settings.placements && Object.keys(settings.placements).length && { pl: settings.placements }),
     ...(settings.aisleGroups?.length && { ag: settings.aisleGroups }),
+    ...(settings.door !== undefined && { door: settings.door }),
     ...(settings.directions && Object.keys(settings.directions).length && { dr: settings.directions }),
     a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : a.chilled ? 2 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
@@ -263,7 +264,7 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation> } = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; door?: number } = {}) {
   const placements = arrangement.placements ?? {};
   const L = AISLE_LENGTH;
   // Blocks of shelving: the numbered aisles, runs of aisles the shopper made into their own block,
@@ -495,16 +496,20 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
       });
     }
   }
-  // Front corners, and the checkouts to the left of the door.
+  // Front corners, and the checkouts beside the door (to its left if there's room, else its right).
+  const doorX = Math.max(1, Math.min(width - 2, Math.round((arrangement.door ?? 0.5) * (width - 1))));
   for (const d of FRONT_RIGHT) if (corners.includes(d)) places.push(area(d, { x: width - 6, y: front, w: 4, h: 3 }));
   for (const d of FRONT_LEFT) if (corners.includes(d)) places.push(area(d, { x: 2, y: front, w: 4, h: 3 }));
-  const checkoutX = Math.max(corners.some((d) => FRONT_LEFT.includes(d)) ? 7 : 2, mid - 10);
+  const leftEdge = corners.some((d) => FRONT_LEFT.includes(d)) ? 7 : 2;
+  const rightEdge = width - (corners.some((d) => FRONT_RIGHT.includes(d)) ? 7 : 2);
+  const coW = 8;
+  const checkoutX = doorX - 2 - coW >= leftEdge ? doorX - 2 - coW : Math.min(rightEdge - coW, doorX + 3);
   if (model.checkout) {
-    places.push({ kind: 'area', id: 'g-checkout', label: 'Checkout', x: checkoutX, y: front, w: Math.min(8, mid - 1 - checkoutX), h: 2, categories: [] });
+    places.push({ kind: 'area', id: 'g-checkout', label: 'Checkout', x: checkoutX, y: front, w: coW, h: 2, categories: [] });
   }
   return {
     width, height, places, aisles,
-    entrance: { x: mid, y: height - 1 },
+    entrance: { x: doorX, y: height - 1 },
     checkout: { x: checkoutX + 3, y: height - 2 },
   };
 }

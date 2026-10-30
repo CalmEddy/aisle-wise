@@ -20,6 +20,7 @@ import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from
 import { parseAmount } from './core/items';
 import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut';
 import { parseLabel, type LabelStyle } from './core/labels';
+import { doorQuestion } from './core/door';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
 import { aisleNumber, DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
@@ -417,6 +418,8 @@ export default function App() {
     const last = t.picks[t.picks.length - 1].at;
     return Date.now() - last > TRIP_GAP ? undefined : { first: t.picks[0].at, last };
   }, [trips, layout.id]);
+  /** "Where's the door?": asked once per store after a trip, with where the trips tend to start. */
+  const doorAsk = useMemo(() => doorQuestion(layout, trips, catalog), [layout, trips, catalog]);
   /** Things bought before, for "Buy again" in the add window. */
   const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
@@ -994,7 +997,14 @@ export default function App() {
               ...(dir && { directions: { ...layout.gen?.directions, [ref]: dir } }),
             }),
             skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); },
-            setLabels }}
+            setLabels,
+            door: doorAsk,
+            setDoor: (f) => {
+              const gen = layout.gen;
+              if (!gen) return undefined;
+              if (f === undefined) { setGen({ skipped: [...(gen.skipped ?? []), 'entrance'] }); return undefined; }
+              return setGen({ door: f, sure: [...(gen.sure ?? []), 'entrance'], locked: gen.locked.filter((id) => id !== 'g-entrance' && id !== 'g-checkout-point') });
+            } }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

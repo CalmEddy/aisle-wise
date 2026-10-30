@@ -111,6 +111,8 @@ export interface GeneratedMap extends Arrangement {
   placementsSkipped?: string[];
   /** Runs of aisles drawn as their own block ("aisles:7" = aisles 7 to 10), e.g. running side to side below the rest. */
   aisleGroups?: { from: string; to: string }[];
+  /** Where the door is along the front, 0 (left) to 1 (right); unset: the middle. */
+  door?: number;
   /** Which way each block's shelves run ("block:C", "aisles:7"); unset: up and down (aisle groups: side to side). */
   directions?: Record<string, Orientation>;
 }
