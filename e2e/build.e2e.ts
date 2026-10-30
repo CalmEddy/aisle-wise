@@ -74,25 +74,28 @@ test('selecting an aisle selects its shelves; it moves as one, and turns when th
   await page.locator('svg.map .aisle-label text').first().click({ force: true });
   await expect(page.locator('svg.map g.place.selected')).toHaveCount(2);
   await expect(page.locator('.aisle-group-outline')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Move aisle up' }).click();
+  await page.getByRole('toolbar', { name: 'Change Aisle 1' }).getByRole('button', { name: 'Move aisle up' }).click();
   let l = await layout(page);
   expect(l.places.map((p: any) => [p.id, p.y])).toEqual([['L', 7], ['R', 7], ['X', 8]]);
-  await page.getByRole('button', { name: /Side to side/ }).click();
+  // The controls sit on the map, next to the aisle.
+  const tools = page.getByRole('toolbar', { name: 'Change Aisle 1' });
+  await expect(tools).toBeVisible();
+  await tools.getByRole('button', { name: 'Turn side to side' }).click();
   l = await layout(page);
   expect(l.aisles[0]).toMatchObject({ w: 10, h: 2 });
   expect(l.places.filter((p: any) => p.id !== 'X').every((p: any) => p.orientation === 'horizontal')).toBe(true);
   // Moving right runs into the shelf "Next": refused.
-  for (let i = 0; i < 6; i++) await page.getByRole('button', { name: 'Move aisle right' }).click();
+  for (let i = 0; i < 6; i++) await tools.getByRole('button', { name: 'Move aisle right' }).click();
   await expect(page.locator('.toast')).toContainText('Can’t move it that way');
 });
 
 test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page }) => {
   await fresh(page, cornerStore());
   await page.getByRole('button', { name: 'Build mode' }).click();
-  // The main four tools show first; the rest are under "More tools" (remembered).
-  await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(4);
+  // The main five tools show first; the rest are under "More tools" (remembered).
+  await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(5);
   await page.getByRole('button', { name: 'More tools' }).click();
-  await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(9);
+  await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(10);
   expect((await saved<any>(page, 'display')).buildMoreTools).toBe(true);
   await page.getByRole('button', { name: 'Cut aisles' }).click();
   const l0 = await layout(page);
@@ -111,4 +114,78 @@ test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page 
   l = await layout(page);
   expect(l.aisles.map((a: any) => a.label)).not.toContain('Aisle 42');
   expect(new Set(l.aisles.map((a: any) => a.label)).size).toBe(10);
+});
+
+/** Three aisles side by side (shelves back to back between them), with room around. */
+const threeAisles = () => {
+  const sh = (id: string, x: number) => ({ kind: 'shelf', id, label: id, orientation: 'vertical', x, y: 6, length: 10, categories: [] });
+  return {
+    layouts: [{
+      id: 's1', name: 'Three', width: 34, height: 34, entrance: { x: 1, y: 33 }, checkout: { x: 15, y: 33 },
+      places: [sh('a1', 10), sh('a2', 13), sh('b1', 14), sh('b2', 17), sh('c1', 18), sh('c2', 21)],
+      aisles: [
+        { id: 'A', label: 'Aisle 1', x: 11, y: 6, w: 2, h: 10 },
+        { id: 'B', label: 'Aisle 2', x: 15, y: 6, w: 2, h: 10 },
+        { id: 'C', label: 'Aisle 3', x: 19, y: 6, w: 2, h: 10 },
+      ],
+    }],
+    activeLayout: 's1',
+  };
+};
+
+test('select a group of aisles with a box, turn it as one block, then delete it with undo', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, threeAisles());
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await page.getByRole('button', { name: 'Select aisles' }).click();
+  await dragMap(page, [12, 10], [19, 11]);
+  const tools = page.getByRole('toolbar', { name: 'Change 3 aisles' });
+  await expect(tools).toBeVisible();
+  await expect(page.locator('svg.map g.place.selected')).toHaveCount(6);
+  // A tap takes one out.
+  await tapMap(page, 15, 12);
+  await expect(page.getByRole('toolbar', { name: 'Change 2 aisles' })).toBeVisible();
+  await tapMap(page, 15, 12);
+  await tools.getByRole('button', { name: 'Turn side to side' }).click();
+  let l = await layout(page);
+  expect(l.aisles.every((a: any) => a.w === 10 && a.h === 2)).toBe(true);
+  expect(l.places.every((p: any) => p.orientation === 'horizontal')).toBe(true);
+  // Nothing overlaps.
+  const rects = [...l.aisles, ...l.places.map((p: any) => ({ x: p.x, y: p.y, w: p.length, h: 1 }))];
+  for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+    const a = rects[i]; const b = rects[j];
+    expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(false);
+  }
+  await page.getByRole('toolbar', { name: 'Change 3 aisles' }).getByRole('button', { name: 'Delete aisles and shelves' }).click();
+  l = await layout(page);
+  expect([l.aisles.length, l.places.length]).toEqual([0, 0]);
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  l = await layout(page);
+  expect([l.aisles.length, l.places.length]).toEqual([3, 6]);
+  ok();
+});
+
+test('bumping a shelf away from its aisle widens the aisle; it won’t go onto the next one', async ({ page }) => {
+  await fresh(page, threeAisles());
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await page.locator('svg.map g.place.shelf').first().click({ force: true }); // a1, the left side of Aisle 1
+  const tools = page.getByRole('toolbar', { name: 'Change a1' });
+  await tools.getByRole('button', { name: 'Move shelf left' }).click();
+  let l = await layout(page);
+  expect(l.aisles.find((a: any) => a.id === 'A')).toMatchObject({ x: 10, w: 3 });
+  // Offset it along the aisle: the aisle still runs the length of both sides.
+  await tools.getByRole('button', { name: 'Move shelf up' }).click();
+  l = await layout(page);
+  expect(l.aisles.find((a: any) => a.id === 'A')).toMatchObject({ y: 5, h: 11 });
+  // No "next shelf" suggestion is offered inside the widened walkway.
+  const ghosts = await page.locator('.map-ghost.next rect:not(.hit)').evaluateAll((rs) => rs.map((r) => ({ x: +r.getAttribute('x')!, w: +r.getAttribute('width')! })));
+  expect(ghosts.filter((g) => g.x < 13 && g.x + g.w > 10)).toEqual([]); // Aisle 1's walkway is x 10–12
+  // a2 is back to back with b1: it can't move right onto it.
+  await page.locator('svg.map g.place.shelf[data-drop="a2"]').click({ force: true });
+  await page.getByRole('toolbar', { name: 'Change a2' }).getByRole('button', { name: 'Move shelf right' }).click();
+  await expect(page.locator('.toast')).toContainText('Can’t move it that way');
+  // Length on the map too.
+  await page.getByRole('toolbar', { name: 'Change a2' }).getByRole('button', { name: 'Longer' }).click();
+  l = await layout(page);
+  expect(l.places.find((p: any) => p.id === 'a2').length).toBe(11);
 });

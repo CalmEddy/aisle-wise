@@ -15,7 +15,7 @@ import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
-import { addAisle, clipAisles, removeAisle, renameAisle, moveAisle, turnAisle } from './core/aisles';
+import { addAisle, clipAisles, removeAisle, renameAisle, aislesIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
@@ -499,8 +499,19 @@ export default function App() {
   }
 
   /** Edits a shelf or area in the current store (build mode's edit panel). */
-  function updatePlace(placeId: string, patch: Partial<Place>) {
+  /** Changes a shelf or area. Moving or resizing a shelf keeps its aisles; returns false if it would land on something. */
+  function updatePlace(placeId: string, patch: Partial<Place>): boolean {
+    const place = layout.places.find((p) => p.id === placeId);
+    if (!place) return false;
+    const geometry = ['x', 'y', 'length', 'orientation'].some((k) => k in patch);
+    if (place.kind === 'shelf' && geometry) {
+      const next = clampPlace({ ...place, ...patch } as Place, layout);
+      const r = moveShelf(layout, placeId, next as Partial<Shelf>);
+      if (r.ok) replaceLayout(r.layout);
+      return r.ok;
+    }
     replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? clampPlace({ ...p, ...patch } as Place, layout) : p)) });
+    return true;
   }
 
   /** What Undo puts back for a change to the current store. */
@@ -546,20 +557,28 @@ export default function App() {
       replaceLayout(removeAisle(layout, id));
       return snapshot;
     },
-    /** Moves the whole aisle (label and both shelves). False if there's no room. */
-    move(id: string, dx: number, dy: number): boolean {
-      const r = moveAisle(layout, id, dx, dy);
+    /** Moves whole aisles (labels and both shelves). False if there's no room. */
+    move(ids: string | string[], dx: number, dy: number): boolean {
+      const r = moveAisles(layout, ([] as string[]).concat(ids), dx, dy);
       if (r.ok) replaceLayout(r.layout);
       return r.ok;
     },
-    /** Turns the whole aisle a quarter turn. Undefined if there's no room. */
-    turn(id: string): Snapshot | undefined {
+    /** Turns whole aisles a quarter turn, as one block. Undefined if there's no room. */
+    turn(ids: string | string[]): Snapshot | undefined {
       const snapshot = snapshotNow();
-      const r = turnAisle(layout, id);
+      const r = turnAisles(layout, ([] as string[]).concat(ids));
       if (!r.ok) return undefined;
       replaceLayout(r.layout);
       return snapshot;
     },
+    /** Deletes aisles with their shelves (keeping shelves another aisle still uses). */
+    deleteMany(ids: string[]): Snapshot {
+      const snapshot = snapshotNow();
+      replaceLayout(deleteAisles(layout, ids));
+      return snapshot;
+    },
+    /** The aisles a dragged box touches. */
+    within: (box: Rect) => aislesIn(layout, box),
     /** Numbers every numbered aisle 1, 2, 3… from the back block, door side first. */
     renumber(): Snapshot {
       const snapshot = snapshotNow();

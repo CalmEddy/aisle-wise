@@ -36,6 +36,8 @@ import { ItemMenu } from './ItemMenu';
 import { type BuildNote, BuildPanel, BuildBanner } from './BuildPanel';
 import { typicalWhere, whereText } from './whereText';
 import { AisleEditor } from './AisleEditor';
+import { MapTools, type MapAction } from './MapTools';
+import { aisleShelves } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
 
 interface Props {
@@ -97,7 +99,7 @@ export interface BuildApi {
   stepTo: (dir: Direction) => void;
   markHere: (which: 'entrance' | 'checkout') => Snapshot;
   startBlankStore: () => void;
-  updatePlace: (placeId: string, patch: Partial<Place>) => void;
+  updatePlace: (placeId: string, patch: Partial<Place>) => boolean;
   deletePlace: (placeId: string) => void;
   /** What Undo would put back right now. */
   snapshot: () => Snapshot;
@@ -114,8 +116,10 @@ export interface BuildApi {
     rename: (id: string, label: string) => void;
     remove: (id: string) => Snapshot;
     renumber: () => Snapshot;
-    move: (id: string, dx: number, dy: number) => boolean;
-    turn: (id: string) => Snapshot | undefined;
+    move: (ids: string | string[], dx: number, dy: number) => boolean;
+    turn: (ids: string | string[]) => Snapshot | undefined;
+    deleteMany: (ids: string[]) => Snapshot;
+    within: (box: Rect) => string[];
     cut: (box: Rect, numbers: CutNumbers) => { snapshot: Snapshot; cut: number; renamed: string[] };
   };
   store: StoreApi;
@@ -125,6 +129,8 @@ export interface BuildApi {
 type MapDrag =
   | { mode: 'move' | 'resize'; id: string; start: Point; orig: Place; snapshot: Snapshot; moved: boolean }
   | { mode: 'entrance' | 'checkout'; start: Point; snapshot: Snapshot; moved: boolean };
+
+const overlapsRect = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 export function ShoppingView(props: Props) {
   const { layout, floor, catalog, items, setItems, setLocation, setAvailable, position, setPosition, onEditLayout } = props;
@@ -165,6 +171,21 @@ export function ShoppingView(props: Props) {
   const [cutWidth, setCutWidth] = useState<number>();
   const [cutNumbers, setCutNumbers] = useState<CutNumbers>('same');
   const cutting = building && tool === 'cut';
+  // Select tool: a group of aisles to turn, move or delete together.
+  const selectDrag = useBlockDrag(layout);
+  const [selectedAisles, setSelectedAisles] = useState<string[]>([]);
+  const selecting = building && tool === 'select';
+  const chosenAisles = selecting ? selectedAisles.filter((id) => layout.aisles?.some((a) => a.id === id)) : [];
+  function finishSelect() {
+    const r = selectDrag.rect;
+    selectDrag.up();
+    selectDrag.clear();
+    if (!r) return;
+    const ids = props.build.aisles.within(r);
+    // A tap adds or takes out the aisle under it; a box picks everything it touches.
+    if (r.w === 1 && r.h === 1) setSelectedAisles((prev) => (ids.some((id) => prev.includes(id)) ? prev.filter((id) => !ids.includes(id)) : [...prev, ...ids]));
+    else setSelectedAisles(ids);
+  }
   /** The cut box: as dragged, with its thickness changed by the panel's Width. */
   const cutBox = cutDrag.rect && cutWidth !== undefined
     ? (cutsVertical(cutDrag.rect)
@@ -203,14 +224,95 @@ export function ShoppingView(props: Props) {
   function setTool(t: BuildTool) {
     setToolState(t);
     block.reset();
+    selectDrag.clear();
+    if (t !== 'select') setSelectedAisles([]);
     cutDrag.clear();
     setCutWidth(undefined);
     setBrushSteps([]);
-    if (t === 'block' || t === 'cut') {
+    if (t === 'block' || t === 'cut' || t === 'select') {
       setEditingId(undefined);
       setNote(null);
     }
   }
+  // ---- Controls on the map, next to what's selected ----
+  const say = (text: string, snapshot?: Snapshot) => setNote({ kind: 'message', text, ...(snapshot && { snapshot }) });
+  const arrows = (move: (dx: number, dy: number) => boolean, what: string): MapAction[] =>
+    ([['←', -1, 0, 'left'], ['↑', 0, -1, 'up'], ['↓', 0, 1, 'down'], ['→', 1, 0, 'right']] as const).map(([icon, dx, dy, word]) => ({
+      key: word, icon, label: `Move ${what} ${word}`,
+      onClick: () => { if (!move(dx, dy)) say('Can’t move it that way: something’s in the way, or it’s at the wall.'); },
+    }));
+  const aisleRect = (ids: string[]) => {
+    const labels = (layout.aisles ?? []).filter((a) => ids.includes(a.id));
+    const rects = [...labels, ...labels.flatMap((a) => aisleShelves(layout, a).map(footprint))];
+    if (!rects.length) return undefined;
+    const x = Math.min(...rects.map((r) => r.x));
+    const y = Math.min(...rects.map((r) => r.y));
+    return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
+  };
+  function aisleTools(ids: string[], title: string, onGone: () => void) {
+    const anchor = aisleRect(ids);
+    if (!anchor) return undefined;
+    const vertical = (layout.aisles ?? []).filter((a) => ids.includes(a.id)).every((a) => a.h >= a.w);
+    const what = ids.length === 1 ? 'aisle' : 'aisles';
+    return {
+      anchor, title,
+      rows: [
+        [
+          { key: 'turn', icon: vertical ? '↔' : '↕', label: vertical ? 'Turn side to side' : 'Turn up and down', onClick: () => {
+            const snapshot = props.build.aisles.turn(ids);
+            if (snapshot) say(`Turned ${title}.`, snapshot);
+            else say('No room to turn here: something’s in the way, or it would go past the walls.');
+          } },
+          ...arrows((dx, dy) => props.build.aisles.move(ids, dx, dy), what),
+          { key: 'delete', icon: '🗑', label: `Delete ${what} and shelves`, danger: true, onClick: () => {
+            const snapshot = props.build.aisles.deleteMany(ids);
+            onGone();
+            say(`Deleted ${title}.`, snapshot);
+          } },
+        ],
+      ] as MapAction[][],
+    };
+  }
+  function placeTools(p: Place) {
+    const anchor = footprint(p);
+    const update = (patch: Partial<Place>) => props.build.updatePlace(p.id, patch);
+    const turn: MapAction = p.kind === 'shelf'
+      ? { key: 'turn', icon: p.orientation === 'vertical' ? '↔' : '↕', label: 'Turn the shelf', onClick: () => {
+          // About its middle.
+          const v = p.orientation === 'vertical';
+          const half = Math.floor(p.length / 2);
+          const patch = v ? { orientation: 'horizontal' as const, x: p.x - half, y: p.y + half } : { orientation: 'vertical' as const, x: p.x + half, y: p.y - half };
+          if (!update(patch)) say('No room to turn it here.');
+        } }
+      : { key: 'turn', icon: '⟳', label: 'Turn the area', onClick: () => { update({ w: p.h, h: p.w } as Partial<Place>); } };
+    const size: MapAction[] = p.kind === 'shelf'
+      ? [
+          { key: 'shorter', icon: '−', label: 'Shorter', disabled: p.length <= 2, onClick: () => { update({ length: p.length - 1 } as Partial<Place>); } },
+          { key: 'longer', icon: '+', label: 'Longer', onClick: () => { if (!update({ length: p.length + 1 } as Partial<Place>)) say('Can’t make it longer: something’s in the way.'); } },
+        ]
+      : [
+          { key: 'narrower', icon: '⇤', label: 'Narrower', disabled: p.w <= 1, onClick: () => { update({ w: p.w - 1 } as Partial<Place>); } },
+          { key: 'wider', icon: '⇥', label: 'Wider', onClick: () => { update({ w: p.w + 1 } as Partial<Place>); } },
+          { key: 'shallower', icon: '⤒', label: 'Less deep', disabled: p.h <= 1, onClick: () => { update({ h: p.h - 1 } as Partial<Place>); } },
+          { key: 'deeper', icon: '⤓', label: 'Deeper', onClick: () => { update({ h: p.h + 1 } as Partial<Place>); } },
+        ];
+    const del: MapAction = { key: 'delete', icon: '🗑', label: `Delete ${p.kind}`, danger: true, onClick: () => {
+      const snapshot = props.build.snapshot();
+      props.build.deletePlace(p.id);
+      setEditingId(undefined);
+      say(`Deleted “${p.label || p.kind}”.`, snapshot);
+    } };
+    return {
+      anchor, title: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'),
+      rows: [[turn, ...size, del], arrows((dx, dy) => update({ x: p.x + dx, y: p.y + dy }), p.kind)],
+    };
+  }
+  const mapTools = !building ? undefined
+    : selecting && chosenAisles.length ? aisleTools(chosenAisles, chosenAisles.length === 1 ? (layout.aisles!.find((a) => a.id === chosenAisles[0])!.label || '1 aisle') : `${chosenAisles.length} aisles`, () => setSelectedAisles([]))
+      : tool === 'walk' && editingAisle ? aisleTools([editingAisle.id], editingAisle.label || 'aisle', () => setEditingAisleId(undefined))
+        : tool === 'walk' && editing ? placeTools(editing)
+          : undefined;
+
   const problems = useMemo(() => (building ? checkLayout(layout, floor, catalog.categories) : []), [building, layout, floor, catalog.categories]);
 
   // Walk tool: drag the selected shelf/area (or its resize handle), or the entrance/checkout markers.
@@ -302,12 +404,18 @@ export function ShoppingView(props: Props) {
   // Shelves probably walked past on the way to a shelf that was just made.
   const justMade = note?.kind === 'built' && note.action === 'create' ? findShelf(note.placeId) : undefined;
   const justPair = note?.kind === 'built' ? findShelf(note.pairId) : undefined;
+  // Suggested shelves never go on an aisle's walkway.
+  const clearOfAisles = (shelves: Shelf[]) => shelves.every((sh) => !(layout.aisles ?? []).some((a) => overlapsRect(a, footprint(sh))));
   const skipped = useMemo(
-    () => (building && justMade ? skippedShelves(layout, justPair ? [justMade, justPair] : [justMade], double) : []),
+    () => {
+      const found = building && justMade ? skippedShelves(layout, justPair ? [justMade, justPair] : [justMade], double) : [];
+      return clearOfAisles(found) ? found : [];
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [building, justMade, justPair, layout, double],
   );
   const nextOptions = building && !blocking && baseShelf && !skipped.length
-    ? ([-1, 1] as const).map((side) => ({ side, shelves: nextShelves(layout, baseShelf, side, double) })).filter((o) => o.shelves.length > 0)
+    ? ([-1, 1] as const).map((side) => ({ side, shelves: nextShelves(layout, baseShelf, side, double) })).filter((o) => o.shelves.length > 0 && clearOfAisles(o.shelves))
     : [];
 
   function stampShelves(shelves: Shelf[], filled: boolean) {
@@ -631,6 +739,7 @@ export function ShoppingView(props: Props) {
       {(items.length > 0 || building) && (
         <>
           {(building || layout.places.length > 0) && (
+          <div className="map-wrap">
           <StoreMap
             layout={layout}
             you={position}
@@ -643,13 +752,17 @@ export function ShoppingView(props: Props) {
             highlightId={here?.id}
             selectedId={editing?.id}
             selectedAisleId={editingAisle?.id}
+            selectedAisleIds={chosenAisles}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
-            onMapTap={blocking || cutting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+            onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
               if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
             } : undefined}
-            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : cutting ? {
+            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : selecting ? {
+              className: 'map drawing',
+              onPointerDown: selectDrag.down, onPointerMove: selectDrag.move, onPointerUp: finishSelect, onPointerCancel: finishSelect,
+            } : cutting ? {
               className: 'map drawing',
               onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => { setCutWidth(undefined); cutDrag.down(e); },
               onPointerMove: cutDrag.move, onPointerUp: cutDrag.up, onPointerCancel: cutDrag.up,
@@ -660,6 +773,9 @@ export function ShoppingView(props: Props) {
               onPointerCancel: endMapDrag,
             } : mapStrip ? { className: 'map strip tappable' } : undefined}
           >
+            {selecting && selectDrag.rect && (
+              <rect className="map-select-outline" x={selectDrag.rect.x} y={selectDrag.rect.y} width={selectDrag.rect.w} height={selectDrag.rect.h} />
+            )}
             {cutting && cutBox && (
               <rect className="map-cut-outline" x={cutBox.x} y={cutBox.y} width={cutBox.w} height={cutBox.h} />
             )}
@@ -678,6 +794,8 @@ export function ShoppingView(props: Props) {
               );
             })()}
           </StoreMap>
+          {building && mapTools && <MapTools svgRef={svgRef} {...mapTools} />}
+          </div>
           )}
           {building && (
             <BuildToolbar tool={tool} setTool={setTool} more={!!props.display.buildMoreTools}

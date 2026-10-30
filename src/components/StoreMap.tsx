@@ -37,6 +37,8 @@ interface Props {
   /** Tapping an aisle label (build mode); without it labels can't be tapped. */
   onAisleTap?: (id: string) => void;
   selectedAisleId?: string;
+  /** A group of selected aisles (the Select tool). */
+  selectedAisleIds?: string[];
   /** Zoom in on this rectangle (grid units). */
   focus?: Rect;
   /** Colours and icons for category sections. */
@@ -73,14 +75,16 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
   const box = focus ?? { x: 0, y: 0, w: layout.width, h: layout.height };
-  // A selected aisle shows its shelves selected too (they move and turn with it).
-  const selectedAisle = selectedAisleId ? layout.aisles?.find((a) => a.id === selectedAisleId) : undefined;
-  const aisleShelfIds = new Set(selectedAisle ? aisleShelves(layout, selectedAisle).map((sh) => sh.id) : []);
+  // Selected aisles show their shelves selected too (they move and turn with them).
+  const chosen = new Set([...(selectedAisleIds ?? []), ...(selectedAisleId ? [selectedAisleId] : [])]);
+  const selectedAisles = (layout.aisles ?? []).filter((a) => chosen.has(a.id));
+  const shelvesOf = new Map(selectedAisles.map((a) => [a.id, aisleShelves(layout, a)]));
+  const aisleShelfIds = new Set([...shelvesOf.values()].flat().map((sh) => sh.id));
   const viewBox = `${box.x - pad} ${box.y - pad} ${box.w + pad * 2} ${box.h + pad * 2}`;
   return (
     <svg
@@ -124,7 +128,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
         const cx = a.x + a.w / 2;
         const cy = a.y + a.h / 2;
         return (
-          <g key={a.id} className={`aisle-label${a.guess ? ' guess' : ''}${a.id === selectedAisleId ? ' selected' : ''}${onAisleTap ? ' tappable' : ''}`}
+          <g key={a.id} className={`aisle-label${a.guess ? ' guess' : ''}${chosen.has(a.id) ? ' selected' : ''}${onAisleTap ? ' tappable' : ''}`}
             onClick={onAisleTap ? () => onAisleTap(a.id) : undefined}>
             <rect className="aisle-area" x={a.x + 0.1} y={a.y + 0.1} width={a.w - 0.2} height={a.h - 0.2} rx={0.35} />
             <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={size}
@@ -133,15 +137,15 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
         );
       })}
 
-      {selectedAisle && (() => {
-        // One outline round the selected aisle and the shelves that go with it.
-        const parts = [selectedAisle, ...[...aisleShelfIds].map((id) => footprint(layout.places.find((p) => p.id === id)!))];
+      {selectedAisles.map((a) => {
+        // One outline round each selected aisle and the shelves that go with it.
+        const parts = [a, ...shelvesOf.get(a.id)!.map(footprint)];
         const x = Math.min(...parts.map((r) => r.x));
         const y = Math.min(...parts.map((r) => r.y));
         const w = Math.max(...parts.map((r) => r.x + r.w)) - x;
         const h = Math.max(...parts.map((r) => r.y + r.h)) - y;
-        return <rect className="aisle-group-outline" x={x - 0.2} y={y - 0.2} width={w + 0.4} height={h + 0.4} rx={0.5} />;
-      })()}
+        return <rect key={`sel-${a.id}`} className="aisle-group-outline" x={x - 0.2} y={y - 0.2} width={w + 0.4} height={h + 0.4} rx={0.5} />;
+      })}
 
       {ghosts.map((g, i) => {
         const r = g.rect;

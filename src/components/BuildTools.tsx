@@ -9,10 +9,11 @@ import { CategoryPicker } from './CategoryPicker';
 import type { Category, GeneratedMap } from '../core/types';
 
 /** What tapping or dragging on the map does in build mode. */
-export type BuildTool = 'walk' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'cut' | 'area' | 'entrance' | 'checkout';
+export type BuildTool = 'walk' | 'select' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'cut' | 'area' | 'entrance' | 'checkout';
 
 const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
   { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
+  { id: 'select', icon: '⬚', label: 'Select aisles', hint: 'Drag a box over aisles to select them, or tap an aisle to add it or take it out. Then turn, move or delete them together.' },
   { id: 'brush', icon: '🖌', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
   { id: 'shelf-v', icon: '▮↕', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
   { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
@@ -25,7 +26,7 @@ const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
 
 /** The build-mode tools under the map: one row of icons, with the chosen tool's name and a short hint. */
 /** The tools shown until "more" is opened: enough to lay out most stores. */
-const MAIN_TOOLS: BuildTool[] = ['walk', 'brush', 'block', 'area'];
+const MAIN_TOOLS: BuildTool[] = ['walk', 'select', 'brush', 'block', 'area'];
 
 export function BuildToolbar({ tool, setTool, more, setMore }: {
   tool: BuildTool;

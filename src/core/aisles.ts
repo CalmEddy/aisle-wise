@@ -84,7 +84,7 @@ export function clipAisles(l: StoreLayout): StoreLayout {
 }
 
 // ---------------------------------------------------------------------------
-// Moving and turning a whole aisle: its label and the shelves on both sides
+// Whole aisles (a label and the shelves on both sides), one or a group at a time
 
 /** The shelves along either side of an aisle's walkway. */
 export function aisleShelves(l: StoreLayout, a: AisleLabel): Shelf[] {
@@ -98,50 +98,74 @@ export function aisleShelves(l: StoreLayout, a: AisleLabel): Shelf[] {
 
 const shelfRect = (s: Shelf): Rect => (s.orientation === 'vertical' ? { x: s.x, y: s.y, w: 1, h: s.length } : { x: s.x, y: s.y, w: s.length, h: 1 });
 const placeRect = (p: StoreLayout['places'][number]): Rect => (p.kind === 'shelf' ? shelfRect(p) : { x: p.x, y: p.y, w: p.w, h: p.h });
+const inside = (l: StoreLayout, r: Rect) => r.x >= 0 && r.y >= 0 && r.x + r.w <= l.width && r.y + r.h <= l.height;
 
-/** Whether the aisle's new parts fit: inside the store, and clear of everything else. */
-function fits(l: StoreLayout, moving: Set<string>, rects: Rect[]): boolean {
-  const others = l.places.filter((p) => !moving.has(p.id)).map(placeRect);
-  return rects.every((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= l.width && r.y + r.h <= l.height && !others.some((o) => overlaps(o, r)));
+/**
+ * Whether new rectangles fit: inside the store, clear of every place not in
+ * `places`, and clear of every aisle label not in `aisles` (aisles never
+ * overlap each other).
+ */
+function fits(l: StoreLayout, places: Set<string>, aisles: Set<string>, rects: Rect[]): boolean {
+  const others = [
+    ...l.places.filter((p) => !places.has(p.id)).map(placeRect),
+    ...(l.aisles ?? []).filter((a) => !aisles.has(a.id)),
+  ];
+  return rects.every((r) => inside(l, r) && !others.some((o) => overlaps(o, r)));
 }
 
-/** Moves an aisle (label and both shelves) by dx, dy squares. Unchanged if there's no room. */
-export function moveAisle(l: StoreLayout, id: string, dx: number, dy: number): { layout: StoreLayout; ok: boolean } {
-  const a = (l.aisles ?? []).find((x) => x.id === id);
-  if (!a) return { layout: l, ok: false };
-  const shelves = aisleShelves(l, a);
-  const moving = new Set(shelves.map((s) => s.id));
+/** The aisles with these ids, and every shelf along them. */
+function group(l: StoreLayout, ids: string[]) {
+  const labels = (l.aisles ?? []).filter((a) => ids.includes(a.id));
+  const shelves = new Map<string, Shelf>();
+  for (const a of labels) for (const s of aisleShelves(l, a)) shelves.set(s.id, s);
+  return { labels, shelves: [...shelves.values()] };
+}
+
+/** The aisles whose walkways a box touches (for selecting a group by dragging). */
+export function aislesIn(l: StoreLayout, box: Rect): string[] {
+  return (l.aisles ?? []).filter((a) => overlaps(a, box)).map((a) => a.id);
+}
+
+/** Moves aisles (labels and shelves) by dx, dy squares. Unchanged if they'd hit something or leave the store. */
+export function moveAisles(l: StoreLayout, ids: string[], dx: number, dy: number): { layout: StoreLayout; ok: boolean } {
+  const { labels, shelves } = group(l, ids);
+  if (!labels.length) return { layout: l, ok: false };
+  const placeIds = new Set(shelves.map((s) => s.id));
+  const labelIds = new Set(labels.map((a) => a.id));
   const shift = <T extends Rect | Shelf>(r: T): T => ({ ...r, x: r.x + dx, y: r.y + dy });
-  if (!fits(l, moving, [shift(a), ...shelves.map((s) => shift(shelfRect(s)))])) return { layout: l, ok: false };
+  if (!fits(l, placeIds, labelIds, [...labels.map(shift), ...shelves.map((s) => shift(shelfRect(s)))])) return { layout: l, ok: false };
   return {
     layout: {
       ...l,
-      places: l.places.map((p) => (moving.has(p.id) ? shift(p as Shelf) : p)),
-      aisles: (l.aisles ?? []).map((x) => (x.id === id ? shift(x) : x)),
+      places: l.places.map((p) => (placeIds.has(p.id) ? shift(p as Shelf) : p)),
+      aisles: (l.aisles ?? []).map((x) => (labelIds.has(x.id) ? shift(x) : x)),
     },
     ok: true,
   };
 }
 
+export const moveAisle = (l: StoreLayout, id: string, dx: number, dy: number) => moveAisles(l, [id], dx, dy);
+
 /**
- * Turns an aisle a quarter turn about its middle (up-and-down ↔ side-to-side),
- * label and shelves together. Each shelf keeps its order (top becomes left,
- * left becomes top), so saved spots and categories stay where they were
- * along it; wall shelves keep their back away from the walkway.
+ * Turns aisles a quarter turn as one block about its middle (up-and-down ↔
+ * side-to-side): 5 aisles side by side become 5 aisles stacked. Each shelf
+ * keeps its order (top becomes left, left becomes top), so saved spots and
+ * categories stay where they were along it; wall shelves keep their backs
+ * away from the walkway. Unchanged if the turned block would hit something.
  */
-export function turnAisle(l: StoreLayout, id: string): { layout: StoreLayout; ok: boolean } {
-  const a = (l.aisles ?? []).find((x) => x.id === id);
-  if (!a) return { layout: l, ok: false };
-  const shelves = aisleShelves(l, a);
-  const parts: Rect[] = [a, ...shelves.map(shelfRect)];
-  const x0 = Math.min(...parts.map((r) => r.x));
-  const y0 = Math.min(...parts.map((r) => r.y));
-  const GW = Math.max(...parts.map((r) => r.x + r.w)) - x0;
-  const GH = Math.max(...parts.map((r) => r.y + r.h)) - y0;
-  // The turned group, centred where it was.
+export function turnAisles(l: StoreLayout, ids: string[]): { layout: StoreLayout; ok: boolean } {
+  const { labels, shelves } = group(l, ids);
+  if (!labels.length) return { layout: l, ok: false };
+  // Turn the way most of the group runs now.
+  const wasVertical = labels.filter((a) => a.h >= a.w).length * 2 >= labels.length;
+  const moving = [...labels, ...shelves.map(shelfRect)];
+  const x0 = Math.min(...moving.map((r) => r.x));
+  const y0 = Math.min(...moving.map((r) => r.y));
+  const GW = Math.max(...moving.map((r) => r.x + r.w)) - x0;
+  const GH = Math.max(...moving.map((r) => r.y + r.h)) - y0;
+  // The turned block, centred where it was.
   const nx0 = Math.round(x0 + GW / 2 - GH / 2);
   const ny0 = Math.round(y0 + GH / 2 - GW / 2);
-  const wasVertical = a.h >= a.w;
   const turn = (r: Rect): Rect => {
     const rx = r.x - x0;
     const ry = r.y - y0;
@@ -150,21 +174,87 @@ export function turnAisle(l: StoreLayout, id: string): { layout: StoreLayout; ok
       ? { x: nx0 + ry, y: ny0 + (GW - (rx + r.w)), w: r.h, h: r.w }
       : { x: nx0 + (GH - (ry + r.h)), y: ny0 + rx, w: r.h, h: r.w };
   };
-  const label = { ...a, ...turn(a) };
+  const turnedLabels = new Map(labels.map((a) => [a.id, { ...a, ...turn(a) }]));
   const turned = new Map(shelves.map((s) => {
     const r = turn(shelfRect(s));
+    const vertical = s.orientation === 'vertical';
     const next: Shelf = {
-      ...s, x: r.x, y: r.y, orientation: wasVertical ? 'horizontal' : 'vertical',
+      ...s, x: r.x, y: r.y, orientation: vertical ? 'horizontal' : 'vertical',
       ...(s.back !== undefined && { back: (-s.back) as -1 | 1 }),
     };
     return [s.id, next];
   }));
-  if (!fits(l, new Set(turned.keys()), [label, ...[...turned.values()].map(shelfRect)])) return { layout: l, ok: false };
+  const ok = fits(l, new Set(turned.keys()), new Set(turnedLabels.keys()), [...turnedLabels.values(), ...[...turned.values()].map(shelfRect)]);
+  if (!ok) return { layout: l, ok: false };
   return {
     layout: {
       ...l,
       places: l.places.map((p) => turned.get(p.id) ?? p),
-      aisles: (l.aisles ?? []).map((x) => (x.id === id ? label : x)),
+      aisles: (l.aisles ?? []).map((x) => turnedLabels.get(x.id) ?? x),
+    },
+    ok: true,
+  };
+}
+
+export const turnAisle = (l: StoreLayout, id: string) => turnAisles(l, [id]);
+
+/** Deletes aisles: their labels, and their shelves unless a remaining aisle also uses them. */
+export function deleteAisles(l: StoreLayout, ids: string[]): StoreLayout {
+  const { labels, shelves } = group(l, ids);
+  const labelIds = new Set(labels.map((a) => a.id));
+  const keep = (l.aisles ?? []).filter((a) => !labelIds.has(a.id));
+  const shared = new Set(keep.flatMap((a) => aisleShelves(l, a).map((s) => s.id)));
+  const gone = new Set(shelves.map((s) => s.id).filter((id) => !shared.has(id)));
+  return { ...l, places: l.places.filter((p) => !gone.has(p.id)), aisles: keep };
+}
+
+/**
+ * Moves or resizes one shelf, keeping the aisles it borders: moved away from
+ * its aisle, the walkway widens; moved into it, it narrows; slid along, the
+ * aisle runs the length of both sides. Refused (unchanged) if the shelf would
+ * land on another place or another aisle's walkway, close its own walkway,
+ * or leave the store.
+ */
+export function moveShelf(l: StoreLayout, id: string, patch: Partial<Shelf>): { layout: StoreLayout; ok: boolean } {
+  const s = l.places.find((p): p is Shelf => p.id === id && p.kind === 'shelf');
+  if (!s) return { layout: l, ok: false };
+  const next: Shelf = { ...s, ...patch };
+  const own = (l.aisles ?? []).filter((a) => aisleShelves(l, a).some((x) => x.id === id));
+  const ownIds = new Set(own.map((a) => a.id));
+  // The shelf itself: in the store, on open floor (its own walkways are fine).
+  if (!fits(l, new Set([id]), ownIds, [shelfRect(next)])) return { layout: l, ok: false };
+  const sameDirection = next.orientation === s.orientation;
+  const refit = new Map<string, AisleLabel>();
+  if (sameDirection) {
+    for (const a of own) {
+      const vertical = a.h >= a.w;
+      const sides = aisleShelves(l, a).map((x) => (x.id === id ? next : x));
+      const across = (r: Rect) => (vertical ? r.x : r.y);
+      // Which side each shelf was on before the move decides its side now.
+      const wasLow = (x: Shelf) => across(shelfRect(x.id === id ? s : x)) < across(a);
+      const lows = sides.filter(wasLow);
+      const highs = sides.filter((x) => !wasLow(x));
+      const from = lows.length ? Math.max(...lows.map((x) => across(shelfRect(x)) + 1)) : across(a);
+      const to = highs.length ? Math.min(...highs.map((x) => across(shelfRect(x)))) : across(a) + (vertical ? a.w : a.h);
+      if (to - from < 1) return { layout: l, ok: false };
+      const along = (r: Rect) => (vertical ? [r.y, r.y + r.h] : [r.x, r.x + r.w]);
+      const runs = sides.map((x) => along(shelfRect(x)));
+      const a0 = Math.min(...runs.map((r) => r[0]));
+      const a1 = Math.max(...runs.map((r) => r[1]));
+      refit.set(a.id, vertical ? { ...a, x: from, w: to - from, y: a0, h: a1 - a0 } : { ...a, y: from, h: to - from, x: a0, w: a1 - a0 });
+    }
+  }
+  // Refitted walkways mustn't run into other places or aisles.
+  for (const a of refit.values()) {
+    const mine = new Set(aisleShelves(l, own.find((o) => o.id === a.id)!).map((x) => x.id));
+    mine.add(id);
+    if (!fits(l, mine, ownIds, [a])) return { layout: l, ok: false };
+  }
+  return {
+    layout: {
+      ...l,
+      places: l.places.map((p) => (p.id === id ? next : p)),
+      aisles: (l.aisles ?? []).map((a) => refit.get(a.id) ?? a),
     },
     ok: true,
   };
