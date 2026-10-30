@@ -25,8 +25,8 @@ export const cutsVertical = (box: Rect) => box.w >= box.h;
 interface Piece { id: string; start: number; len: number }
 
 /** What a cut would do: the shelves it crosses (or removes), the squares taken out, and the aisle labels it crosses. */
-export function cutPreview(l: StoreLayout, box: Rect) {
-  const vertical = cutsVertical(box);
+export function cutPreview(l: StoreLayout, box: Rect, which: 'auto' | 'vertical' | 'horizontal' = 'auto') {
+  const vertical = which === 'auto' ? cutsVertical(box) : which === 'vertical';
   const shelves = l.places.filter((p): p is Shelf => p.kind === 'shelf' && (p.orientation === 'vertical') === vertical && overlaps(footprint(p), box));
   const removed = shelves.map((s) => {
     const f = footprint(s);
@@ -49,8 +49,8 @@ function highestAisle(l: StoreLayout): number {
 }
 
 /** Cuts the shelves under `box`. Returns the new store and master list (saved spots moved to the right half). */
-export function cutAisles(l: StoreLayout, products: Product[], box: Rect, numbers: CutNumbers): { layout: StoreLayout; products: Product[]; cut: number; renamed: string[] } {
-  const { vertical, shelves, aisles: crossed } = cutPreview(l, box);
+export function cutAisles(l: StoreLayout, products: Product[], box: Rect, numbers: CutNumbers, which: 'auto' | 'vertical' | 'horizontal' = 'auto'): { layout: StoreLayout; products: Product[]; cut: number; renamed: string[] } {
+  const { vertical, shelves, aisles: crossed } = cutPreview(l, box, which);
   if (!shelves.length) return { layout: l, products, cut: 0, renamed: [] };
   const b0 = vertical ? box.y : box.x;
   const b1 = b0 + (vertical ? box.h : box.w);
@@ -198,4 +198,20 @@ export function renumberAisles(l: StoreLayout): StoreLayout {
   });
   const names = new Map(order.map((a, i) => [a.id, /^\s*aisle/i.test(a.label) ? `Aisle ${i + 1}` : String(i + 1)]));
   return { ...l, aisles: (l.aisles ?? []).map((a) => (names.has(a.id) ? { ...a, label: names.get(a.id)! } : a)) };
+}
+
+/**
+ * Clears the shelves under an area (a display or promo space put down over
+ * them): every shelf it covers, whichever way it runs, is split around it.
+ * Aisle labels are left as they are (the aisles carry on past it).
+ */
+export function cutUnder(l: StoreLayout, products: Product[], area: Rect): { layout: StoreLayout; products: Product[]; cut: number } {
+  const a = cutAisles(l, products, area, 'same', 'vertical');
+  const b = cutAisles(a.layout, a.products, area, 'same', 'horizontal');
+  return { layout: b.layout, products: b.products, cut: a.cut + b.cut };
+}
+
+/** Shelves an area covers (to offer cutting them). */
+export function shelvesUnder(l: StoreLayout, area: Rect): number {
+  return cutPreview(l, area, 'vertical').shelves.length + cutPreview(l, area, 'horizontal').shelves.length;
 }

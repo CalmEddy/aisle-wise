@@ -1,7 +1,7 @@
-import { aisleNumber, DEPTS, findAisle, guessDept, sectionNumber } from './clues';
+import { acrossRect, aisleNumber, DEPTS, findAisle, guessDept, sectionNumber } from './clues';
 import { formatLabel, shelfOffsets, type LabelStyle } from './labels';
 import { footprint } from './geometry';
-import type { AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -66,6 +66,8 @@ export interface IslandModel {
   near: OpenNear;
   /** Next to this aisle (its label), instead of `near`. */
   aisle?: string;
+  /** In the middle of a block, across these aisles or sections: the shelves there make way. */
+  across?: Across;
   fixture?: Fixture;
   temp?: Temp;
   categories: string[];
@@ -170,9 +172,11 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
       case 'open': {
         if (c.aisle) aisle(c.aisle);
         const near = c.near ?? 'middle';
-        const key = `${c.aisle ? `a${c.aisle.trim().toUpperCase()}` : near}-${c.fixture ?? 'any'}-${c.temp ?? 'room'}`;
+        const across = c.across && { from: c.across.from.trim().toUpperCase(), to: c.across.to.trim().toUpperCase(), ...(c.across.part && { part: c.across.part }) };
+        const where = across ? `x${across.from}-${across.to}-${across.part ?? 'middle'}` : c.aisle ? `a${c.aisle.trim().toUpperCase()}` : near;
+        const key = `${where}-${c.fixture ?? 'any'}-${c.temp ?? 'room'}`;
         let isl = islands.get(key);
-        if (!isl) islands.set(key, (isl = { key, near, ...(c.aisle && { aisle: c.aisle.trim().toUpperCase() }), ...(c.fixture && { fixture: c.fixture }), ...(c.temp && { temp: c.temp }), categories: [] }));
+        if (!isl) islands.set(key, (isl = { key, near, ...(c.aisle && { aisle: c.aisle.trim().toUpperCase() }), ...(across && { across }), ...(c.fixture && { fixture: c.fixture }), ...(c.temp && { temp: c.temp }), categories: [] }));
         addCat(isl.categories, p.categoryId);
         break;
       }
@@ -297,7 +301,7 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   // Down: back wall shelf (y 1), a 3-square cross aisle, the aisles, the front cross aisle, things in the open, checkout.
   const yShelf = 5;
   const H = Math.max(bh, L); // how deep the aisles and sections run
-  const band = model.islands.length ? 4 : 0;
+  const band = model.islands.some((i) => !i.across) ? 4 : 0;
   const front = yShelf + H + 3 + band;
   const height = front + 4;
   const places: Place[] = [];
@@ -374,6 +378,25 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
       });
     }
   }
+  // Things out in the middle of a block (across aisles 3–5, front): the shelves there make way.
+  for (const isl of model.islands.filter((i) => i.across)) {
+    const r = acrossRect({ places } as StoreLayout, isl.across!);
+    if (!r) continue;
+    for (let i = places.length - 1; i >= 0; i--) {
+      const sh = places[i];
+      if (sh.kind !== 'shelf' || !overlaps(footprint(sh), r)) continue;
+      const v = sh.orientation === 'vertical';
+      const start = v ? sh.y : sh.x;
+      const end = start + sh.length;
+      const cut0 = v ? r.y : r.x;
+      const cut1 = cut0 + (v ? r.h : r.w);
+      const pieces = [{ from: start, to: Math.min(end, cut0) }, { from: Math.max(start, cut1), to: end }].filter((q) => q.to > q.from);
+      places.splice(i, 1, ...pieces.map((q, k) => ({
+        ...sh, id: k === 0 ? sh.id : `${sh.id}~2`, length: q.to - q.from, ...(v ? { y: q.from } : { x: q.from }),
+      })));
+    }
+    places.push({ kind: 'area', id: `g-open-${isl.key}`, label: islandLabel(isl), ...r, categories: [...isl.categories], ...(isl.temp && { temp: isl.temp }) });
+  }
   const backRun = { from: xLeftWall, len: xRightWall - xLeftWall + 1 };
   const produceFar = arrangement.produce === 'far';
   const back = BACK_WALL.filter((d) => model.depts.includes(d));
@@ -445,11 +468,11 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
 
   // Out in the open: tables, cases and stands in a band between the aisles and the checkouts.
   const mid = Math.floor(width / 2);
-  if (model.islands.length) {
+  if (model.islands.some((i) => !i.across)) {
     const yIsland = yShelf + H + 3;
     const taken: Rect[] = [];
     const walkX = (label: string) => aisles.find((x) => x.id === `g-aisle-${label}`)?.x;
-    for (const isl of model.islands) {
+    for (const isl of model.islands.filter((i) => !i.across)) {
       // Where it goes (the door is in the middle of the front), then either side of that until there's room.
       let x: number;
       const pl = placements[`isl:${isl.key}`];
@@ -466,13 +489,8 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
         r = { ...r, x: x + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 4 };
       }
       taken.push(r);
-      const what = isl.fixture === 'table' ? 'table' : isl.fixture === 'stand' ? 'stand' : isl.fixture === 'case' ? 'case' : undefined;
-      const depts = [...new Set(isl.categories.map(guessDept))];
-      const dept = depts.length === 1 && depts[0] ? deptInfo(depts[0]).name : undefined;
-      const cold = isl.temp === 'frozen' ? 'Freezer' : isl.temp === 'chilled' ? 'Fridge' : undefined;
-      const label = [cold ?? dept, what ?? (dept || cold ? undefined : 'Display')].filter(Boolean).join(' ') || 'Display';
       places.push({
-        kind: 'area', id: `g-open-${isl.key}`, label: label[0].toUpperCase() + label.slice(1), ...r,
+        kind: 'area', id: `g-open-${isl.key}`, label: islandLabel(isl), ...r,
         categories: [...isl.categories], ...(isl.temp && { temp: isl.temp }),
       });
     }
@@ -641,4 +659,14 @@ export function arrangeBlocks(items: BlockItem[], placements: Record<string, Pla
   const minX = Math.min(0, ...out.map((o) => o.rect.x));
   const minY = Math.min(0, ...out.map((o) => o.rect.y));
   return out.map((o) => ({ ...o, rect: { ...o.rect, x: o.rect.x - minX, y: o.rect.y - minY } }));
+}
+
+/** What a table, case or stand is called on the map ("Produce table", "Freezer case"). */
+function islandLabel(isl: IslandModel): string {
+  const what = isl.fixture === 'table' ? 'table' : isl.fixture === 'stand' ? 'stand' : isl.fixture === 'case' ? 'case' : undefined;
+  const depts = [...new Set(isl.categories.map(guessDept))];
+  const dept = depts.length === 1 && depts[0] ? deptInfo(depts[0]).name : undefined;
+  const cold = isl.temp === 'frozen' ? 'Freezer' : isl.temp === 'chilled' ? 'Fridge' : undefined;
+  const label = [cold ?? dept, what ?? (dept || cold ? undefined : 'Display')].filter(Boolean).join(' ') || 'Display';
+  return label[0].toUpperCase() + label.slice(1);
 }

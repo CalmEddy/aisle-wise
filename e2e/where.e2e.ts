@@ -274,3 +274,27 @@ test('a store that labels shelves like B12: set up by example, one-tap next shel
   const products = await saved<any[]>(page, 'products');
   expect(Object.values(products.find((x) => x.name === 'Oats').clues)[0]).toEqual({ kind: 'shelf', code: 'B13', section: 'B', shelf: 13 });
 });
+
+test('a stand across aisles 2–3 at the front: the map puts it there and the shelves make way', async ({ page }) => {
+  await addItems(page, 'Cereal, Promo crisps');
+  const bar = page.locator('.where-bar');
+  await tick(page, 'Cereal');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: '4', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  await tick(page, 'Promo crisps');
+  await bar.getByRole('button', { name: 'Other…' }).click();
+  await page.getByRole('tab', { name: 'Open' }).click();
+  await page.getByRole('button', { name: 'Stand / display' }).click();
+  await page.getByRole('button', { name: 'Across aisles…' }).click();
+  await page.getByLabel('From aisle or section').fill('2');
+  await page.getByLabel('To aisle or section').fill('3');
+  await page.getByRole('button', { name: 'Front', exact: true }).click();
+  await page.getByRole('button', { name: /^Save · Stand across aisles 2–3 \(front\)/ }).click();
+  await expect.poll(async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places.some((p: any) => p.id.startsWith('g-open-x2-3'))).toBe(true);
+  const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  const len = (id: string) => l.places.find((p: any) => p.id === id).length;
+  expect(len('g-shelf-2-L')).toBeLessThan(14);
+  expect(len('g-shelf-4-L')).toBe(14);
+  await expect(page.getByRole('group', { name: /Where’s/ })).toHaveCount(0); // nothing to place: it's where it was said
+});

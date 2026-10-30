@@ -1,5 +1,5 @@
 import { exactKey, exactSpotAt, footprint } from './geometry';
-import type { AisleLabel, AislePos, AisleSide, Clue, Dept, OpenNear, Place, Point, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { Across, AisleLabel, AislePos, AisleSide, Clue, Dept, OpenNear, Place, Point, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Plain-language item locations ("aisle 7, left, middle", "Produce"): what
@@ -56,7 +56,7 @@ export function describeClue(c: Clue): string {
     }
     case 'open': {
       const what = c.fixture ? FIXTURE_WORD[c.fixture] : 'Out in the open';
-      const where = c.aisle ? `by aisle ${c.aisle}` : c.near ? NEAR_WORD[c.near] : '';
+      const where = c.across ? `across ${acrossWords(c.across)}` : c.aisle ? `by aisle ${c.aisle}` : c.near ? NEAR_WORD[c.near] : '';
       const head = [what, where].filter(Boolean).join(' ');
       return c.temp ? `${cold(c.temp)}${head[0].toLowerCase()}${head.slice(1)}` : head;
     }
@@ -78,6 +78,17 @@ const FRONT: Partial<Record<Dept, number>> = { produce: 0, floral: 1, bakery: 2,
 const BACK: Partial<Record<Dept, number>> = { meat: 9000, seafood: 9001, dairy: 9002, frozen: 9003, pharmacy: 9500 };
 const deptRank = (d: Dept) => FRONT[d] ?? BACK[d] ?? 9400;
 const POS_RANK: Record<AislePos, number> = { front: 2, middle: 4, back: 6 };
+/** "aisles 3–5 (front)", "sections D–E", "aisle 4". */
+export function acrossWords(a: Across): string {
+  const sections = /[A-Z]/i.test(a.from);
+  const what = a.from === a.to ? `${sections ? 'section' : 'aisle'} ${a.from}` : `${sections ? 'sections' : 'aisles'} ${a.from}–${a.to}`;
+  return a.part ? `${what} (${a.part})` : what;
+}
+function acrossRank(a: Across): number {
+  const n = /[A-Z]/i.test(a.from) ? sectionNumber(a.from.toUpperCase()) : aisleNumber(a.from);
+  return Number.isNaN(n) ? 8500 : 100 + n * 10 + (a.part === 'front' ? 2 : a.part === 'back' ? 6 : 4);
+}
+
 /** A section's place in order: A=1, B=2…, or its number. */
 export function sectionNumber(section: string): number {
   const first = section.split('-')[0];
@@ -104,7 +115,7 @@ export function clueRank(c: Clue): number {
     case 'shelf': return 100 + sectionNumber(c.section) * 10 + Math.min(c.shelf ?? 0, 99) / 10;
     // Walls: after the aisles, round from the left wall's front to the right wall's front.
     case 'wall': return 9100 + WALL_ORDER[c.wall] * 10 + partRank(c.wall, c.part);
-    case 'open': return c.aisle ? aisle(c.aisle, 0) : c.near === 'entrance' ? 5 : c.near === 'far' ? 8700 : 4900;
+    case 'open': return c.across ? acrossRank(c.across) : c.aisle ? aisle(c.aisle, 0) : c.near === 'entrance' ? 5 : c.near === 'far' ? 8700 : 4900;
     case 'display': return c.aisle ? aisle(c.aisle, 4) : c.dept ? deptRank(c.dept) + 0.5 : 8900;
     case 'dept': return deptRank(c.dept);
     case 'checkout': return 9999;
@@ -196,7 +207,7 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
     case 'endcap': return inAisle(c.aisle, undefined, c.end === 'front' ? 0.02 : 0.98);
     case 'wall': return onWall(l, c.wall, c.part, c.temp);
     case 'shelf': return labelledShelf(l, c.code, c.section, c.shelf);
-    case 'open': return c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
+    case 'open': return c.across ? inAcross(l, c.across, c.temp) : c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
     case 'display': return c.aisle ? inAisle(c.aisle, undefined, 0.5) : c.dept ? findDept(l, c.dept, product?.categoryId) : undefined;
     case 'dept': return findDept(l, c.dept, product?.categoryId);
     case 'checkout': return l.places.find((p) => /checkout/i.test(p.label))?.id;
@@ -301,6 +312,43 @@ function labelledShelf(l: StoreLayout, code: string, section: string, shelf?: nu
     .filter((x) => x.m && x.m[1] === sec)
     .sort((a, b) => Math.abs(Number(a.m![2]) - shelf) - Math.abs(Number(b.m![2]) - shelf));
   return same[0] ? centre(same[0].p) : undefined;
+}
+
+/**
+ * Where an "across aisles 3–5" area is on the map: the shelves of those
+ * aisles (or sections), at the part said (front = the end nearer the
+ * front of the store). Undefined if the map has none of them yet.
+ */
+export function acrossRect(l: StoreLayout, a: Across): Rect | undefined {
+  const sections = /[A-Z]/i.test(a.from);
+  const lo = sections ? sectionNumber(a.from.toUpperCase()) : aisleNumber(a.from);
+  const hi = sections ? sectionNumber(a.to.toUpperCase()) : aisleNumber(a.to);
+  const shelves = l.places.filter((p): p is Shelf => {
+    if (p.kind !== 'shelf') return false;
+    const m = sections ? /^g-sec-(.+)-\d+$/.exec(p.id) : /^g-shelf-(.+)-[LR]$/.exec(p.id);
+    if (!m) return false;
+    const n = sections ? sectionNumber(m[1]) : aisleNumber(m[1]);
+    return n >= Math.min(lo, hi) && n <= Math.max(lo, hi);
+  });
+  if (!shelves.length) return undefined;
+  const rs = shelves.map(footprint);
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  const w = Math.max(...rs.map((r) => r.x + r.w)) - x;
+  const h = Math.max(...rs.map((r) => r.y + r.h)) - y;
+  const upright = shelves.filter((s) => s.orientation === 'vertical').length * 2 >= shelves.length;
+  // A third of the way along the shelves (at least 3 squares), at the part said.
+  const run = upright ? h : w;
+  const len = Math.max(3, Math.round(run / 3));
+  const at = a.part === 'back' ? 0 : a.part === 'front' ? run - len : Math.round((run - len) / 2);
+  return upright ? { x, y: y + at, w, h: len } : { x: x + (run - len - at), y, w: len, h };
+}
+
+function inAcross(l: StoreLayout, a: Across, t?: Temp): string | undefined {
+  const r = acrossRect(l, a);
+  if (!r) return undefined;
+  const target = { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+  return nearest(target, l.places.filter((p) => p.kind === 'area'), t);
 }
 
 /** Aisle numbers used in this store's clues, most used first (for quick picks). */

@@ -55,3 +55,30 @@ describe('blocks of shelving that run different ways', () => {
     expect(y(2) - y(3)).toBe(3); // a walkway between pairs
   });
 });
+
+describe('areas that cut through shelves', () => {
+  const promo: Product = { id: 'promo', name: 'Promo', categoryId: 'snacks', clues: { s: { kind: 'open', fixture: 'stand', across: { from: '2', to: '4', part: 'front' } } } };
+  it('puts the area across those aisles at the front, and the shelves there make way', async () => {
+    const { describeClue, resolveClue } = await import('./clues');
+    const all = [...products, promo];
+    const l = regenerate(blank, buildModel(all, 's'));
+    const area = l.places.find((p) => p.id.startsWith('g-open-x2-4'))!;
+    expect(area).toMatchObject({ kind: 'area', label: 'Stand' });
+    const a2 = l.aisles!.find((x) => x.id === 'g-aisle-2')!;
+    // At the front (bottom) end of the aisles, a third of their length.
+    expect(area.y + (area as any).h).toBe(a2.y + a2.h);
+    // Aisles 2–4's shelves are split round it; aisle 1's and 5's aren't.
+    const len = (n: number) => (l.places.find((p) => p.id === `g-shelf-${n}-L`) as Shelf).length;
+    expect(len(1)).toBe(14);
+    expect(len(3)).toBeLessThan(14);
+    expect(len(5)).toBe(14);
+    for (const p of l.places) if (p.kind === 'shelf' && p.id.startsWith('g-shelf-3')) expect(p.y + p.length).toBeLessThanOrEqual(area.y);
+    expect(describeClue(promo.clues!.s)).toBe('Stand across aisles 2–4 (front)');
+    expect(resolveClue(promo.clues!.s, l)?.split('@')[0]).toBe(area.id);
+    // Rebuilding changes nothing.
+    const again = regenerate(l, buildModel(all, 's'));
+    expect(again.places.map((p) => [p.id, p.x, p.y].join())).toEqual(l.places.map((p) => [p.id, p.x, p.y].join()));
+    const floor = new Floor(l);
+    expect(floor.reachable(l.entrance, { x: area.x, y: area.y })).toBe(true);
+  });
+});

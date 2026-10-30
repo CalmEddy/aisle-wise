@@ -102,3 +102,23 @@ describe('cutting aisles with a cross aisle', () => {
     expect(where.kind === 'spot' && where.spot.placeId).toMatch(/^cut-/);
   });
 });
+
+describe('an area put down over shelves', () => {
+  it('splits every shelf under it, whichever way it runs', async () => {
+    const { cutUnder, shelvesUnder } = await import('./cut');
+    const l: StoreLayout = {
+      ...store,
+      places: [...store.places, { kind: 'shelf', id: 'h', label: 'h', orientation: 'horizontal', x: 1, y: 24, length: 14, categories: [] }],
+      height: 30,
+    };
+    const area = { x: 4, y: 8, w: 5, h: 3 }; // over s2 (x 5) and s3 (x 8)
+    expect(shelvesUnder(l, area)).toBe(2);
+    const r = cutUnder(l, [], area);
+    expect(r.cut).toBe(2);
+    const s2 = r.layout.places.filter((p) => p.x === 5) as Shelf[];
+    expect(s2.map((p) => [p.y, p.length]).sort((a, b) => a[0] - b[0])).toEqual([[2, 6], [11, 11]]);
+    // A side-to-side shelf under a tall area is cut too.
+    const r2 = cutUnder(l, [], { x: 6, y: 23, w: 2, h: 3 });
+    expect(r2.layout.places.filter((p) => p.y === 24).map((p) => [p.x, (p as Shelf).length]).sort((a, b) => a[0] - b[0])).toEqual([[1, 5], [8, 7]]);
+  });
+});

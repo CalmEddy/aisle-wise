@@ -205,7 +205,7 @@ export type Clue =
   /** Along a wall, as you face into the store from the entrance. */
   | { kind: 'wall'; wall: Wall; part?: WallPart; temp?: Temp }
   /** Out in the open: a table, case or stand on the floor, not against a wall or in an aisle. */
-  | { kind: 'open'; near?: OpenNear; aisle?: string; fixture?: Fixture; temp?: Temp }
+  | { kind: 'open'; near?: OpenNear; aisle?: string; fixture?: Fixture; temp?: Temp; across?: Across }
   /** A labelled shelf in a store that labels shelves, not aisles ("B12": section B, shelf 12). */
   | { kind: 'shelf'; code: string; section: string; shelf?: number; temp?: Temp }
   /** Older answers: a freezer case in an aisle, or along a wall (no aisle). */
@@ -223,6 +223,8 @@ export type WallPart = 'front' | 'middle' | 'back' | 'left' | 'right';
 /** Where out in the open. */
 export type OpenNear = 'entrance' | 'middle' | 'far';
 export type Fixture = 'table' | 'case' | 'stand';
+/** Out in the middle of a block, across aisles (or sections) `from`–`to`, at its front, middle or back: the shelves there make way. */
+export interface Across { from: string; to: string; part?: AislePos }
 
 /** A spot where items are picked up. */
 export interface Spot {

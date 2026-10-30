@@ -132,7 +132,15 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
     </div>
   );
   const wallClue: Clue | undefined = wall ? { kind: 'wall', wall, ...(part && { part }), ...withTemp } : undefined;
-  const openClue: Clue = { kind: 'open', ...(near && !aisle.trim() && { near }), ...(aisle.trim() && { aisle: aisle.trim() }), ...(fixture && { fixture }), ...withTemp };
+  // "Across aisles 3–5, front": out in the middle of a block, where the shelves make way.
+  const [acrossOn, setAcrossOn] = useState(current?.kind === 'open' && !!current.across);
+  const [from, setFrom] = useState(current?.kind === 'open' && current.across ? current.across.from : recentAisles[0] ?? '');
+  const [to, setTo] = useState(current?.kind === 'open' && current.across ? current.across.to : recentAisles[0] ?? '');
+  const [acrossPart, setAcrossPart] = useState<AislePos | undefined>(current?.kind === 'open' && current.across ? current.across.part : 'middle');
+  const acrossOk = acrossOn && from.trim() && (to.trim() || from.trim());
+  const openClue: Clue = acrossOn
+    ? { kind: 'open', across: { from: from.trim().toUpperCase(), to: (to.trim() || from.trim()).toUpperCase(), ...(acrossPart && { part: acrossPart }) }, ...(fixture && { fixture }), ...withTemp }
+    : { kind: 'open', ...(near && !aisle.trim() && { near }), ...(aisle.trim() && { aisle: aisle.trim() }), ...(fixture && { fixture }), ...withTemp };
 
   return (
     <div className="sheet-backdrop" onClick={onLater ?? onSkip}>
@@ -187,10 +195,23 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
           {tab === 'open' && (
             <>
               {choice<Fixture>('What', [['table', 'Table'], ['case', 'Case'], ['stand', 'Stand / display']], fixture, setFixture)}
-              {choice<OpenNear>('Where', (['entrance', 'middle', 'far'] as const).map((n) => [n, NEAR_WORD[n][0].toUpperCase() + NEAR_WORD[n].slice(1)] as [OpenNear, string]), aisle.trim() ? undefined : near, (n) => { setNear(n); setAisle(''); })}
-              {aislePicker(true)}
+              {choice<OpenNear | 'across'>('Where', [...(['entrance', 'middle', 'far'] as const).map((n) => [n, NEAR_WORD[n][0].toUpperCase() + NEAR_WORD[n].slice(1)] as [OpenNear, string]), ['across', 'Across aisles…']],
+                acrossOn ? 'across' : aisle.trim() ? undefined : near,
+                (n) => { if (n === 'across') { setAcrossOn(true); setAisle(''); } else { setAcrossOn(false); setNear(n); setAisle(''); } })}
+              {acrossOn ? (
+                <>
+                  <div className="where-row">
+                    <span className="where-label">Across</span>
+                    <input className="where-num" value={from} onChange={(e) => setFrom(e.target.value.slice(0, 6))} placeholder="#" aria-label="From aisle or section" />
+                    <span className="muted">to</span>
+                    <input className="where-num" value={to} onChange={(e) => setTo(e.target.value.slice(0, 6))} placeholder="#" aria-label="To aisle or section" />
+                  </div>
+                  {choice<AislePos>('Part', [['front', 'Front'], ['middle', 'Middle'], ['back', 'Back']], acrossPart, setAcrossPart)}
+                  <p className="muted small where-note">Aisle numbers, or section letters. The shelves there make way for it on the map.</p>
+                </>
+              ) : aislePicker(true)}
               {tempRow}
-              <button className="btn primary wide" onClick={() => onSave(openClue)}>Save · {describeClue(openClue)}</button>
+              <button className="btn primary wide" disabled={acrossOn && !acrossOk} onClick={() => onSave(openClue)}>Save · {describeClue(openClue)}</button>
             </>
           )}
           {tab === 'dept' && deptChips((dept) => onSave({ kind: 'dept', dept }), guess)}

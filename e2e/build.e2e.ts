@@ -257,3 +257,22 @@ test('make some aisles their own block: side to side, placed on the mini-map, jo
   await expect.poll(async () => { const x = await layout(page); return a(x, 4).h - a(x, 4).w; }).toBeGreaterThan(0);
   ok();
 });
+
+test('an area put down over shelves can cut them', async ({ page }) => {
+  await fresh(page, threeAisles());
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await page.getByRole('button', { name: 'Open area' }).click();
+  await tapMap(page, 15, 10); // a 6 × 4 area over the middle of the aisles
+  const l0 = await layout(page);
+  const area = l0.places.find((p: any) => p.kind === 'area');
+  const bar = page.getByRole('toolbar', { name: `Change ${area.label}` });
+  await bar.getByRole('button', { name: 'Cut the shelves under it' }).click();
+  await expect(page.locator('.toast')).toContainText('Cut');
+  const l = await layout(page);
+  const r = { x: area.x, y: area.y, w: area.w, h: area.h };
+  const overlaps = (p: any) => p.x < r.x + r.w && r.x < p.x + 1 && p.y < r.y + r.h && r.y < p.y + p.length;
+  expect(l.places.filter((p: any) => p.kind === 'shelf' && overlaps(p))).toEqual([]);
+  expect(l.places.filter((p: any) => p.kind === 'shelf').length).toBeGreaterThan(6);
+  await page.locator('.build-top').getByRole('button', { name: 'Undo' }).click();
+  expect((await layout(page)).places.filter((p: any) => p.kind === 'shelf')).toHaveLength(6);
+});

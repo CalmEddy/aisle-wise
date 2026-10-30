@@ -101,7 +101,7 @@ export function pendingPlacements(layout: StoreLayout, products: Product[], mode
   for (const isl of model.islands) {
     const ref = `isl:${isl.key}`;
     const id = `g-open-${isl.key}`;
-    if (isl.aisle || done.has(ref) || locked.has(id) || !onMap.has(id)) continue;
+    if (isl.aisle || isl.across || done.has(ref) || locked.has(id) || !onMap.has(id)) continue;
     out.push({ ref, name: layout.places.find((p) => p.id === id)!.label, placeId: id });
   }
   return out;

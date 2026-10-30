@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { cutPreview, cutsVertical, type CutNumbers } from '../core/cut';
+import { cutPreview, cutsVertical, shelvesUnder, type CutNumbers } from '../core/cut';
 import { CutPanel } from './CutPanel';
 import { useBlockDrag } from './ShelfBlock';
 import type { Usual } from '../core/trips';
@@ -136,6 +136,7 @@ export interface BuildApi {
     turn: (ids: string | string[]) => Snapshot | undefined;
     deleteMany: (ids: string[]) => Snapshot;
     makeBlock: (ids: string[]) => Snapshot | undefined;
+    cutUnder: (areaId: string) => { snapshot: Snapshot; cut: number };
     within: (box: Rect) => string[];
     cut: (box: Rect, numbers: CutNumbers) => { snapshot: Snapshot; cut: number; renamed: string[] };
   };
@@ -322,6 +323,12 @@ export function ShoppingView(props: Props) {
           { key: 'shallower', icon: '⤒', label: 'Less deep', disabled: p.h <= 1, onClick: () => { update({ h: p.h - 1 } as Partial<Place>); } },
           { key: 'deeper', icon: '⤓', label: 'Deeper', onClick: () => { update({ h: p.h + 1 } as Partial<Place>); } },
         ];
+    // An area over shelves (a display or promo space): offer clearing the shelves under it.
+    const under = p.kind === 'area' ? shelvesUnder(layout, footprint(p)) : 0;
+    const cutBtn: MapAction[] = under ? [{ key: 'cut-under', icon: '✂', label: 'Cut the shelves under it', onClick: () => {
+      const r = props.build.aisles.cutUnder(p.id);
+      say(`Cut ${r.cut} shel${r.cut === 1 ? 'f' : 'ves'} under “${p.label || 'the area'}”.`, r.snapshot);
+    } }] : [];
     const del: MapAction = { key: 'delete', icon: '🗑', label: `Delete ${p.kind}`, danger: true, onClick: () => {
       const snapshot = props.build.snapshot();
       props.build.deletePlace(p.id);
@@ -330,7 +337,7 @@ export function ShoppingView(props: Props) {
     } };
     return {
       anchor, title: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'),
-      rows: [[turn, ...size, del], arrows((dx, dy) => update({ x: p.x + dx, y: p.y + dy }), p.kind)],
+      rows: [[turn, ...size, ...cutBtn, del], arrows((dx, dy) => update({ x: p.x + dx, y: p.y + dy }), p.kind)],
     };
   }
   const mapTools = !building ? undefined

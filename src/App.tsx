@@ -18,7 +18,7 @@ import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle, aislesIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
-import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
+import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut';
 import { parseLabel, type LabelStyle } from './core/labels';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
 import { aisleNumber, DEPTS } from './core/clues';
@@ -633,6 +633,15 @@ export default function App() {
       const snapshot = snapshotNow();
       replaceLayout(renumberAisles(layout));
       return snapshot;
+    },
+    /** Clears the shelves under an area (splitting them round it). */
+    cutUnder(areaId: string): { snapshot: Snapshot; cut: number } {
+      const snapshot = snapshotNow();
+      const area = layout.places.find((p) => p.id === areaId);
+      if (!area || area.kind !== 'area') return { snapshot, cut: 0 };
+      const r = cutUnder(layout, products, { x: area.x, y: area.y, w: area.w, h: area.h });
+      if (r.cut) { replaceLayout(r.layout); setProducts(() => r.products); }
+      return { snapshot, cut: r.cut };
     },
     /** Cuts a cross aisle through the shelves under `box`. */
     cut(box: Rect, numbers: CutNumbers): { snapshot: Snapshot; cut: number; renamed: string[] } {
