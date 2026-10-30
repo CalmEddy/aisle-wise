@@ -934,3 +934,4 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .pairing-option.active .pic-shelf { fill: var(--accent); }
 .pic-num { font-weight: 800; fill: var(--text); }
 .pairing-option.active .pic-num:not(.under) { fill: #fff; }
+.placement-dir { margin-bottom: 6px; }

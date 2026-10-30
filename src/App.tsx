@@ -21,7 +21,7 @@ import { parseAmount } from './core/items';
 import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
 import { parseLabel, type LabelStyle } from './core/labels';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
-import { DEPTS } from './core/clues';
+import { aisleNumber, DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
 import {
@@ -442,6 +442,15 @@ export default function App() {
     }
     return snapshot;
   }
+  /** The blocks of shelving on this store's generated map, and which way each runs (for Store settings). */
+  const storeBlocks = useMemo(() => {
+    const m = buildModel(products, layout.id);
+    const gen = layout.gen;
+    const out: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean }[] = [];
+    for (const g of gen?.aisleGroups ?? []) out.push({ ref: `aisles:${g.from}`, name: `Aisles ${g.from}–${g.to}`, dir: gen?.directions?.[`aisles:${g.from}`] ?? 'horizontal', group: true });
+    for (const b of m.blocks) out.push({ ref: `block:${b.section}`, name: `Section ${b.section}`, dir: gen?.directions?.[`block:${b.section}`] ?? 'vertical', group: false });
+    return out;
+  }, [products, layout.id, layout.gen]);
   /** Which arrangement settings this store's map has (for Store settings). */
   const layoutHas = useMemo(() => {
     const m = buildModel(products, layout.id);
@@ -593,6 +602,32 @@ export default function App() {
     },
     /** The aisles a dragged box touches. */
     within: (box: Rect) => aislesIn(layout, box),
+    /**
+     * Makes generated aisles (by label id "g-aisle-7"…) their own block, running side to side to
+     * start; the map then asks where the block is. Undefined if they aren't a run of numbered aisles.
+     */
+    makeBlock(ids: string[]): Snapshot | undefined {
+      const gen = layout.gen;
+      const labels = ids.map((id) => /^g-aisle-(.+)$/.exec(id)?.[1]);
+      if (!gen?.enabled || labels.some((x) => !x)) return undefined;
+      const nums = labels.map((x) => aisleNumber(x!)).sort((a, b) => a - b);
+      if (nums.some(Number.isNaN)) return undefined;
+      const sorted = [...labels].sort((a, b) => aisleNumber(a!) - aisleNumber(b!)) as string[];
+      const from = sorted[0];
+      const to = sorted[sorted.length - 1];
+      const inRange = (id: string) => {
+        const m = /^g-(?:aisle|shelf)-([^-]+)/.exec(id);
+        const n = m ? aisleNumber(m[1]) : NaN;
+        return n >= nums[0] && n <= nums[nums.length - 1];
+      };
+      const others = (gen.aisleGroups ?? []).filter((g) => aisleNumber(g.to) < nums[0] || aisleNumber(g.from) > nums[nums.length - 1]);
+      return setGen({
+        aisleGroups: [...others, { from, to }],
+        directions: { ...gen.directions, [`aisles:${from}`]: 'horizontal' },
+        // These aisles follow the block now, not edits made to them before.
+        locked: gen.locked.filter((id) => !inRange(id)),
+      });
+    },
     /** Numbers every numbered aisle 1, 2, 3… from the back block, door side first. */
     renumber(): Snapshot {
       const snapshot = snapshotNow();
@@ -938,12 +973,15 @@ export default function App() {
             startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
             store: {
               layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id,
-              gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas,
+              gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,
             },
           }}
           setItemCategory={setItemCategory}
           where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip,
-            place: (ref, placement) => setGen({ placements: { ...layout.gen?.placements, [ref]: placement } }),
+            place: (ref, placement, dir) => setGen({
+              placements: { ...layout.gen?.placements, [ref]: placement },
+              ...(dir && { directions: { ...layout.gen?.directions, [ref]: dir } }),
+            }),
             skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); },
             setLabels }}
           undo={undo}

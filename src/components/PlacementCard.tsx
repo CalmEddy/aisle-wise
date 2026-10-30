@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { placementOptions, subjectPlaces, type PlacementSubject } from '../core/placement';
-import type { Placement, Product, StoreLayout } from '../core/types';
+import { isBlock, placementOptions, subjectPlaces, type PlacementSubject } from '../core/placement';
+import type { Orientation, Placement, Product, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { StoreMap, type MapGhost } from './StoreMap';
 
@@ -14,11 +14,15 @@ export function PlacementCard({ layout, products, subject, look, onPlace, onNotS
   products: Product[];
   subject: PlacementSubject;
   look?: SectionLook;
-  onPlace: (placement: Placement, label: string) => void;
+  /** Keeps it there (and, for a block, which way it runs). */
+  onPlace: (placement: Placement, label: string, dir?: Orientation) => void;
   onNotSure: () => void;
   onLater: () => void;
 }) {
-  const options = useMemo(() => placementOptions(layout, products, subject), [layout, products, subject]);
+  // Blocks (a section, or a run of aisles) can run either way: tried both ways on the mini-map.
+  const block = isBlock(subject);
+  const [dir, setDir] = useState<Orientation>(layout.gen?.directions?.[subject.ref] ?? (subject.ref.startsWith('aisles:') ? 'horizontal' : 'vertical'));
+  const options = useMemo(() => placementOptions(layout, products, subject, block ? dir : undefined), [layout, products, subject, block, dir]);
   const [chosen, setChosen] = useState<number>();
   const pick = chosen !== undefined ? options[chosen] : undefined;
   // The map as it is, without the thing being placed, and a numbered marker on each spot.
@@ -37,6 +41,15 @@ export function PlacementCard({ layout, products, subject, look, onPlace, onNotS
         <span>{pick ? <>Like this? <b>{subject.name}</b>: {pick.label}</> : <>Where’s <b>{subject.name}</b>? Tap a spot.</>}</span>
         <button className="link" onClick={onLater}>Later</button>
       </div>
+      {block && (
+        <div className="segmented mini-seg placement-dir" role="group" aria-label="Which way its shelves run">
+          {(['vertical', 'horizontal'] as const).map((o) => (
+            <button key={o} className={dir === o ? 'active' : ''} aria-pressed={dir === o} onClick={() => { setDir(o); setChosen(undefined); }}>
+              {o === 'vertical' ? '↕ Up & down' : '↔ Side to side'}
+            </button>
+          ))}
+        </div>
+      )}
       <div className="placement-map">
         {pick
           ? <StoreMap layout={pick.preview} look={look} changedIds={subjectPlaces(pick.preview, subject).map((p) => p.id)} />
@@ -44,7 +57,7 @@ export function PlacementCard({ layout, products, subject, look, onPlace, onNotS
       </div>
       {pick ? (
         <div className="where-bar-choices">
-          <button className="btn primary" onClick={() => onPlace(pick.placement, pick.label)}>Place here</button>
+          <button className="btn primary" onClick={() => onPlace(pick.placement, pick.label, block ? dir : undefined)}>Place here</button>
           <button className="btn" onClick={() => setChosen(undefined)}>‹ Back</button>
         </div>
       ) : (

@@ -1,7 +1,7 @@
 import { aisleNumber, DEPTS, findAisle, guessDept, sectionNumber } from './clues';
 import { formatLabel, shelfOffsets, type LabelStyle } from './labels';
 import { footprint } from './geometry';
-import type { AisleLabel, AislePos, Area, Arrangement, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -226,7 +226,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
 }
 
 /** What a map is generated with: the entrance corner and the arrangement. */
-export type GenSettings = Arrangement & { entrance: GeneratedMap['entrance']; placements?: Record<string, Placement>; labels?: LabelStyle };
+export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions'> & { labels?: LabelStyle };
 
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
@@ -237,6 +237,8 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
     ...(settings.produce === 'far' && { p: 'far' }),
     ...(settings.backWall === 'reversed' && { b: 'rev' }),
     ...(settings.placements && Object.keys(settings.placements).length && { pl: settings.placements }),
+    ...(settings.aisleGroups?.length && { ag: settings.aisleGroups }),
+    ...(settings.directions && Object.keys(settings.directions).length && { dr: settings.directions }),
     a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : a.chilled ? 2 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
     ...(model.blocks.length && { bl: model.blocks.map((b) => [b.section, b.seen ? 1 : 0, b.max, b.shelves, b.temp ?? '']) }),
@@ -257,23 +259,44 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle } = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation> } = {}) {
   const placements = arrangement.placements ?? {};
-  const n = model.aisles.length;
   const L = AISLE_LENGTH;
-  // Sections of labelled shelves, laid out as blocks (in their own squares, from 0,0).
-  const blockRects = layoutBlocks(model.blocks, arrangement.labels?.pairing ?? 'backToBack', placements);
-  const bw = blockRects.length ? Math.max(...blockRects.map((b) => b.rect.x + b.rect.w)) : 0;
-  const bh = blockRects.length ? Math.max(...blockRects.map((b) => b.rect.y + b.rect.h)) : 0;
-  // Across: left wall shelf (x 1), a 2-square walkway, the sections, a walkway, the aisles (4 squares each), a walkway, the right wall shelf.
+  // Blocks of shelving: the numbered aisles, runs of aisles the shopper made into their own block,
+  // and sections of labelled shelves. Each has a direction and a place next to the others.
+  const pairing = arrangement.labels?.pairing ?? 'backToBack';
+  const dirs = arrangement.directions ?? {};
+  const inGroup = (label: string) => (arrangement.aisleGroups ?? []).find((g) => {
+    const n = aisleNumber(label);
+    return n >= aisleNumber(g.from) && n <= aisleNumber(g.to);
+  });
+  const mainAisles = model.aisles.filter((a) => !inGroup(a.label));
+  const items: BlockItem[] = [];
+  if (mainAisles.length) items.push({ ref: 'aisles:main', ...aisleBlockSize(mainAisles.length, 'vertical', L) });
+  for (const g of arrangement.aisleGroups ?? []) {
+    const members = model.aisles.filter((a) => inGroup(a.label) === g);
+    if (!members.length) continue;
+    const ref = `aisles:${g.from}`;
+    items.push({ ref, ...aisleBlockSize(members.length, dirs[ref] ?? 'horizontal', L), default: items.length ? { of: 'aisles:main', side: 'below' } : undefined });
+  }
+  let prevSection: string | undefined = mainAisles.length ? 'aisles:main' : undefined;
+  for (const b of model.blocks) {
+    const ref = `block:${b.section}`;
+    items.push({ ref, ...sectionSize(b, pairing, dirs[ref] ?? 'vertical'), default: prevSection ? { of: prevSection, side: 'left' } : undefined });
+    prevSection = ref;
+  }
+  const arranged = arrangeBlocks(items, placements);
+  const at = new Map(arranged.map((a) => [a.ref, a.rect]));
+  const bw = arranged.length ? Math.max(...arranged.map((a) => a.rect.x + a.rect.w)) : 0;
+  const bh = arranged.length ? Math.max(...arranged.map((a) => a.rect.y + a.rect.h)) : 0;
+  // Across: left wall shelf (x 1), a 2-square walkway, the blocks, a walkway, the right wall shelf.
   const xLeftWall = 1;
   const xBlocks = xLeftWall + 3;
-  const x0 = xBlocks + (bw ? bw + 2 : 0); // first aisle shelf
-  const width = Math.max((n ? x0 + 4 * n : xBlocks + bw) + 4, 14);
+  const width = Math.max(xBlocks + bw + 4, 14);
   const xRightWall = width - 2;
   // Down: back wall shelf (y 1), a 3-square cross aisle, the aisles, the front cross aisle, things in the open, checkout.
   const yShelf = 5;
-  const H = Math.max(n ? L : 0, bh, L); // how deep the aisles and sections run
+  const H = Math.max(bh, L); // how deep the aisles and sections run
   const band = model.islands.length ? 4 : 0;
   const front = yShelf + H + 3 + band;
   const height = front + 4;
@@ -281,22 +304,45 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   const aisles: AisleLabel[] = [];
   const area = (d: Dept, r: Rect): Area => ({ kind: 'area', id: `g-dept-${d}`, label: deptInfo(d).name, ...r, categories: [...deptInfo(d).categories] });
 
-  // Aisles, aisle 1 on the right (or on the left when the store numbers that way). Slot i (from the left) holds shelves at x0+4i and x0+4i+3.
-  model.aisles.forEach((a, k) => {
-    const slot = arrangement.aisleOne === 'far' ? k : n - 1 - k;
-    const walk: Rect = { x: x0 + 1 + 4 * slot, y: yShelf, w: 2, h: L };
-    aisles.push({ id: `g-aisle-${a.label}`, label: `Aisle ${a.label}`, ...walk, ...(a.seen ? {} : { guess: true }) });
-    for (const side of ['L', 'R'] as const) {
-      // Walking up the aisle from the front, left is the smaller x.
-      const x = side === 'L' ? walk.x - 1 : walk.x + 2;
-      const shelf: Shelf = {
-        kind: 'shelf', id: `g-shelf-${a.label}-${side}`, label: `${a.label}${side}`,
-        orientation: 'vertical', x, y: yShelf, length: L, categories: cats(a, side), ...(a.seen ? {} : { guess: true }),
-        ...(a.freezer ? { temp: 'frozen' as const } : a.chilled ? { temp: 'chilled' as const } : {}),
-      };
-      places.push(shelf);
-    }
-  });
+  // Aisles, aisle 1 on the right (or on the left when the store numbers that way). In an up-and-down
+  // block, slot i (from the left) holds shelves at 4i and 4i+3; in a side-to-side block, slot i (from the
+  // front, i.e. the bottom) holds shelves at those distances up from its bottom.
+  const drawAisles = (list: AisleModel[], rect: Rect, dir: Orientation) => {
+    const m = list.length;
+    list.forEach((a, k) => {
+      const freezer = a.freezer ? { temp: 'frozen' as const } : a.chilled ? { temp: 'chilled' as const } : {};
+      const guess = a.seen ? {} : { guess: true };
+      if (dir === 'vertical') {
+        const fromRight = arrangement.aisleOne === 'far' ? k : m - 1 - k;
+        const walk: Rect = { x: xBlocks + rect.x + 1 + 4 * fromRight, y: yShelf + rect.y, w: 2, h: L };
+        aisles.push({ id: `g-aisle-${a.label}`, label: `Aisle ${a.label}`, ...walk, ...guess });
+        for (const side of ['L', 'R'] as const) {
+          // Walking up the aisle from the front, left is the smaller x.
+          places.push({
+            kind: 'shelf', id: `g-shelf-${a.label}-${side}`, label: `${a.label}${side}`, orientation: 'vertical',
+            x: side === 'L' ? walk.x - 1 : walk.x + 2, y: walk.y, length: L, categories: cats(a, side), ...guess, ...freezer,
+          });
+        }
+      } else {
+        // Side to side: aisle 1 nearest the front (bottom); walking along it from the right, left is the smaller y.
+        const fromBottom = arrangement.aisleOne === 'far' ? m - 1 - k : k;
+        const walk: Rect = { x: xBlocks + rect.x, y: yShelf + rect.y + rect.h - 3 - 4 * fromBottom, w: L, h: 2 };
+        aisles.push({ id: `g-aisle-${a.label}`, label: `Aisle ${a.label}`, ...walk, ...guess });
+        for (const side of ['L', 'R'] as const) {
+          places.push({
+            kind: 'shelf', id: `g-shelf-${a.label}-${side}`, label: `${a.label}${side}`, orientation: 'horizontal',
+            x: walk.x, y: side === 'L' ? walk.y - 1 : walk.y + 2, length: L, categories: cats(a, side), ...guess, ...freezer,
+          });
+        }
+      }
+    });
+  };
+  if (mainAisles.length) drawAisles(mainAisles, at.get('aisles:main')!, 'vertical');
+  for (const g of arrangement.aisleGroups ?? []) {
+    const ref = `aisles:${g.from}`;
+    const rect = at.get(ref);
+    if (rect) drawAisles(model.aisles.filter((a) => inGroup(a.label) === g), rect, dirs[ref] ?? 'horizontal');
+  }
 
   // The walls: each a chain of shelf sections. Departments go on the wall the answers say, or their
   // usual one: Produce, Bakery and Deli up the right wall (front to back), Frozen down the left (or
@@ -304,18 +350,24 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   // the front corners.
   const sideRun = { from: 2, len: yShelf + H - 2 }; // from just under the back wall to the front of the aisles
 
-  // The sections' shelves, shelf 1 of each on its right (like aisle 1).
-  for (const { block, rect } of blockRects) {
-    const pairing = arrangement.labels?.pairing ?? 'backToBack';
+  // The sections' shelves, shelf 1 of each on its right (like aisle 1), or at the front when it runs side to side.
+  for (const block of model.blocks) {
+    const ref = `block:${block.section}`;
+    const rect = at.get(ref);
+    if (!rect) continue;
+    const across = dirs[ref] === 'horizontal';
     const offs = shelfOffsets(pairing, block.max);
+    const row = pairing === 'row';
     for (let k = 1; k <= block.max; k++) {
-      const row = pairing === 'row';
+      const len = row ? ROW_BAY : SECTION_SHELF;
+      const step = row ? (block.max - k) * ROW_BAY : 0; // along a row
+      const off = row ? 0 : (across ? rect.h : rect.w) - 1 - offs[k - 1]; // across the section
       places.push({
         kind: 'shelf', id: `g-sec-${block.section}-${k}`, label: formatLabel(arrangement.labels, block.section, k),
-        orientation: 'vertical',
-        x: xBlocks + rect.x + (row ? 0 : rect.w - 1 - offs[k - 1]),
-        y: yShelf + rect.y + (row ? (block.max - k) * ROW_BAY : 0),
-        length: row ? ROW_BAY : SECTION_SHELF,
+        orientation: across ? 'horizontal' : 'vertical',
+        x: xBlocks + rect.x + (across ? (row ? rect.w - len - step : 0) : off),
+        y: yShelf + rect.y + (across ? off : step),
+        length: len,
         categories: block.shelves[k] ?? [],
         ...(!block.seen || !block.seenShelves.includes(k) ? { guess: true } : {}),
         ...(block.temp && { temp: block.temp }),
@@ -528,54 +580,64 @@ export function changedParts(before: StoreLayout, after: StoreLayout): string[] 
 export const SECTION_SHELF = 10;
 export const ROW_BAY = 4;
 
-/** A section's size in squares: across (its shelves side by side) and deep. */
-function blockSize(b: BlockModel, pairing: LabelStyle['pairing']) {
-  if (pairing === 'row') return { w: 1, h: b.max * ROW_BAY };
+/** A block to lay out: its size, and where it goes when the shopper hasn't said. */
+interface BlockItem { ref: string; w: number; h: number; default?: Placement }
+
+/** A block of m numbered aisles: 4 squares per aisle across, the aisle length along. */
+function aisleBlockSize(m: number, dir: Orientation, L: number) {
+  return dir === 'vertical' ? { w: 4 * m, h: L } : { w: L, h: 4 * m };
+}
+
+/** A section's size in squares, standing up and down or turned side to side. */
+function sectionSize(b: BlockModel, pairing: LabelStyle['pairing'], dir: Orientation) {
   const offs = shelfOffsets(pairing, b.max);
-  return { w: Math.max(...offs) + 1, h: SECTION_SHELF };
+  const across = pairing === 'row' ? 1 : Math.max(...offs) + 1;
+  const along = pairing === 'row' ? b.max * ROW_BAY : SECTION_SHELF;
+  return dir === 'vertical' ? { w: across, h: along } : { w: along, h: across };
 }
 
 /**
- * Where each section goes, in squares from the top-left of the sections'
- * area: each next to the one before it (to its left), unless the shopper
- * placed it next to another ("block:C" below "block:A"). Walkways between
- * sections are 2 squares; nothing overlaps.
+ * Where each block goes, in squares from the top-left of the blocks' area:
+ * next to another block (left, right, behind = above, in front = below) as
+ * the shopper placed it, or as it usually goes. Walkways between blocks
+ * are 2 squares; nothing overlaps.
  */
-export function layoutBlocks(blocks: BlockModel[], pairing: LabelStyle['pairing'], placements: Record<string, Placement>) {
-  const out: { block: BlockModel; rect: Rect }[] = [];
+export function arrangeBlocks(items: BlockItem[], placements: Record<string, Placement>) {
+  const out: { ref: string; rect: Rect }[] = [];
   const gap = 2;
-  const clash = (r: Rect, self: BlockModel) => out.some((o) => o.block !== self && r.x < o.rect.x + o.rect.w + gap && o.rect.x < r.x + r.w + gap && r.y < o.rect.y + o.rect.h + gap && o.rect.y < r.y + r.h + gap);
-  // Sections placed next to another go after it (so it's there to be next to); the rest in order.
-  const order: BlockModel[] = [];
-  const left = [...blocks];
+  const clash = (r: Rect, self: string) => out.some((o) => o.ref !== self && r.x < o.rect.x + o.rect.w + gap && o.rect.x < r.x + r.w + gap && r.y < o.rect.y + o.rect.h + gap && o.rect.y < r.y + r.h + gap);
+  const rule = (it: BlockItem) => placements[it.ref] ?? it.default;
+  // A block placed next to another goes after it (so it's there to be next to).
+  const order: BlockItem[] = [];
+  const left = [...items];
   while (left.length) {
-    const i = left.findIndex((b) => {
-      const pl = placements[`block:${b.section}`];
-      return !pl || order.some((o) => `block:${o.section}` === pl.of) || !left.some((o) => `block:${o.section}` === pl.of);
+    const i = left.findIndex((it) => {
+      const pl = rule(it);
+      return !pl || order.some((o) => o.ref === pl.of) || !left.some((o) => o.ref === pl.of);
     });
     order.push(...left.splice(i < 0 ? 0 : i, 1));
   }
-  for (const b of order) {
-    const { w, h } = blockSize(b, pairing);
-    const pl = placements[`block:${b.section}`];
-    const target = pl && out.find((o) => `block:${o.block.section}` === pl.of);
-    const prev = out[out.length - 1];
-    let r: Rect;
+  for (const it of order) {
+    const { w, h } = it;
+    const pl = rule(it);
+    const target = pl && out.find((o) => o.ref === pl.of);
+    let r: Rect = { x: 0, y: 0, w, h };
     let step = { x: -1, y: 0 };
     if (target) {
       const t = target.rect;
       switch (pl!.side) {
         case 'right': r = { x: t.x + t.w + gap, y: t.y, w, h }; step = { x: 1, y: 0 }; break;
-        case 'above': r = { x: t.x, y: t.y - gap - h, w, h }; step = { x: 0, y: -1 }; break;
-        case 'below': r = { x: t.x, y: t.y + t.h + gap, w, h }; step = { x: 0, y: 1 }; break;
+        case 'above': r = { x: t.x + t.w - w, y: t.y - gap - h, w, h }; step = { x: 0, y: -1 }; break;
+        case 'below': r = { x: t.x + t.w - w, y: t.y + t.h + gap, w, h }; step = { x: 0, y: 1 }; break;
         default: r = { x: t.x - gap - w, y: t.y, w, h };
       }
-    } else if (prev) r = { x: prev.rect.x - gap - w, y: prev.rect.y, w, h };
-    else r = { x: 0, y: 0, w, h };
-    for (let k = 0; k < 200 && clash(r, b); k++) r = { ...r, x: r.x + step.x, y: r.y + step.y };
-    out.push({ block: b, rect: r });
+    } else if (out.length) {
+      const prev = out[out.length - 1].rect;
+      r = { x: prev.x - gap - w, y: prev.y, w, h };
+    }
+    for (let k = 0; k < 400 && clash(r, it.ref); k++) r = { ...r, x: r.x + step.x, y: r.y + step.y };
+    out.push({ ref: it.ref, rect: r });
   }
-  // Start the area at 0,0.
   const minX = Math.min(0, ...out.map((o) => o.rect.x));
   const minY = Math.min(0, ...out.map((o) => o.rect.y));
   return out.map((o) => ({ ...o, rect: { ...o.rect, x: o.rect.x - minX, y: o.rect.y - minY } }));

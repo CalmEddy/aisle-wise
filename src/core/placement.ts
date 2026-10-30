@@ -1,7 +1,7 @@
-import { DEPTS } from './clues';
+import { aisleNumber, DEPTS } from './clues';
 import { buildModel, regenerate, type SectionModel, type StoreModel } from './generate';
 import { footprint } from './geometry';
-import type { Placement, Product, Rect, StoreLayout, Wall } from './types';
+import type { Orientation, Placement, Product, Rect, StoreLayout, Wall } from './types';
 
 /**
  * Asking where new things go, relative to what's already on the map.
@@ -22,11 +22,26 @@ export interface PlacementSubject {
   placeId: string;
   /** A whole section of shelves: every place whose id starts with `placeId`. */
   group?: boolean;
+  /** A run of aisles made into a block: its aisles' shelves. */
+  aisles?: { from: string; to: string };
 }
 
+/** A block that can run either way (a section, or a run of aisles). */
+export const isBlock = (s: PlacementSubject) => s.ref.startsWith('block:') || s.ref.startsWith('aisles:');
+
 /** The places that make up a subject on a map. */
-export const subjectPlaces = (l: StoreLayout, s: PlacementSubject) =>
-  l.places.filter((p) => (s.group ? p.id.startsWith(s.placeId) : p.id === s.placeId));
+export const subjectPlaces = (l: StoreLayout, s: PlacementSubject) => {
+  if (s.aisles) {
+    const lo = aisleNumber(s.aisles.from);
+    const hi = aisleNumber(s.aisles.to);
+    return l.places.filter((p) => {
+      const m = /^g-shelf-(.+)-[LR]$/.exec(p.id);
+      const n = m ? aisleNumber(m[1]) : NaN;
+      return n >= lo && n <= hi;
+    });
+  }
+  return l.places.filter((p) => (s.group ? p.id.startsWith(s.placeId) : p.id === s.placeId));
+};
 
 /** The rectangle around a subject's places. */
 function subjectRect(l: StoreLayout, s: PlacementSubject): Rect | undefined {
@@ -77,6 +92,12 @@ export function pendingPlacements(layout: StoreLayout, products: Product[], mode
     if (done.has(ref) || !layout.places.some((p) => p.id.startsWith(`g-sec-${b.section}-`))) continue;
     out.push({ ref, name: `Section ${b.section}`, placeId: `g-sec-${b.section}-`, group: true });
   }
+  // Runs of aisles made into their own block: where are they?
+  for (const g of gen.aisleGroups ?? []) {
+    const ref = `aisles:${g.from}`;
+    if (done.has(ref)) continue;
+    out.push({ ref, name: `Aisles ${g.from}–${g.to}`, placeId: '', group: true, aisles: g });
+  }
   for (const isl of model.islands) {
     const ref = `isl:${isl.key}`;
     const id = `g-open-${isl.key}`;
@@ -101,9 +122,11 @@ const sideWord = (wall: Wall, side: 'before' | 'after') =>
   wall === 'back' ? (side === 'before' ? 'left of' : 'right of') : side === 'before' ? 'in front of' : 'behind';
 
 /** The spots a thing could go, each with its preview (spots that land in the same place are offered once). */
-export function placementOptions(layout: StoreLayout, products: Product[], subject: PlacementSubject): PlacementOption[] {
-  const gen = layout.gen;
-  if (!gen) return [];
+export function placementOptions(layout: StoreLayout, products: Product[], subject: PlacementSubject, dir?: Orientation): PlacementOption[] {
+  const base = layout.gen;
+  if (!base) return [];
+  // Trying it the other way round, if asked.
+  const gen = dir ? { ...base, directions: { ...base.directions, [subject.ref]: dir } } : base;
   const model = buildModel(products, layout.id);
   const candidates: { placement: Placement; label: string }[] = [];
   if (subject.ref.startsWith('sec:')) {
@@ -120,12 +143,17 @@ export function placementOptions(layout: StoreLayout, products: Product[], subje
     for (const wall of ['left', 'back', 'right'] as Wall[]) {
       if (!used.has(wall)) candidates.push({ placement: { of: `wall:${wall}` }, label: WALL_NAME[wall] });
     }
-  } else if (subject.ref.startsWith('block:')) {
-    const me = subject.ref.slice(6);
+  } else if (isBlock(subject)) {
     const SIDE = { left: 'Left of', right: 'Right of', above: 'Behind', below: 'In front of' } as const;
-    for (const b of model.blocks.filter((x) => x.section !== me && (x.seen || layout.places.some((p) => p.id.startsWith(`g-sec-${x.section}-`))))) {
+    const grouped = (label: string) => (gen.aisleGroups ?? []).some((g) => aisleNumber(label) >= aisleNumber(g.from) && aisleNumber(label) <= aisleNumber(g.to));
+    const targets: { ref: string; name: string }[] = [];
+    const main = model.aisles.filter((a) => !grouped(a.label));
+    if (main.length) targets.push({ ref: 'aisles:main', name: main.length > 1 ? `aisles ${main[0].label}–${main[main.length - 1].label}` : `aisle ${main[0].label}` });
+    for (const g of gen.aisleGroups ?? []) targets.push({ ref: `aisles:${g.from}`, name: `aisles ${g.from}–${g.to}` });
+    for (const b of model.blocks) if (b.seen || layout.places.some((p) => p.id.startsWith(`g-sec-${b.section}-`))) targets.push({ ref: `block:${b.section}`, name: `section ${b.section}` });
+    for (const t of targets.filter((x) => x.ref !== subject.ref)) {
       for (const side of ['left', 'right', 'above', 'below'] as const) {
-        candidates.push({ placement: { of: `block:${b.section}`, side }, label: `${SIDE[side]} section ${b.section}` });
+        candidates.push({ placement: { of: t.ref, side }, label: `${SIDE[side]} ${t.name}` });
       }
     }
   } else {
@@ -139,7 +167,8 @@ export function placementOptions(layout: StoreLayout, products: Product[], subje
     const preview = regenerate({ ...layout, gen: { ...gen, placements: { ...gen.placements, [subject.ref]: c.placement } } }, model);
     const ghost = subjectRect(preview, subject);
     if (!ghost) continue;
-    const key = `${ghost.x},${ghost.y},${ghost.w},${ghost.h}`;
+    // Same map, same spot (whatever was asked): offer it once.
+    const key = preview.places.map((p) => `${p.id}:${p.x},${p.y}`).join('|');
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ ...c, ghost, preview });

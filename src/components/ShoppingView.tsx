@@ -12,7 +12,7 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { Clue, ListItem, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
+import type { Clue, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
@@ -40,7 +40,7 @@ import { WhereList } from './WhereList';
 import { PlacementCard } from './PlacementCard';
 import { LabelStyleSheet } from './LabelStyleSheet';
 import { parseLabel, type LabelStyle } from '../core/labels';
-import { pendingPlacements } from '../core/placement';
+import { isBlock, pendingPlacements } from '../core/placement';
 import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves } from '../core/aisles';
@@ -86,7 +86,7 @@ interface Props {
     /** The trip in progress here: first and last check-off (ms). */
     trip?: { first: number; last: number };
     /** Places something relative to what's on the map ("Bakery behind Produce"). Returns what Undo restores. */
-    place: (ref: string, placement: Placement) => Snapshot;
+    place: (ref: string, placement: Placement, dir?: Orientation) => Snapshot;
     /** Not sure where it goes: stop asking. */
     skipPlacement: (ref: string) => void;
     /** Sets how this store labels its shelves ("B12"), or back to aisle numbers. Returns what Undo restores. */
@@ -135,6 +135,7 @@ export interface BuildApi {
     move: (ids: string | string[], dx: number, dy: number) => boolean;
     turn: (ids: string | string[]) => Snapshot | undefined;
     deleteMany: (ids: string[]) => Snapshot;
+    makeBlock: (ids: string[]) => Snapshot | undefined;
     within: (box: Rect) => string[];
     cut: (box: Rect, numbers: CutNumbers) => { snapshot: Snapshot; cut: number; renamed: string[] };
   };
@@ -281,6 +282,14 @@ export function ShoppingView(props: Props) {
             else say('No room to turn here: something’s in the way, or it would go past the walls.');
           } },
           ...arrows((dx, dy) => props.build.aisles.move(ids, dx, dy), what),
+          ...(layout.gen?.enabled && ids.length > 0 && ids.every((id) => id.startsWith('g-aisle-')) ? [{
+            key: 'block', icon: '⧉', label: 'Make these aisles a block', onClick: () => {
+              const snapshot = props.build.aisles.makeBlock(ids);
+              if (!snapshot) { say('Only numbered aisles from answers can be made into a block.'); return; }
+              onGone();
+              say(`${title} are their own block now: say where on the map.`, snapshot);
+            },
+          }] : []),
           { key: 'delete', icon: '🗑', label: `Delete ${what} and shelves`, danger: true, onClick: () => {
             const snapshot = props.build.aisles.deleteMany(ids);
             onGone();
@@ -698,7 +707,8 @@ export function ShoppingView(props: Props) {
   }));
   const [listOpen, setListOpen] = useState(false);
   // Things the map has only guessed the place of: asked one at a time, relative to what's on the map.
-  const pending = useMemo(() => (building ? [] : pendingPlacements(layout, catalog.products)), [layout, catalog.products, building]);
+  // In the editor, only blocks are asked about (made with "New block").
+  const pending = useMemo(() => pendingPlacements(layout, catalog.products).filter((sub) => !building || isBlock(sub)), [layout, catalog.products, building]);
   const [placeLater, setPlaceLater] = useState<string[]>([]);
   const placing = pending.find((sub) => !placeLater.includes(sub.ref));
   const laterHere = (askLater[layout.id] ?? [])
@@ -1362,8 +1372,8 @@ export function ShoppingView(props: Props) {
           products={catalog.products}
           subject={placing}
           look={props.mapLook}
-          onPlace={(placement, label) => {
-            const snapshot = props.where.place(placing.ref, placement);
+          onPlace={(placement, label, dir) => {
+            const snapshot = props.where.place(placing.ref, placement, dir);
             setToast({ snapshot, added: [], mode: 'list', note: `${placing.name}: ${label}` });
           }}
           onNotSure={() => props.where.skipPlacement(placing.ref)}

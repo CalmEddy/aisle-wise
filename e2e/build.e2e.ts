@@ -228,3 +228,31 @@ test('the editor: map fills the screen, zoom, list in the sheet, undo in the top
   await expect(page.locator('.build-screen')).toHaveCount(0);
   ok();
 });
+
+test('make some aisles their own block: side to side, placed on the mini-map, joined back from Store settings', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, cornerStore());
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await page.getByRole('button', { name: 'Select aisles' }).click();
+  // Aisles 4 and 5 are the leftmost two.
+  const l0 = await layout(page);
+  const a = (l: any, n: number) => l.aisles.find((x: any) => x.id === `g-aisle-${n}`);
+  await dragMap(page, [a(l0, 5).x, 10], [a(l0, 4).x + 1, 11]);
+  await page.getByRole('toolbar', { name: 'Change 2 aisles' }).getByRole('button', { name: 'Make these aisles a block' }).click();
+  const card = page.getByRole('group', { name: 'Where’s Aisles 4–5?' });
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('button', { name: '↔ Side to side' })).toHaveAttribute('aria-pressed', 'true');
+  await card.locator('.placement-options .chip', { hasText: 'In front of aisles 1–3' }).click();
+  await card.getByRole('button', { name: 'Place here' }).click();
+  let l = await layout(page);
+  expect(a(l, 4).w).toBeGreaterThan(a(l, 4).h);
+  expect(a(l, 4).y).toBeGreaterThan(a(l, 1).y + a(l, 1).h);
+  expect(l.gen.aisleGroups).toEqual([{ from: '4', to: '5' }]);
+  // Store settings: the block, its direction, and joining it back.
+  await page.locator('.build-sheet').getByRole('tab', { name: 'Store' }).click();
+  await page.locator('.store-settings summary').click();
+  await page.getByRole('button', { name: 'Join back' }).click();
+  l = await layout(page);
+  expect(a(l, 4).h).toBeGreaterThan(a(l, 4).w);
+  ok();
+});

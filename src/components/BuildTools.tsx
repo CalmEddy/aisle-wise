@@ -80,6 +80,8 @@ export interface StoreApi {
   answer: (q: LayoutQuestion, option: number | undefined) => void;
   /** Which arrangement settings apply to this store; backWall names its two ends. */
   layoutHas: { aisles: boolean; produce: boolean; backWall?: [string, string] };
+  /** Blocks of shelving made from answers: aisle runs made into a block, and sections. */
+  blocks: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean }[];
 }
 
 type GenKey = 'entrance' | 'aisleOne' | 'produce' | 'backWall';
@@ -197,6 +199,33 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
                   Stop updating automatically
                 </button>
               </div>
+              {store.blocks.length > 0 && (
+                <div className="field">
+                  <span>Blocks of shelving</span>
+                  {store.blocks.map((b) => (
+                    <div key={b.ref} className="gen-choice">
+                      <span className="gen-choice-label">{b.name}</span>
+                      <div className="segmented mini-seg" role="group" aria-label={`Which way ${b.name} runs`}>
+                        {(['vertical', 'horizontal'] as const).map((o) => (
+                          <button key={o} className={b.dir === o ? 'active' : ''} aria-pressed={b.dir === o}
+                            onClick={() => onUndoable(`${b.name} ${o === 'vertical' ? 'up and down' : 'side to side'}.`, store.setGen({ directions: { ...store.gen!.directions, [b.ref]: o } }))}>
+                            {o === 'vertical' ? '↕' : '↔'}
+                          </button>
+                        ))}
+                      </div>
+                      {b.group && (
+                        <button className="link" onClick={() => {
+                          const { [b.ref]: _gone, ...placements } = store.gen!.placements ?? {};
+                          void _gone;
+                          onUndoable(`${b.name} joined back up with the other aisles.`, store.setGen({
+                            aisleGroups: (store.gen!.aisleGroups ?? []).filter((g) => `aisles:${g.from}` !== b.ref), placements,
+                          }));
+                        }}>Join back</button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
               {store.gen.locked.length > 0 && <p className="muted small">Parts you’ve changed ({store.gen.locked.length}) are kept as you left them.</p>}
             </>
           ) : (
