@@ -416,3 +416,14 @@ export function newlyEdited(before: StoreLayout, after: StoreLayout): string[] {
   if (!same(before.checkout, after.checkout)) out.push('g-checkout-point');
   return out.filter((id) => !before.gen!.locked.includes(id));
 }
+
+/**
+ * What a rebuild changed on the map, for highlighting: ids of places and
+ * aisle labels that are new, or have moved, changed size or direction, or
+ * stock something new. Parts that only lost their "guess" dashes count too.
+ */
+export function changedParts(before: StoreLayout, after: StoreLayout): string[] {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const old = new Map<string, unknown>([...before.places, ...(before.aisles ?? [])].map((p) => [p.id, p]));
+  return [...after.places, ...(after.aisles ?? [])].filter((p) => !same(old.get(p.id), p)).map((p) => p.id);
+}

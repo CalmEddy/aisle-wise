@@ -114,3 +114,20 @@ test('the row shows where an answered item is', async ({ page }) => {
   await tick(page, 'Jam'); // back on the list
   await expect(row(page, 'Jam')).toContainText('7');
 });
+
+test('answers change the map straight away, outlined until the next trip', async ({ page }) => {
+  await addItems(page, 'Apples, Cereal');
+  await tick(page, 'Apples');
+  await page.locator('.where-bar .btn.primary').click(); // Produce
+  await expect(page.locator('svg.map .place.changed')).not.toHaveCount(0);
+  const before = await page.locator('svg.map .change-frame').count();
+  await tick(page, 'Cereal');
+  await page.locator('.where-bar').getByRole('button', { name: /Other|Aisle \/ department/ }).click();
+  await page.getByLabel('Aisle number').fill('4');
+  await page.getByRole('button', { name: /^Save · Aisle 4/ }).click();
+  // Aisle 4 and its shelves are new: more outlined.
+  await expect.poll(() => page.locator('svg.map .change-frame').count()).toBeGreaterThan(before);
+  await expect(page.locator('svg.map .aisle-label.changed')).not.toHaveCount(0);
+  await page.locator('.trip-done-card').getByRole('button', { name: 'Clear cart · start next trip' }).click();
+  await expect(page.locator('svg.map .change-frame')).toHaveCount(0);
+});

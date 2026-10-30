@@ -19,7 +19,7 @@ import { addAisle, clipAisles, removeAisle, renameAisle, aislesIn, deleteAisles,
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { cutAisles, renumberAisles, type CutNumbers } from './core/cut';
-import { buildModel, modelKey, newlyEdited, regenerate } from './core/generate';
+import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
 import { DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
@@ -272,6 +272,9 @@ export default function App() {
   const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? keepEdits(l, next) : l)));
 
   // ---- Map generated from aisle answers ----
+  /** Per store: parts of the map just added or changed (outlined until the next trip). */
+  const [mapChanges, setMapChanges] = usePersistentState<Record<string, string[]>>('aw.mapChanges', {});
+  const seenChange = (id: string) => setMapChanges((prev) => ({ ...prev, [layout.id]: (prev[layout.id] ?? []).filter((x) => x !== id) }));
   // Rebuilt whenever the answers for this store change; a blank store starts doing this with its first answer.
   useEffect(() => {
     const hasAnswers = products.some((p) => p.clues?.[layout.id]);
@@ -280,7 +283,12 @@ export default function App() {
     if (!gen.enabled) return;
     const model = buildModel(products, layout.id);
     if (modelKey(model, gen) === gen.key) return;
-    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? regenerate({ ...l, gen }, model) : l)));
+    const after = regenerate({ ...layout, gen }, model);
+    // Outline what changed, until the next trip (or it's tapped in Edit map).
+    const changed = changedParts(layout, after);
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? after : l)));
+    if (changed.length) setMapChanges((prev) => ({ ...prev, [layout.id]: [...new Set([...(prev[layout.id] ?? []), ...changed])] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, layout, setLayouts]);
 
   /** Turns generating on or off, flips the entrance side, or lets edited parts be regenerated. */
@@ -410,24 +418,14 @@ export default function App() {
   const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
   const learned = useMemo(() => learnArrangement(layout, products, trips, catalog), [layout, products, trips, catalog]);
-  /** Updates the generated map with what these trips clearly show. */
-  function learnFrom(list: Trip[]) {
-    const l = learnArrangement(layout, products, list, catalog);
-    if (!Object.keys(l.apply).length) return;
-    setLayouts((prev) => prev.map((x) => (x.id === layout.id && x.gen ? { ...x, gen: { ...x.gen, ...l.apply } } : x)));
-    setNotice(`Map updated from your trips: ${describeArrangement(l.apply, buildModel(products, layout.id))}.`);
-  }
-  // Once per store per visit to the app, from the finished trips (not one in progress, so the map doesn't shift mid-shop).
-  const learnedFor = useRef(new Set<string>());
+  // What the trips clearly show goes on the map straight away (mid-trip too); the changes are outlined.
+  const learnedKey = JSON.stringify(learned.apply);
   useEffect(() => {
-    if (!layout.gen?.enabled || learnedFor.current.has(layout.id)) return;
-    learnedFor.current.add(layout.id);
-    const mine = trips.filter((t) => t.layoutId === layout.id);
-    const last = mine[mine.length - 1];
-    const lastAt = last?.picks[last.picks.length - 1]?.at ?? 0;
-    learnFrom(last && Date.now() - lastAt < TRIP_GAP ? trips.filter((t) => t !== last) : trips);
+    if (!layout.gen?.enabled || !Object.keys(learned.apply).length) return;
+    setLayouts((prev) => prev.map((x) => (x.id === layout.id && x.gen ? { ...x, gen: { ...x.gen, ...learned.apply } } : x)));
+    setNotice(`Map updated from your trips: ${describeArrangement(learned.apply, buildModel(products, layout.id))}. Changes are outlined.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout.id, layout.gen?.enabled]);
+  }, [learnedKey, layout.id]);
   /** Which arrangement settings this store's map has (for Store settings). */
   const layoutHas = useMemo(() => {
     const m = buildModel(products, layout.id);
@@ -447,8 +445,8 @@ export default function App() {
     setNotice('Thanks – the map is updated.');
   }
   function endTrip() {
-    learnFrom(trips);
     setTrips((prev) => startTrip(prev, layout.id, Date.now()));
+    setMapChanges((prev) => ({ ...prev, [layout.id]: [] }));
   }
   function notePick(item: ListItem, picked: boolean) {
     const product = productFor(item, catalog);
@@ -904,6 +902,8 @@ export default function App() {
           key={listId}
           listsOpen={listsOpen}
           usuals={buyAgain}
+          mapChanges={mapChanges[layout.id] ?? []}
+          onSeenChange={seenChange}
           onListsClose={() => setListsOpen(false)}
           lists={{
             all: lists, current: listId, counts: listCounts, switchTo: setActiveListId,

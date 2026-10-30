@@ -851,3 +851,9 @@ main { padding-bottom: 110px; }
 .map-tool.danger { color: var(--danger); }
 .map-select-outline { fill: color-mix(in srgb, var(--you) 10%, transparent); stroke: var(--you); stroke-width: 0.18; stroke-dasharray: 0.5 0.3; pointer-events: none; }
 svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* ---- What the map just changed ---- */
+.change-frame { fill: none; stroke: #f59e0b; stroke-width: 0.3; pointer-events: none; animation: change-pulse 0.9s ease-in-out 4; }
+.aisle-label.changed .aisle-area { stroke: #f59e0b; stroke-width: 0.3; animation: change-pulse 0.9s ease-in-out 4; }
+@keyframes change-pulse { 0%, 100% { stroke-opacity: 1; stroke-width: 0.3; } 50% { stroke-opacity: 0.35; stroke-width: 0.6; } }
+@media (prefers-reduced-motion: reduce) { .change-frame, .aisle-label.changed .aisle-area { animation: none; } }

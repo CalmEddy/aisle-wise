@@ -49,6 +49,10 @@ interface Props {
   /** Show the how-it-works hint (toggled by ⓘ in the header). */
   /** Things bought before, most likely wanted again first. */
   usuals: Usual[];
+  /** Parts of the map just added or changed (outlined). */
+  mapChanges: string[];
+  /** A changed part has been looked at (tapped in Edit map). */
+  onSeenChange: (id: string) => void;
   layout: StoreLayout;
   floor: Floor;
   catalog: Catalog;
@@ -313,6 +317,26 @@ export function ShoppingView(props: Props) {
         : tool === 'walk' && editing ? placeTools(editing)
           : undefined;
 
+  // When the map changes, the strip shows the changed part for a few seconds, then goes back to following you.
+  const [changeFocus, setChangeFocus] = useState<{ a: Point; b: Point }>();
+  const seenChanges = useRef<string[]>(props.mapChanges);
+  useEffect(() => {
+    const fresh = props.mapChanges.filter((id) => !seenChanges.current.includes(id));
+    seenChanges.current = props.mapChanges;
+    if (!fresh.length) return;
+    const rects = [
+      ...layout.places.filter((p) => fresh.includes(p.id)).map(footprint),
+      ...(layout.aisles ?? []).filter((a) => fresh.includes(a.id)),
+    ];
+    if (!rects.length) return;
+    const a = { x: Math.min(...rects.map((r) => r.x)), y: Math.min(...rects.map((r) => r.y)) };
+    const b = { x: Math.max(...rects.map((r) => r.x + r.w)) - 1, y: Math.max(...rects.map((r) => r.y + r.h)) - 1 };
+    setChangeFocus({ a, b });
+    const t = setTimeout(() => setChangeFocus(undefined), 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.mapChanges]);
+
   const problems = useMemo(() => (building ? checkLayout(layout, floor, catalog.categories) : []), [building, layout, floor, catalog.categories]);
 
   // Walk tool: drag the selected shelf/area (or its resize handle), or the entrance/checkout markers.
@@ -380,6 +404,8 @@ export function ShoppingView(props: Props) {
       return;
     }
     // Walk: tapping a shelf, area or aisle label opens it for editing (and puts you there).
+    if (place && props.mapChanges.includes(place.id)) props.onSeenChange(place.id);
+    if (!place && aisleTapped.current && props.mapChanges.includes(aisleTapped.current)) props.onSeenChange(aisleTapped.current);
     setEditingId(place?.id);
     setEditingAisleId(place ? undefined : aisleTapped.current);
     aisleTapped.current = undefined;
@@ -743,7 +769,7 @@ export function ShoppingView(props: Props) {
           <StoreMap
             layout={layout}
             you={position}
-            focus={mapStrip ? stripFocus(layout, position, route[0]?.point) : undefined}
+            focus={mapStrip ? (changeFocus ? stripFocus(layout, changeFocus.a, changeFocus.b) : stripFocus(layout, position, route[0]?.point)) : undefined}
             dots={mapDots}
             pins={pins}
             ghosts={ghosts}
@@ -753,6 +779,7 @@ export function ShoppingView(props: Props) {
             selectedId={editing?.id}
             selectedAisleId={editingAisle?.id}
             selectedAisleIds={chosenAisles}
+            changedIds={props.mapChanges}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
             onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}

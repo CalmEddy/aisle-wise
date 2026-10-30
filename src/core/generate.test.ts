@@ -179,3 +179,16 @@ describe('walls as chains of sections, and things out in the open', () => {
     }
   });
 });
+
+describe('what a rebuild changed', () => {
+  it('lists new and changed parts, not the ones left as they were', async () => {
+    const { changedParts } = await import('./generate');
+    const before = regenerate(blank, buildModel(products, 's'));
+    const more = [...products, { id: 'chips', name: 'Chips', categoryId: 'snacks', clues: { s: { kind: 'aisle' as const, aisle: '2', side: 'R' as const } } }];
+    const after = regenerate(before, buildModel(more, 's'));
+    const changed = changedParts(before, after);
+    // Aisle 2 is no longer a guess, and its right-hand shelf now stocks snacks.
+    expect(changed).toEqual(expect.arrayContaining(['g-shelf-2-R', 'g-aisle-2']));
+    expect(changed).not.toContain('g-dept-produce');
+  });
+});

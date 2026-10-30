@@ -39,6 +39,8 @@ interface Props {
   selectedAisleId?: string;
   /** A group of selected aisles (the Select tool). */
   selectedAisleIds?: string[];
+  /** Places and aisles the map just added or changed (outlined so they're easy to spot). */
+  changedIds?: string[];
   /** Zoom in on this rectangle (grid units). */
   focus?: Rect;
   /** Colours and icons for category sections. */
@@ -75,7 +77,7 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -85,6 +87,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
   const selectedAisles = (layout.aisles ?? []).filter((a) => chosen.has(a.id));
   const shelvesOf = new Map(selectedAisles.map((a) => [a.id, aisleShelves(layout, a)]));
   const aisleShelfIds = new Set([...shelvesOf.values()].flat().map((sh) => sh.id));
+  const changed = new Set(changedIds ?? []);
   const viewBox = `${box.x - pad} ${box.y - pad} ${box.w + pad * 2} ${box.h + pad * 2}`;
   return (
     <svg
@@ -114,6 +117,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           backs={place.kind === 'shelf' ? shelfBacks(layout, place) : []}
           highlighted={highlightId === place.id}
           selected={selectedId === place.id || aisleShelfIds.has(place.id)}
+          changed={changed.has(place.id)}
           look={look}
           onTap={onPlaceTap}
           onPointerDown={onPlacePointerDown}
@@ -128,7 +132,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
         const cx = a.x + a.w / 2;
         const cy = a.y + a.h / 2;
         return (
-          <g key={a.id} className={`aisle-label${a.guess ? ' guess' : ''}${chosen.has(a.id) ? ' selected' : ''}${onAisleTap ? ' tappable' : ''}`}
+          <g key={a.id} className={`aisle-label${a.guess ? ' guess' : ''}${chosen.has(a.id) ? ' selected' : ''}${changed.has(a.id) ? ' changed' : ''}${onAisleTap ? ' tappable' : ''}`}
             onClick={onAisleTap ? () => onAisleTap(a.id) : undefined}>
             <rect className="aisle-area" x={a.x + 0.1} y={a.y + 0.1} width={a.w - 0.2} height={a.h - 0.2} rx={0.35} />
             <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={size}
@@ -193,8 +197,10 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
   );
 });
 
-function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointerDown }: {
+function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap, onPointerDown }: {
   place: Place;
+  /** Just added or changed by the map: outlined. */
+  changed?: boolean;
   /** Edges backed by another shelf (drawn just inside this shelf). */
   backs: Segment[];
   highlighted: boolean;
@@ -215,7 +221,7 @@ function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointe
   const size = isShelf
     ? Math.min(0.78, (run / chars) * 1.6)
     : Math.min(1.5, Math.max(0.8, thick * 0.4), (run / chars) * 1.7);
-  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, place.guess && 'guess', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
+  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, changed && 'changed', place.guess && 'guess', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
   const pad = 0.6; // easier to tap a thin shelf
 
@@ -266,6 +272,7 @@ function PlaceShape({ place, backs, highlighted, selected, look, onTap, onPointe
           </text>
         </>
       )}
+      {changed && <rect className="change-frame" x={f.x - 0.35} y={f.y - 0.35} width={f.w + 0.7} height={f.h + 0.7} rx={isShelf ? 0.45 : 0.8} />}
       {look?.iconOf && sections.map((sec, i) => {
         const icon = look.iconOf!(sec.categoryId);
         if (!icon) return null;
