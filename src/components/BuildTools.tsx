@@ -158,21 +158,19 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
               {store.question && (
                 <LayoutQuestionCard compact question={store.question} onAnswer={(o) => store.answer(store.question!, o)} />
               )}
-              <GenChoice store={store} onUndoable={onUndoable} setting="entrance" label="Entrance" note={(t) => `Entrance on the ${t}.`}
-                options={[['left', 'Front left ◧'], ['right', 'Front right ◨']]} />
               {store.layoutHas.aisles && (
-                <GenChoice store={store} onUndoable={onUndoable} setting="aisleOne" label="Aisle 1" note={(t) => `Aisle 1 is the ${t === 'far' ? 'farthest from' : 'nearest'} the door.`}
-                  options={[['near', 'Nearest the door'], ['far', 'Farthest']]} />
+                <GenChoice store={store} onUndoable={onUndoable} setting="aisleOne" label="Aisle 1" note={(t) => `Aisle 1 is on the ${t === 'far' ? 'left' : 'right'}.`}
+                  options={[['near', 'On the right'], ['far', 'On the left']]} />
               )}
               {store.layoutHas.produce && (
-                <GenChoice store={store} onUndoable={onUndoable} setting="produce" label="Produce" note={(t) => `Produce ${t === 'far' ? 'across the store' : 'near the door'}.`}
-                  options={[['near', 'Near the door'], ['far', 'Across the store']]} />
+                <GenChoice store={store} onUndoable={onUndoable} setting="produce" label="Produce" note={(t) => `Produce along the ${t === 'far' ? 'left' : 'right'} wall.`}
+                  options={[['near', 'Right wall'], ['far', 'Left wall']]} />
               )}
               {store.layoutHas.backWall && (
-                <GenChoice store={store} onUndoable={onUndoable} setting="backWall" label="Back wall, door end" note={(t) => `${store.layoutHas.backWall![t === 'reversed' ? 1 : 0]} is nearer the door.`}
+                <GenChoice store={store} onUndoable={onUndoable} setting="backWall" label="Back wall, left end" note={(t) => `${store.layoutHas.backWall![t === 'reversed' ? 1 : 0]} at the left end of the back wall.`}
                   options={[['usual', store.layoutHas.backWall[0]], ['reversed', store.layoutHas.backWall[1]]]} />
               )}
-              <p className="muted small">Trips teach the map which way round things are; what you pick here stays put.</p>
+              <p className="muted small">The back of the store is the top of the map, with the entrance in the middle of the front. Trips teach the map which way round things are; what you pick here stays put.</p>
               <div className="store-actions">
                 {store.gen.locked.length > 0 && (
                   <button className="btn" onClick={() => onUndoable('Edited parts will be rebuilt from the answers.', store.setGen({ locked: [] }))}>

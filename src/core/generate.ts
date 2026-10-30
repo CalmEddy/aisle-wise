@@ -6,12 +6,15 @@ import type { AisleLabel, AislePos, Area, Arrangement, Clue, Dept, Fixture, Gene
  * Building a store map from shoppers' "Where was it?" answers.
  *
  * 1. The answers become a model of the store: which aisles exist (all from 1
- *    up to the highest number heard), what's on each side of each aisle, and
- *    which departments there are.
- * 2. The model becomes a map in the shape of a typical supermarket: numbered
- *    aisles of back-to-back shelves across the middle (aisle 1 nearest the
- *    entrance), Produce along the entrance-side wall, Frozen along the far
- *    wall, the other departments along the back, checkout across the front.
+ *    up to the highest number heard), what's on each side of each aisle,
+ *    which departments there are, and what's along each wall.
+ * 2. The model becomes a map drawn the same way for every store: the top of
+ *    the map is the back of the store and the bottom line is the front, with
+ *    the entrance in the middle of it. The numbered aisles run up and down in
+ *    front of you, aisle 1 on the right. The outermost shelves are the walls:
+ *    the back wall across the top, the left and right walls down the sides.
+ *    Whatever is on the right wall (produce, bakery, deli…) sits to the right
+ *    of the aisles, which start just left of it.
  *
  * Generated parts have stable ids ("g-…"). Anything the shopper changes or
  * deletes is listed in `gen.locked` and never regenerated; places they add
@@ -21,10 +24,13 @@ import type { AisleLabel, AislePos, Area, Arrangement, Clue, Dept, Fixture, Gene
 
 /** Squares along each aisle. */
 export const AISLE_LENGTH = 14;
-/** The other departments, in order along the back wall from the entrance side. */
-export const BACK_WALL: Dept[] = ['bakery', 'deli', 'meat', 'seafood', 'dairy'];
-const FRONT_CORNER_NEAR: Dept[] = ['floral'];
-const FRONT_CORNER_FAR: Dept[] = ['pharmacy'];
+/** Departments usually along the back wall, left to right. */
+export const BACK_WALL: Dept[] = ['dairy', 'seafood', 'meat'];
+/** Departments usually up the right wall, front to back (Produce is placed by its own setting). */
+const RIGHT_WALL: Dept[] = ['bakery', 'deli'];
+/** Departments usually in a front corner. */
+const FRONT_RIGHT: Dept[] = ['floral'];
+const FRONT_LEFT: Dept[] = ['pharmacy'];
 
 interface AisleModel {
   /** As said ("7", "12B"). */
@@ -179,7 +185,7 @@ export type GenSettings = Arrangement & { entrance: GeneratedMap['entrance'] };
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
   return JSON.stringify({
-    e: settings.entrance,
+    v: 2, // the layout rules (back at the top, aisle 1 on the right, entrance in the middle)
     // Only when not the usual, so maps made before these settings existed aren't rebuilt.
     ...(settings.aisleOne === 'far' && { a1: 'far' }),
     ...(settings.produce === 'far' && { p: 'far' }),
@@ -202,24 +208,26 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, entrance: GeneratedMap['entrance'], arrangement: Arrangement = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement = {}) {
   const n = model.aisles.length;
   const L = AISLE_LENGTH;
-  const x0 = 6; // first shelf column (side wall area x 1–4, walkway at x 5)
-  const width = Math.max(4 * n + 12, model.sections.length || model.islands.length ? 20 : 0);
-  // Room for tables and cases out in the open, when there are any.
+  // Across: left wall shelf (x 1), a 2-square walkway, the aisles (4 squares each), a walkway, the right wall shelf.
+  const xLeftWall = 1;
+  const x0 = xLeftWall + 3; // first aisle shelf
+  const width = Math.max(4 * n + x0 + 4, 14);
+  const xRightWall = width - 2;
+  // Down: back wall shelf (y 1), a 3-square cross aisle, the aisles, the front cross aisle, things in the open, checkout.
+  const yShelf = 5;
   const band = model.islands.length ? 4 : 0;
-  const height = L + 13 + band;
-  const yShelf = 6;
-  const mirror = (r: Rect): Rect => (entrance === 'left' ? r : { ...r, x: width - r.x - r.w });
+  const front = yShelf + L + 3 + band;
+  const height = front + 4;
   const places: Place[] = [];
   const aisles: AisleLabel[] = [];
-  const area = (d: Dept, r: Rect): Area => ({ kind: 'area', id: `g-dept-${d}`, label: deptInfo(d).name, ...mirror(r), categories: [...deptInfo(d).categories] });
+  const area = (d: Dept, r: Rect): Area => ({ kind: 'area', id: `g-dept-${d}`, label: deptInfo(d).name, ...r, categories: [...deptInfo(d).categories] });
 
-  // Aisles, numbered from the entrance side (or from the far side). Slot i (from the left) holds shelves at x0+4i (left side) and x0+4i+3 (right side).
+  // Aisles, aisle 1 on the right (or on the left when the store numbers that way). Slot i (from the left) holds shelves at x0+4i and x0+4i+3.
   model.aisles.forEach((a, k) => {
-    const fromEntrance = arrangement.aisleOne === 'far' ? n - 1 - k : k;
-    const slot = entrance === 'left' ? fromEntrance : n - 1 - fromEntrance;
+    const slot = arrangement.aisleOne === 'far' ? k : n - 1 - k;
     const walk: Rect = { x: x0 + 1 + 4 * slot, y: yShelf, w: 2, h: L };
     aisles.push({ id: `g-aisle-${a.label}`, label: `Aisle ${a.label}`, ...walk, ...(a.seen ? {} : { guess: true }) });
     for (const side of ['L', 'R'] as const) {
@@ -234,16 +242,16 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
     }
   });
 
-  // Along the walls: each wall is a chain of shelf sections. Departments go on the wall the answers say,
-  // or their usual one: Produce up the entrance-side wall, Frozen up the far wall (or swapped),
-  // the rest along the back from the entrance side. Floral and Pharmacy take the front corners.
-  const sideRun = { from: yShelf, len: L };
-  const backRun = { from: 1, len: width - 2 };
-  const entranceWall: Wall = entrance === 'left' ? 'left' : 'right';
-  const farSide: Wall = entrance === 'left' ? 'right' : 'left';
+  // The walls: each a chain of shelf sections. Departments go on the wall the answers say, or their
+  // usual one: Produce, Bakery and Deli up the right wall (front to back), Frozen down the left (or
+  // Produce and Frozen swapped), Dairy, Seafood and Meat along the back. Floral and Pharmacy take
+  // the front corners.
+  const sideRun = { from: 2, len: yShelf + L - 2 }; // from just under the back wall to the front of the aisles
+  const backRun = { from: xLeftWall, len: xRightWall - xLeftWall + 1 };
   const produceFar = arrangement.produce === 'far';
   const back = BACK_WALL.filter((d) => model.depts.includes(d));
   if (arrangement.backWall === 'reversed') back.reverse();
+  const right = RIGHT_WALL.filter((d) => model.depts.includes(d));
   const placed: { sec: SectionModel; wall: Wall; along: number }[] = [];
   const corners: Dept[] = [];
   for (const sec of model.sections) {
@@ -251,16 +259,12 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
     let along = sec.along;
     if (!wall) {
       const d = sec.dept;
-      if (d === 'produce') wall = produceFar ? farSide : entranceWall;
-      else if (d === 'frozen') wall = produceFar ? entranceWall : farSide;
-      else if (d && back.includes(d)) {
-        wall = 'back';
-        const t = (back.indexOf(d) + 0.5) / back.length;
-        along ??= entrance === 'left' ? t : 1 - t;
-      } else if (d && (FRONT_CORNER_NEAR.includes(d) || FRONT_CORNER_FAR.includes(d))) {
-        corners.push(d);
-        continue;
-      } else wall = 'back';
+      if (d === 'produce') { wall = produceFar ? 'left' : 'right'; along ??= 0.15; }
+      else if (d === 'frozen') wall = produceFar ? 'right' : 'left';
+      else if (d && right.includes(d)) { wall = 'right'; along ??= 0.45 + (0.5 * (right.indexOf(d) + 0.5)) / right.length; }
+      else if (d && back.includes(d)) { wall = 'back'; along ??= (back.indexOf(d) + 0.5) / back.length; }
+      else if (d && (FRONT_RIGHT.includes(d) || FRONT_LEFT.includes(d))) { corners.push(d); continue; }
+      else wall = 'back';
     }
     placed.push({ sec, wall, along: along ?? 0.5 });
   }
@@ -275,8 +279,7 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
       const start = Math.round((done / total) * run.len);
       done += weight(sec);
       const end = i === here.length - 1 ? run.len : Math.round((done / total) * run.len);
-      const len = Math.max(1, end - start);
-      places.push(wallSection(sec, wall, start, len));
+      places.push(wallSection(sec, wall, start, Math.max(1, end - start)));
     });
   }
   /** One section of wall: `start` squares along it (side walls from the front, the back wall from the left). */
@@ -293,22 +296,22 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
       categories: info ? [...info.categories] : [...sec.categories], ...extra,
     };
     if (wall === 'back') return { ...base, orientation: 'horizontal', x: backRun.from + start, y: 1, back: -1 };
-    return { ...base, orientation: 'vertical', x: wall === 'left' ? 1 : width - 2, y, back: wall === 'left' ? -1 : 1 };
+    return { ...base, orientation: 'vertical', x: wall === 'left' ? xLeftWall : xRightWall, y, back: wall === 'left' ? -1 : 1 };
   }
 
   // Out in the open: tables, cases and stands in a band between the aisles and the checkouts.
-  const front = yShelf + L + 3 + band; // below the front cross aisle (and the open band)
+  const mid = Math.floor(width / 2);
   if (model.islands.length) {
     const yIsland = yShelf + L + 3;
     const taken: Rect[] = [];
     const walkX = (label: string) => aisles.find((x) => x.id === `g-aisle-${label}`)?.x;
     for (const isl of model.islands) {
-      // Where it goes, then either side of that until there's room.
+      // Where it goes (the door is in the middle of the front), then either side of that until there's room.
       let x: number;
       if (isl.aisle && walkX(isl.aisle) !== undefined) x = walkX(isl.aisle)! - 0.5;
-      else if (isl.near === 'entrance') x = mirror({ x: 6, y: 0, w: 3, h: 2 }).x;
-      else if (isl.near === 'far') x = mirror({ x: width - 9, y: 0, w: 3, h: 2 }).x;
-      else x = Math.floor(width / 2) - 1;
+      else if (isl.near === 'entrance') x = mid - 1;
+      else if (isl.near === 'far') x = 2;
+      else x = mid - 1;
       x = Math.round(x);
       let r: Rect = { x, y: yIsland, w: 3, h: 2 };
       for (let k = 1; k < 30 && (taken.some((t) => overlaps(t, r)) || r.x < 1 || r.x + r.w > width - 1); k++) {
@@ -326,16 +329,17 @@ export function generateParts(model: StoreModel, entrance: GeneratedMap['entranc
       });
     }
   }
-  for (const d of FRONT_CORNER_NEAR) if (corners.includes(d)) places.push(area(d, { x: 1, y: front, w: 4, h: 3 }));
-  for (const d of FRONT_CORNER_FAR) if (corners.includes(d)) places.push(area(d, { x: width - 5, y: front, w: 4, h: 3 }));
+  // Front corners, and the checkouts to the left of the door.
+  for (const d of FRONT_RIGHT) if (corners.includes(d)) places.push(area(d, { x: width - 6, y: front, w: 4, h: 3 }));
+  for (const d of FRONT_LEFT) if (corners.includes(d)) places.push(area(d, { x: 2, y: front, w: 4, h: 3 }));
+  const checkoutX = Math.max(corners.some((d) => FRONT_LEFT.includes(d)) ? 7 : 2, mid - 10);
   if (model.checkout) {
-    places.push({ kind: 'area', id: 'g-checkout', label: 'Checkout', x: Math.floor(width / 2) - 4, y: front, w: 8, h: 2, categories: [] });
+    places.push({ kind: 'area', id: 'g-checkout', label: 'Checkout', x: checkoutX, y: front, w: Math.min(8, mid - 1 - checkoutX), h: 2, categories: [] });
   }
-  const entrancePoint = mirror({ x: 2, y: height - 1, w: 1, h: 1 });
   return {
     width, height, places, aisles,
-    entrance: { x: entrancePoint.x, y: entrancePoint.y },
-    checkout: { x: Math.floor(width / 2), y: height - 2 },
+    entrance: { x: mid, y: height - 1 },
+    checkout: { x: checkoutX + 3, y: height - 2 },
   };
 }
 
@@ -353,7 +357,7 @@ export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout 
   const keptAisles = (layout.aisles ?? []).filter((a) => !isGenerated(a.id) || locked.has(a.id));
   // Aisles the shopper has given a number to elsewhere (e.g. the front half of a cut aisle) aren't generated again.
   const elsewhere = (label: string) => keptAisles.some((k) => k.id !== `g-aisle-${label}` && findAisle({ ...layout, aisles: [k] }, label));
-  const parts = generateParts({ ...model, aisles: model.aisles.filter((a) => !elsewhere(a.label)) }, gen.entrance, gen);
+  const parts = generateParts({ ...model, aisles: model.aisles.filter((a) => !elsewhere(a.label)) }, gen);
   const taken = kept.map(footprint);
   const places = [
     ...kept,

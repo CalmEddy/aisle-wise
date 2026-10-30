@@ -77,11 +77,11 @@ export interface GeoPoint {
 
 /** How a generated store is arranged, beyond which corner the entrance is in. Unset means the usual. */
 export interface Arrangement {
-  /** Aisle 1 is the aisle nearest the entrance (usual) or the farthest. */
+  /** Aisle 1 on the right, numbers going up to the left (usual: 'near'), or aisle 1 on the left ('far'). */
   aisleOne?: 'near' | 'far';
-  /** Produce along the entrance-side wall and Frozen along the far wall (usual), or the other way round. */
+  /** Produce up the right wall and Frozen down the left (usual: 'near'), or the other way round ('far'). */
   produce?: 'near' | 'far';
-  /** The back-wall departments in the usual order from the entrance side, or reversed. */
+  /** The back-wall departments in the usual order left to right (Dairy, Seafood, Meat), or reversed. */
   backWall?: 'usual' | 'reversed';
 }
 
@@ -92,7 +92,7 @@ export type LayoutSetting = 'entrance' | keyof Arrangement;
 export interface GeneratedMap extends Arrangement {
   /** Regenerate automatically when answers change. */
   enabled: boolean;
-  /** Which front corner the entrance is in (Produce is on that side; aisle 1 is nearest it). */
+  /** No longer used: every generated map has its entrance in the middle of the front (kept so older saved maps load). */
   entrance: 'left' | 'right';
   /** Generated parts (by id) the shopper changed or deleted: never regenerated. */
   locked: string[];

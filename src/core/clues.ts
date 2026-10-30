@@ -198,47 +198,28 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
 // Walls and open floor, as you face into the store from the entrance
 
 /**
- * The store seen from the entrance: `toMap(u, v)` turns "across" (u: 0 left
- * wall → 1 right wall) and "deep" (v: 0 front → 1 back) into map squares.
- * The front is the edge of the map nearest the entrance.
+ * The store seen from the entrance. Every map is drawn the same way round:
+ * the top is the back of the store and the bottom line is the front. The
+ * outermost places on the left, right and top are the walls.
+ * `toMap(u, v)` turns "across" (u: 0 left wall → 1 right wall) and "deep"
+ * (v: 0 front → 1 back wall) into map squares.
  */
 export function storeFrame(l: StoreLayout) {
-  const W = l.width;
-  const H = l.height;
-  const e = l.entrance;
-  const edges = [
-    { front: 'bottom', d: H - 1 - e.y },
-    { front: 'top', d: e.y },
-    { front: 'left', d: e.x },
-    { front: 'right', d: W - 1 - e.x },
-  ].sort((a, b) => a.d - b.d);
-  const front = edges[0].front;
-  const toMap = (u: number, v: number): Point => {
-    switch (front) {
-      case 'top': return { x: (1 - u) * W, y: v * H };
-      case 'left': return { x: v * W, y: u * H };
-      case 'right': return { x: (1 - v) * W, y: (1 - u) * H };
-      default: return { x: u * W, y: (1 - v) * H };
-    }
-  };
-  const toStore = (p: Point) => {
-    switch (front) {
-      case 'top': return { u: 1 - p.x / W, v: p.y / H };
-      case 'left': return { u: p.y / H, v: p.x / W };
-      case 'right': return { u: 1 - p.y / H, v: 1 - p.x / W };
-      default: return { u: p.x / W, v: 1 - p.y / H };
-    }
-  };
-  /** How far (squares) a rectangle is from a wall. */
+  const boxes = l.places.map(footprint);
+  const bx = boxes.length ? Math.min(...boxes.map((r) => r.x)) : 0;
+  const by = boxes.length ? Math.min(...boxes.map((r) => r.y)) : 0;
+  const bw = boxes.length ? Math.max(...boxes.map((r) => r.x + r.w)) - bx : l.width;
+  // Deep runs from the front line (the bottom of the map) to the back wall.
+  const bh = l.height - by;
+  const toMap = (u: number, v: number): Point => ({ x: bx + u * bw, y: by + (1 - v) * bh });
+  const toStore = (p: Point) => ({ u: bw ? (p.x - bx) / bw : 0.5, v: bh ? 1 - (p.y - by) / bh : 0.5 });
+  /** How far (squares) a rectangle is from a wall: the outermost places on that side. */
   const fromWall = (r: Rect, wall: Wall) => {
-    const corners = [toStore({ x: r.x, y: r.y }), toStore({ x: r.x + r.w, y: r.y + r.h })];
-    const across = front === 'left' || front === 'right' ? H : W;
-    const deep = front === 'left' || front === 'right' ? W : H;
-    if (wall === 'left') return Math.min(...corners.map((c) => c.u)) * across;
-    if (wall === 'right') return (1 - Math.max(...corners.map((c) => c.u))) * across;
-    return (1 - Math.max(...corners.map((c) => c.v))) * deep;
+    if (wall === 'left') return r.x - bx;
+    if (wall === 'right') return bx + bw - (r.x + r.w);
+    return r.y - by;
   };
-  return { front, toMap, toStore, fromWall };
+  return { front: 'bottom' as const, toMap, toStore, fromWall };
 }
 
 /** Where on a wall a part is, in store terms (u across, v deep). */

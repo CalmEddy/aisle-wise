@@ -11,6 +11,7 @@ const products: Product[] = [
   aisle('a1', '1', 'breakfast'), aisle('a2', '2', 'coffee'), aisle('a3', '3', 'baking'), aisle('a4', '4', 'pasta'), aisle('a5', '5', 'canned'), aisle('a6', '6', 'condiments'),
   { id: 'milk', name: 'milk', categoryId: 'dairy', clues: { s: { kind: 'dept', dept: 'dairy' } } },
   { id: 'bread', name: 'bread', categoryId: 'bakery', clues: { s: { kind: 'dept', dept: 'bakery' } } },
+  { id: 'steak', name: 'steak', categoryId: 'meat', clues: { s: { kind: 'dept', dept: 'meat' } } },
 ];
 const catalog = new Catalog(products, []);
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
@@ -19,13 +20,13 @@ const store = regenerate(blank, buildModel(products, 's'));
 const trip = (names: string[], start = 0): Trip => ({ layoutId: 's', start, picks: names.map((name, i) => ({ productId: name, name, at: start + i })) });
 
 describe('learning the arrangement from trips', () => {
-  it('needs a few picks first, but asks about the entrance once there are trips', () => {
+  it('needs a few picks first, and never asks about the entrance (it’s mid-front)', () => {
     const l = learnArrangement(store, products, [trip(['apples', 'a1'])], catalog);
     expect(l.apply).toEqual({});
-    expect(l.question?.setting).toBe('entrance');
+    expect(l.question).toBeUndefined();
   });
 
-  it('sees that aisle 1 is the far end when shoppers walk 6 → 1', () => {
+  it('sees that aisle 1 is on the left when shoppers go from Produce (right wall) to aisle 6 first', () => {
     const walk = ['apples', 'a6', 'a5', 'a4', 'a3', 'a2', 'a1'];
     const l = learnArrangement(store, products, [trip(walk), trip(walk, 1e9)], catalog);
     expect(l.apply).toEqual({ aisleOne: 'far' });
@@ -39,8 +40,9 @@ describe('learning the arrangement from trips', () => {
   });
 
   it('learns the back wall runs the other way', () => {
-    // Usual order puts Bakery on the entrance side, Dairy far; these shoppers get milk first.
-    const walk = ['apples', 'milk', 'bread', 'a6', 'a1'];
+    // Usually Dairy is at the left end of the back wall and Meat at the right, next to the bakery;
+    // these shoppers come from the bakery (right wall) to the milk first, then the steak, then the far aisles.
+    const walk = ['apples', 'bread', 'milk', 'steak', 'a6', 'a5', 'a1'];
     const l = learnArrangement(store, products, [trip(walk), trip(walk, 1e9)], catalog);
     expect(l.apply.backWall).toBe('reversed');
   });
@@ -48,7 +50,7 @@ describe('learning the arrangement from trips', () => {
   it('never changes what the shopper said', () => {
     const walk = ['apples', 'a6', 'a5', 'a4', 'a3', 'a2', 'a1'];
     const sure = { ...store, gen: { ...store.gen!, sure: ['aisleOne' as const] } };
-    expect(learnArrangement(sure, products, [trip(walk), trip(walk, 1e9)], catalog).apply).toEqual({});
+    expect(learnArrangement(sure, products, [trip(walk), trip(walk, 1e9)], catalog).apply.aisleOne).toBeUndefined();
   });
 
   it('asks one question when the walks can’t tell', () => {
@@ -61,6 +63,7 @@ describe('learning the arrangement from trips', () => {
   });
 
   it('describes changes in plain words', () => {
-    expect(describeArrangement({ aisleOne: 'far' })).toBe('aisle 1 is the farthest from the door');
+    expect(describeArrangement({ aisleOne: 'far' })).toBe('aisle 1 is on the left');
+    expect(describeArrangement({ produce: 'far' })).toBe('Produce is along the left wall');
   });
 });

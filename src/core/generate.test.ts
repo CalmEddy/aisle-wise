@@ -29,40 +29,38 @@ describe('map from aisle answers', () => {
     expect(twelve.aisles.map((a) => a.label)).toEqual(['1', '2B']);
   });
 
-  it('generates a supermarket: aisles from the entrance side, departments round the walls', () => {
+  it('draws every store the same way: back at the top, entrance mid-front, aisle 1 on the right', () => {
     const l = regenerate(blank, buildModel(products, 's'));
     const labels = l.places.map((p) => p.label);
     expect(labels).toEqual(expect.arrayContaining(['1L', '1R', '3L', '3R', 'Produce', 'Frozen', 'Dairy', 'Checkout']));
     expect(l.aisles!.map((a) => `${a.label}${a.guess ? '?' : ''}`)).toEqual(['Aisle 1?', 'Aisle 2?', 'Aisle 3']);
-    // Aisle 1 nearest the entrance (left); Produce on the entrance side, Frozen on the far side.
+    const p = (id: string) => l.places.find((x) => x.id === id)!;
+    // Aisle 1 on the right, numbers going up to the left.
+    expect(p('g-shelf-1-L').x).toBeGreaterThan(p('g-shelf-3-L').x);
+    // Produce up the right wall, Frozen down the left, Dairy along the back (top): the outermost shelves.
+    expect(p('g-dept-produce')).toMatchObject({ kind: 'shelf', orientation: 'vertical', back: 1 });
+    expect(p('g-dept-produce').x).toBeGreaterThan(p('g-shelf-1-R').x);
+    expect(p('g-dept-frozen').x).toBeLessThan(p('g-shelf-3-L').x);
+    expect(p('g-dept-dairy')).toMatchObject({ orientation: 'horizontal', y: 1, back: -1 });
+    const xs = l.places.filter((x) => x.kind === 'shelf').map((x) => x.x);
+    expect(p('g-dept-produce').x).toBe(Math.max(...xs));
+    expect(p('g-dept-frozen').x).toBe(Math.min(...xs));
+    // The entrance in the middle of the bottom line; the checkouts beside it.
+    expect(l.entrance).toEqual({ x: Math.floor(l.width / 2), y: l.height - 1 });
+    expect(p('g-checkout').y).toBeGreaterThan(p('g-shelf-1-L').y + 14);
+    // Categories on the shelf, back of the store (top) first.
+    expect((p('g-shelf-3-L') as Shelf).categories).toEqual(['breakfast', 'bakery']);
+    // Everything reachable.
+    const floor = new Floor(l);
+    for (const q of l.places) expect(floor.reachable(l.entrance, { x: q.x, y: q.y })).toBe(true);
+  });
+
+  it('can number the aisles from the left and swap Produce and Frozen', () => {
+    const l = regenerate({ ...blank, gen: { ...blank.gen!, aisleOne: 'far', produce: 'far' } }, buildModel(products, 's'));
     const x = (id: string) => l.places.find((p) => p.id === id)!.x;
     expect(x('g-shelf-1-L')).toBeLessThan(x('g-shelf-3-L'));
     expect(x('g-dept-produce')).toBeLessThan(x('g-shelf-1-L'));
     expect(x('g-dept-frozen')).toBeGreaterThan(x('g-shelf-3-R'));
-    expect(l.entrance.x).toBeLessThan(l.width / 2);
-    // Categories on the shelf, back of the store (top) first.
-    expect((l.places.find((p) => p.id === 'g-shelf-3-L') as Shelf).categories).toEqual(['breakfast', 'bakery']);
-    // Everything reachable.
-    const floor = new Floor(l);
-    for (const p of l.places) expect(floor.reachable(l.entrance, { x: p.x, y: p.y })).toBe(true);
-  });
-
-  it('entrance on the right mirrors it', () => {
-    const l = regenerate({ ...blank, gen: { ...blank.gen!, entrance: 'right' } }, buildModel(products, 's'));
-    const x = (id: string) => l.places.find((p) => p.id === id)!.x;
-    expect(x('g-shelf-1-L')).toBeGreaterThan(x('g-shelf-3-L'));
-    expect(x('g-dept-produce')).toBeGreaterThan(x('g-shelf-1-R'));
-    expect(l.entrance.x).toBeGreaterThan(l.width / 2);
-  });
-
-  it('can number the aisles from the far side and swap Produce and Frozen', () => {
-    const l = regenerate({ ...blank, gen: { ...blank.gen!, aisleOne: 'far', produce: 'far' } }, buildModel(products, 's'));
-    const x = (id: string) => l.places.find((p) => p.id === id)!.x;
-    expect(x('g-shelf-1-L')).toBeGreaterThan(x('g-shelf-3-L'));
-    expect(x('g-dept-produce')).toBeGreaterThan(x('g-shelf-1-R'));
-    expect(x('g-dept-frozen')).toBeLessThan(x('g-shelf-3-L'));
-    expect(l.entrance.x).toBeLessThan(l.width / 2);
-    // Maps made with the usual settings keep their key.
     expect(l.gen!.key).toContain('"a1":"far"');
     expect(regenerate(blank, buildModel(products, 's')).gen!.key).not.toContain('a1');
   });
@@ -107,8 +105,9 @@ describe('map from aisle answers', () => {
   });
 
   it('sizes the store to fit', () => {
-    const parts = generateParts(buildModel(products, 's'), 'left');
-    expect(parts.width).toBe(4 * 3 + 12);
+    const parts = generateParts(buildModel(products, 's'));
+    // Left wall, walkway, three aisles of 4, walkway, right wall, and a square of margin each side.
+    expect(parts.width).toBe(4 * 3 + 8);
     expect(parts.places.every((p) => p.x >= 0 && p.x < parts.width)).toBe(true);
   });
 });
@@ -157,7 +156,9 @@ describe('walls as chains of sections, and things out in the open', () => {
     const fcase = get('g-open-middle-case-frozen');
     expect(table.label).toBe('Produce table');
     expect(fcase).toMatchObject({ label: 'Freezer case', temp: 'frozen' });
-    expect(table.x).toBeGreaterThan(fcase.x); // the door is on the right
+    // The table near the door is nearer the middle of the front (where the door is) than the case.
+    const fromDoor = (p: { x: number; w?: number }) => Math.abs(p.x + 1.5 - l.entrance.x);
+    expect(fromDoor(table)).toBeLessThanOrEqual(fromDoor(fcase));
     const shelfEnd = Math.max(...l.places.filter((p) => p.kind === 'shelf' && p.orientation === 'vertical' && p.id.startsWith('g-shelf')).map((p) => p.y + (p as Shelf).length));
     expect(table.y).toBeGreaterThan(shelfEnd);
   });

@@ -99,7 +99,7 @@ test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page 
   expect((await saved<any>(page, 'display')).buildMoreTools).toBe(true);
   await page.getByRole('button', { name: 'Cut aisles' }).click();
   const l0 = await layout(page);
-  await dragMap(page, [5, 12], [l0.width - 7, 13]);
+  await dragMap(page, [3, 12], [l0.width - 4, 13]); // across aisles 1–5, not the wall shelves
   await expect(page.locator('.cut-panel')).toContainText('10 shelves · 5 aisles');
   await page.getByRole('button', { name: /^New numbers \(6–10\)/ }).click();
   await page.locator('.cut-panel').getByRole('button', { name: /^Cut 10 shelves/ }).click();

@@ -11,14 +11,15 @@ import type { Arrangement, GeneratedMap, LayoutSetting, Point, Product, StoreLay
  *
  * Shoppers walk a store sensibly: in through the entrance, along the way,
  * out at the checkout. So for each way the store could be arranged (aisle 1
- * near the door or far from it, Produce near the door or across the store,
- * the back wall one way round or the other), we measure how far the
- * recorded trips would have walked. The arrangement with the shortest walks
- * is most likely right. When it's clearly shorter, the map is updated; when
- * two arrangements are about the same, we ask one question instead.
+ * on the right or the left, Produce on the right wall or the left, the back
+ * wall one way round or the other), we measure how far the recorded trips
+ * would have walked. The arrangement with the shortest walks is most likely
+ * right. When it's clearly shorter, the map is updated; when two
+ * arrangements are about the same, we ask one question instead.
  *
- * Which corner the entrance is in can't be learned this way (a store and
- * its mirror image have the same walks), so that's always a question.
+ * Every map is drawn the same way round (the back of the store at the top,
+ * the entrance in the middle of the front), so there's no mirror image to
+ * tell apart.
  */
 
 /** How much longer the next-best arrangement's walks must be before we're sure (8%). */
@@ -69,31 +70,25 @@ export const unplacedBack = (model: StoreModel) => BACK_WALL.filter((d) => unpla
 export function questionFor(setting: LayoutSetting, model: StoreModel): LayoutQuestion | undefined {
   switch (setting) {
     case 'entrance':
-      return {
-        setting,
-        text: 'Walking in the door, are the aisles to your left or your right?',
-        options: [
-          { label: 'To my left', patch: { entrance: 'right' } },
-          { label: 'To my right', patch: { entrance: 'left' } },
-        ],
-      };
+      // The entrance is taken to be in the middle of the front; it's dragged on the map if not.
+      return undefined;
     case 'aisleOne':
       return {
         setting,
-        text: 'Walking in, is Aisle 1 the nearest aisle or the farthest?',
+        text: 'Walking in, is Aisle 1 on the right side of the store or the left?',
         options: [
-          { label: 'Nearest', patch: { aisleOne: 'near' } },
-          { label: 'Farthest', patch: { aisleOne: 'far' } },
+          { label: 'On the right', patch: { aisleOne: 'near' } },
+          { label: 'On the left', patch: { aisleOne: 'far' } },
         ],
       };
     case 'produce': {
       const produce = unplaced(model, 'produce');
       return {
         setting,
-        text: produce ? 'Is Produce near the door, or across the store?' : 'Is the frozen food near the door, or across the store?',
+        text: produce ? 'Walking in, is Produce along the right wall or the left wall?' : 'Walking in, is the frozen food along the left wall or the right wall?',
         options: [
-          { label: 'Near the door', patch: { produce: produce ? 'near' : 'far' } },
-          { label: 'Across the store', patch: { produce: produce ? 'far' : 'near' } },
+          { label: produce ? 'Right wall' : 'Left wall', patch: { produce: 'near' } },
+          { label: produce ? 'Left wall' : 'Right wall', patch: { produce: 'far' } },
         ],
       };
     }
@@ -104,7 +99,7 @@ export function questionFor(setting: LayoutSetting, model: StoreModel): LayoutQu
       const last = deptName(back[back.length - 1]);
       return {
         setting,
-        text: `Along the back wall, which is nearer the door’s side: ${first} or ${last}?`,
+        text: `Along the back wall, which is on the left: ${first} or ${last}?`,
         options: [
           { label: first, patch: { backWall: 'usual' } },
           { label: last, patch: { backWall: 'reversed' } },
@@ -150,10 +145,7 @@ export function learnArrangement(layout: StoreLayout, products: Product[], trips
   // Only picks every arrangement can place count (so all are measured on the same walk).
   const counts = mine.map((t, ti) => t.picks.map((_, pi) => candidates.every((c) => c.points[ti][pi])));
   const picks = counts.flat().filter(Boolean).length;
-  const asked = (): LayoutQuestion | undefined => {
-    if (sure.has('entrance') || skipped.has('entrance') || model.aisles.length < 2 || !mine.length) return undefined;
-    return questionFor('entrance', model);
-  };
+  const asked = (): LayoutQuestion | undefined => undefined;
   if (picks < MIN_PICKS || !free.length) return { apply: {}, question: asked(), picks };
 
   const scores = candidates.map((c) => {
@@ -188,15 +180,15 @@ export function learnArrangement(layout: StoreLayout, products: Product[], trips
   return { apply, question: question ?? asked(), picks };
 }
 
-/** What changed, in a sentence ("aisle 1 is the farthest from the door"). */
+/** What changed, in a sentence ("aisle 1 is on the left"). */
 export function describeArrangement(a: Arrangement, model?: StoreModel): string {
   const parts: string[] = [];
-  if (a.aisleOne) parts.push(a.aisleOne === 'far' ? 'aisle 1 is the farthest from the door' : 'aisle 1 is nearest the door');
+  if (a.aisleOne) parts.push(a.aisleOne === 'far' ? 'aisle 1 is on the left' : 'aisle 1 is on the right');
   if (a.produce) {
     const produce = !model || model.depts.includes('produce');
     parts.push(produce
-      ? (a.produce === 'far' ? 'Produce is across the store' : 'Produce is near the door')
-      : (a.produce === 'far' ? 'frozen food is near the door' : 'frozen food is across the store'));
+      ? (a.produce === 'far' ? 'Produce is along the left wall' : 'Produce is along the right wall')
+      : (a.produce === 'far' ? 'frozen food is along the right wall' : 'frozen food is along the left wall'));
   }
   if (a.backWall) parts.push(a.backWall === 'reversed' ? 'the back wall runs the other way' : 'the back wall runs the usual way');
   return parts.join('; ');

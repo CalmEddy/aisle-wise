@@ -75,7 +75,7 @@ test('ask later, then review before you go', async ({ page }) => {
   await expect(page.locator('.where-panel')).toContainText('Where was Jam?');
 });
 
-test('learns which way round the store is from trips, then asks one question', async ({ page }) => {
+test('learns which way round the store is from trips, and redraws the map', async ({ page }) => {
   const aisle = (name: string, n: string, c: string) => ({ id: name, name, categoryId: c, clues: { s1: { kind: 'aisle', aisle: n, pos: 'middle' } } });
   const products = [
     { id: 'Apples', name: 'Apples', categoryId: 'fruit', clues: { s1: { kind: 'dept', dept: 'produce' } } },
@@ -87,19 +87,21 @@ test('learns which way round the store is from trips, then asks one question', a
   const trip = (start: number) => ({ layoutId: 's1', start, picks: walk.map((n, i) => ({ productId: n, name: n, at: start + i * 60000 })) });
   await fresh(page, {
     products,
-    layouts: [{ id: 's1', name: 'Test Mart', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 }, gen: { enabled: true, entrance: 'left', locked: [] } }],
+    // Produce is known to be on the right wall, so walking from it straight to aisle 6 says aisle 1 is on the left.
+    layouts: [{ id: 's1', name: 'Test Mart', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 }, gen: { enabled: true, entrance: 'left', locked: [], sure: ['produce'] } }],
     activeLayout: 's1',
     trips: [trip(t0), trip(t0 + 864e5)],
     items: [{ id: 'i1', name: 'Cereal', productId: 'Cereal', done: false }],
   });
-  await expect(page.locator('.toast')).toContainText('aisle 1 is the farthest from the door');
-  const gen = (await saved<any[]>(page, 'layouts'))[0];
-  expect(gen.gen.aisleOne).toBe('far');
+  await expect(page.locator('.toast')).toContainText('aisle 1 is on the left');
+  const l = (await saved<any[]>(page, 'layouts'))[0];
+  expect(l.gen.aisleOne).toBe('far');
+  const x = (id: string) => l.places.find((p: any) => p.id === id).x;
+  expect(x('g-shelf-1-L')).toBeLessThan(x('g-shelf-6-L'));
+  // The entrance is in the middle of the front; nothing asks about it.
+  expect(l.entrance).toEqual({ x: Math.floor(l.width / 2), y: l.height - 1 });
   await tick(page, 'Cereal');
-  const q = page.locator('.trip-done-card .layout-question');
-  await expect(q).toContainText('are the aisles to your left or your right?');
-  await q.getByRole('button', { name: 'To my right' }).click();
-  expect((await saved<any[]>(page, 'layouts'))[0].gen).toMatchObject({ entrance: 'left', sure: ['entrance'] });
+  await expect(page.locator('.trip-done-card .layout-question')).toHaveCount(0);
 });
 
 test('the row shows where an answered item is', async ({ page }) => {
