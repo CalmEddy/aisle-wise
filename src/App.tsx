@@ -926,7 +926,9 @@ export default function App() {
             },
           }}
           setItemCategory={setItemCategory}
-          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip }}
+          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip,
+            place: (ref, placement) => setGen({ placements: { ...layout.gen?.placements, [ref]: placement } }),
+            skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); } }}
           undo={undo}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}

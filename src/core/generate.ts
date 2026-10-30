@@ -1,6 +1,6 @@
 import { aisleNumber, DEPTS, findAisle, guessDept } from './clues';
 import { footprint } from './geometry';
-import type { AisleLabel, AislePos, Area, Arrangement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { AisleLabel, AislePos, Area, Arrangement, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -180,7 +180,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
 }
 
 /** What a map is generated with: the entrance corner and the arrangement. */
-export type GenSettings = Arrangement & { entrance: GeneratedMap['entrance'] };
+export type GenSettings = Arrangement & { entrance: GeneratedMap['entrance']; placements?: Record<string, Placement> };
 
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
@@ -190,6 +190,7 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
     ...(settings.aisleOne === 'far' && { a1: 'far' }),
     ...(settings.produce === 'far' && { p: 'far' }),
     ...(settings.backWall === 'reversed' && { b: 'rev' }),
+    ...(settings.placements && Object.keys(settings.placements).length && { pl: settings.placements }),
     a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : a.chilled ? 2 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
     s: model.sections.map((x) => [x.key, x.wall ?? '', x.along === undefined ? '' : Math.round(x.along * 20), Math.min(x.count, 9), x.temp ?? '', x.categories]),
@@ -208,7 +209,8 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, arrangement: Arrangement = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement> } = {}) {
+  const placements = arrangement.placements ?? {};
   const n = model.aisles.length;
   const L = AISLE_LENGTH;
   // Across: left wall shelf (x 1), a 2-square walkway, the aisles (4 squares each), a walkway, the right wall shelf.
@@ -263,10 +265,27 @@ export function generateParts(model: StoreModel, arrangement: Arrangement = {}) 
       else if (d === 'frozen') wall = produceFar ? 'right' : 'left';
       else if (d && right.includes(d)) { wall = 'right'; along ??= 0.45 + (0.5 * (right.indexOf(d) + 0.5)) / right.length; }
       else if (d && back.includes(d)) { wall = 'back'; along ??= (back.indexOf(d) + 0.5) / back.length; }
-      else if (d && (FRONT_RIGHT.includes(d) || FRONT_LEFT.includes(d))) { corners.push(d); continue; }
+      else if (d && (FRONT_RIGHT.includes(d) || FRONT_LEFT.includes(d)) && !placements[`sec:${sec.key}`]) { corners.push(d); continue; }
       else wall = 'back';
     }
     placed.push({ sec, wall, along: along ?? 0.5 });
+  }
+  // Where the shopper placed sections: next to another one (just before or after it), or on a wall.
+  // Placements can refer to each other, so settle them a few times over.
+  for (let pass = 0; pass < 4; pass++) {
+    for (const p of placed) {
+      const pl = placements[`sec:${p.sec.key}`];
+      if (!pl) continue;
+      if (pl.of.startsWith('wall:')) {
+        const w = pl.of.slice(5) as Wall;
+        if (p.wall !== w) { p.wall = w; p.along = pl.side === 'before' ? 0 : pl.side === 'after' ? 1 : 0.5; }
+        continue;
+      }
+      const target = placed.find((t) => `sec:${t.sec.key}` === pl.of && t !== p);
+      if (!target) continue;
+      p.wall = target.wall;
+      p.along = target.along + (pl.side === 'before' ? -0.001 : 0.001);
+    }
   }
   const weight = (sec: SectionModel) => 1 + 0.25 * Math.min(sec.count - 1, 8);
   for (const wall of ['left', 'back', 'right'] as Wall[]) {
@@ -308,7 +327,11 @@ export function generateParts(model: StoreModel, arrangement: Arrangement = {}) 
     for (const isl of model.islands) {
       // Where it goes (the door is in the middle of the front), then either side of that until there's room.
       let x: number;
-      if (isl.aisle && walkX(isl.aisle) !== undefined) x = walkX(isl.aisle)! - 0.5;
+      const pl = placements[`isl:${isl.key}`];
+      const byAisle = pl?.of.startsWith('aisle:') ? pl.of.slice(6) : isl.aisle;
+      if (pl?.of === 'wall:left') x = 2;
+      else if (pl?.of === 'wall:right') x = width - 5;
+      else if (byAisle && walkX(byAisle) !== undefined) x = walkX(byAisle)! - 0.5;
       else if (isl.near === 'entrance') x = mid - 1;
       else if (isl.near === 'far') x = 2;
       else x = mid - 1;

@@ -12,7 +12,7 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { Clue, ListItem, Place, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
+import type { Clue, ListItem, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
@@ -37,6 +37,8 @@ import { type BuildNote, BuildPanel, BuildBanner } from './BuildPanel';
 import { typicalWhere, whereText } from './whereText';
 import { AisleEditor } from './AisleEditor';
 import { WhereList } from './WhereList';
+import { PlacementCard } from './PlacementCard';
+import { pendingPlacements } from '../core/placement';
 import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves } from '../core/aisles';
@@ -81,6 +83,10 @@ interface Props {
     answer: (q: LayoutQuestion, option: number | undefined) => void;
     /** The trip in progress here: first and last check-off (ms). */
     trip?: { first: number; last: number };
+    /** Places something relative to what's on the map ("Bakery behind Produce"). Returns what Undo restores. */
+    place: (ref: string, placement: Placement) => Snapshot;
+    /** Not sure where it goes: stop asking. */
+    skipPlacement: (ref: string) => void;
   };
   position: Point;
   setPosition: (p: Point) => void;
@@ -679,6 +685,10 @@ export function ShoppingView(props: Props) {
     ...d, askAtCheckout: [...(d.askAtCheckout ?? []).filter((id) => id !== layout.id), ...(on ? [layout.id] : [])],
   }));
   const [listOpen, setListOpen] = useState(false);
+  // Things the map has only guessed the place of: asked one at a time, relative to what's on the map.
+  const pending = useMemo(() => (building ? [] : pendingPlacements(layout, catalog.products)), [layout, catalog.products, building]);
+  const [placeLater, setPlaceLater] = useState<string[]>([]);
+  const placing = pending.find((sub) => !placeLater.includes(sub.ref));
   const laterHere = (askLater[layout.id] ?? [])
     .map((id) => items.find((i) => i.id === id))
     .filter((i): i is ListItem => !!i && isUnknownHere(i));
@@ -1296,6 +1306,21 @@ export function ShoppingView(props: Props) {
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
         />
       )}
+      {placing && !whereBarFor && !whereFor && !adding && !listOpen && !menuFor && (!askAtCheckout || tripDone) && (
+        <PlacementCard
+          key={placing.ref}
+          layout={layout}
+          products={catalog.products}
+          subject={placing}
+          look={props.mapLook}
+          onPlace={(placement, label) => {
+            const snapshot = props.where.place(placing.ref, placement);
+            setToast({ snapshot, added: [], mode: 'list', note: `${placing.name}: ${label}` });
+          }}
+          onNotSure={() => props.where.skipPlacement(placing.ref)}
+          onLater={() => setPlaceLater((l) => [...l, placing.ref])}
+        />
+      )}
       {listOpen && !whereFor && (
         <WhereList
           items={laterHere}
@@ -1317,7 +1342,7 @@ export function ShoppingView(props: Props) {
           onClose={() => setListOpen(false)}
         />
       )}
-      {toast && !drag && !note && !whereBarFor && (
+      {toast && !drag && !note && !whereBarFor && !(placing && !whereFor && !adding && !listOpen && !menuFor && (!askAtCheckout || tripDone)) && (
         <ToastBar
           toast={toast}
           layout={layout}

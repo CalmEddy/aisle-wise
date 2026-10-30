@@ -195,3 +195,31 @@ test('no question when the map already knows the category; or all at checkout in
   await expect(list.locator('.where-bar')).toHaveCount(1);
   await expect(list.getByRole('checkbox')).toBeChecked();
 });
+
+test('where’s the Bakery? tap a spot on the mini-map, see the preview, place it', async ({ page }) => {
+  await addItems(page, 'Apples, Bread');
+  await tick(page, 'Apples');
+  await page.locator('.where-bar').getByRole('button', { name: 'Right wall →' }).click();
+  await tick(page, 'Bread');
+  await page.locator('.where-bar .btn.primary').click(); // Bakery: a department, but where?
+  const card = page.getByRole('group', { name: 'Where’s Bakery?' });
+  await expect(card).toBeVisible();
+  // Tap the numbered spot on the mini-map for "behind Produce".
+  const labels = await card.locator('.placement-options .chip').allInnerTexts();
+  const n = labels.findIndex((t) => t.includes('behind Produce')) + 1;
+  await card.locator('.map-ghost.next', { hasText: String(n) }).click();
+  await expect(card).toContainText('Like this?');
+  await expect(card.locator('svg.map .place.changed')).toHaveCount(1); // Bakery outlined in the preview
+  await card.getByRole('button', { name: 'Place here' }).click();
+  await expect(card).toHaveCount(0);
+  const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  expect(l.gen.placements).toEqual({ 'sec:bakery': { of: 'sec:produce', side: 'after' } });
+  const p = (id: string) => l.places.find((x: any) => x.id === id);
+  expect(p('g-dept-bakery').x).toBe(p('g-dept-produce').x);
+  expect(p('g-dept-bakery').y).toBeLessThan(p('g-dept-produce').y);
+  // Undo puts it back to the guess, and asks again.
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toBeVisible();
+  await page.getByRole('button', { name: /Not sure/ }).click();
+  await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toHaveCount(0);
+});

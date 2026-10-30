@@ -102,6 +102,22 @@ export interface GeneratedMap extends Arrangement {
   sure?: LayoutSetting[];
   /** Settings the shopper wasn't sure about when asked: not asked again. */
   skipped?: LayoutSetting[];
+  /** Where the shopper placed things relative to others (by part: "sec:bakery", "isl:…"). */
+  placements?: Record<string, Placement>;
+  /** Parts the shopper wasn't sure where to place: not asked again. */
+  placementsSkipped?: string[];
+}
+
+/**
+ * Where something goes, relative to something already on the map: next to
+ * a wall section (before or after it along the wall: side walls run front to
+ * back, the back wall left to right), on an empty wall ("wall:left"), or out
+ * in the open by an aisle ("aisle:5").
+ */
+export interface Placement {
+  /** "sec:<section>", "wall:left|back|right" or "aisle:<label>". */
+  of: string;
+  side?: 'before' | 'after';
 }
 
 /** A label for a walkway: the rectangle of floor it names. */
