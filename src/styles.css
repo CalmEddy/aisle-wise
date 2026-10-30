@@ -866,3 +866,9 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .where-bar-pad-value { flex: 1; font-size: 1.1rem; }
 .where-bar-keys { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .where-bar-keys .key { padding: 10px 0; font-size: 1.1rem; }
+
+/* ---- "Where were these?" list (at checkout) ---- */
+.where-list { max-height: 88vh; overflow-y: auto; }
+.where-list .where-bar { position: static; transform: none; width: auto; max-width: none; margin: 0 0 10px; box-shadow: none; border-color: var(--line); }
+.where-list-mode { margin-top: 8px; }
+.where-bar-checkout { font-size: 0.85rem; padding: 4px 2px; }

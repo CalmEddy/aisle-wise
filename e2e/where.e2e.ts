@@ -69,10 +69,15 @@ test('ask later, then review before you go', async ({ page }) => {
   await page.locator('.where-bar').getByRole('button', { name: 'Later' }).click();
   const review = page.locator('.trip-done-card').getByRole('button', { name: /Say where 2 things were/ });
   await review.click();
-  await expect(page.locator('.where-panel')).toContainText('Where was Bread?');
-  await page.getByRole('tab', { name: 'Department' }).click();
-  await page.getByRole('button', { name: /Bakery/ }).click();
-  await expect(page.locator('.where-panel')).toContainText('Where was Jam?');
+  const list = page.getByRole('dialog', { name: 'Where were these?' });
+  await expect(list.locator('.where-bar')).toHaveCount(2);
+  await list.locator('.where-bar', { hasText: 'Bread' }).locator('.btn.primary').click(); // Bakery
+  // Other… opens the full panel for that one, then comes back to the list.
+  await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: 'Other…' }).click();
+  await page.getByRole('tab', { name: 'End-cap' }).click();
+  await page.getByLabel('Aisle number').fill('4');
+  await page.getByRole('button', { name: 'Front end' }).click();
+  await expect(list).toContainText('All placed');
 });
 
 test('learns which way round the store is from trips, and redraws the map', async ({ page }) => {
@@ -166,4 +171,27 @@ test('quick bar: next aisles in one tap, number buttons, walls, fridge/freezer',
     { kind: 'aisle', aisle: '3' }, { kind: 'aisle', aisle: '5' }, { kind: 'aisle', aisle: '7' },
     { kind: 'wall', wall: 'right' }, { kind: 'aisle', aisle: '9', temp: 'frozen' }, { kind: 'wall', wall: 'left', temp: 'chilled' },
   ]);
+});
+
+test('no question when the map already knows the category; or all at checkout in one list', async ({ page }) => {
+  await addItems(page, 'Bananas, Lettuce, Jam, Tea, Soap');
+  await tick(page, 'Bananas');
+  await page.locator('.where-bar .btn.primary').click(); // Produce: the map now stocks fruit and veg there
+  await tick(page, 'Lettuce');
+  await expect(page.locator('.where-bar')).toHaveCount(0); // veg is only in Produce: not asked
+  // Switch to asking at checkout.
+  await tick(page, 'Jam');
+  await page.locator('.where-bar').getByRole('button', { name: 'Ask me at checkout' }).click();
+  await tick(page, 'Tea');
+  await expect(page.locator('.where-bar')).toHaveCount(0);
+  await tick(page, 'Soap');
+  const list = page.getByRole('dialog', { name: 'Where were these?' });
+  await page.locator('.trip-done-card').getByRole('button', { name: /Say where 3 things were/ }).click();
+  await expect(list.locator('.where-bar')).toHaveCount(3);
+  await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: '# Aisle…' }).click();
+  await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: '6', exact: true }).click();
+  await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: 'Save' }).click();
+  await list.locator('.where-bar', { hasText: 'Tea' }).getByRole('button', { name: 'Aisle 7', exact: true }).click();
+  await expect(list.locator('.where-bar')).toHaveCount(1);
+  await expect(list.getByRole('checkbox')).toBeChecked();
 });

@@ -36,6 +36,7 @@ import { ItemMenu } from './ItemMenu';
 import { type BuildNote, BuildPanel, BuildBanner } from './BuildPanel';
 import { typicalWhere, whereText } from './whereText';
 import { AisleEditor } from './AisleEditor';
+import { WhereList } from './WhereList';
 import { MapTools, type MapAction } from './MapTools';
 import { aisleShelves } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
@@ -615,7 +616,9 @@ export function ShoppingView(props: Props) {
     const loc = locate(item);
     if (!item.done && loc.kind === 'spot') setPosition(loc.spot.point);
     // Nothing saved about where it is in this store yet: ask.
-    if (!item.done && props.where.ask && isUnknownHere(item)) {
+    if (!item.done && props.where.ask && isUnknownHere(item) && askAtCheckout) {
+      setLaterHere((ids) => [...ids.filter((id) => id !== item.id), item.id]);
+    } else if (!item.done && props.where.ask && isUnknownHere(item)) {
       // Not answered the last one? It waits for later; this one takes the bar.
       if (whereBarFor && whereBarFor.id !== item.id) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
       setWhereBarFor(item);
@@ -631,11 +634,22 @@ export function ShoppingView(props: Props) {
   const [lastClue, setLastClue] = useState<Clue>();
   /** Aisle numbers answered this trip, in order (to guess the next one). */
   const [aisleTrail, setAisleTrail] = useState<string[]>([]);
-  /** No saved place and no answer for this store. */
+  /**
+   * Worth asking about: no saved place and no answer for this store, and the
+   * map can't already place it (its category isn't stocked in exactly one place).
+   */
   function isUnknownHere(item: ListItem) {
     const p = productFor(item, catalog);
-    return !p?.locations?.[layout.id] && !p?.clues?.[layout.id];
+    if (p?.locations?.[layout.id] || p?.clues?.[layout.id]) return false;
+    const cat = p?.categoryId;
+    return !(cat && layout.places.filter((pl) => pl.categories.includes(cat)).length === 1);
   }
+  // At this store: ask in one list at checkout, not as you go.
+  const askAtCheckout = !!props.display.askAtCheckout?.includes(layout.id);
+  const setAskAtCheckout = (on: boolean) => props.setDisplay((d) => ({
+    ...d, askAtCheckout: [...(d.askAtCheckout ?? []).filter((id) => id !== layout.id), ...(on ? [layout.id] : [])],
+  }));
+  const [listOpen, setListOpen] = useState(false);
   const laterHere = (askLater[layout.id] ?? [])
     .map((id) => items.find((i) => i.id === id))
     .filter((i): i is ListItem => !!i && isUnknownHere(i));
@@ -962,7 +976,7 @@ export function ShoppingView(props: Props) {
 
       <main>
         {laterHere.length > 0 && !tripDone && (
-          <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => { setReviewing(true); setWhereFor(laterHere[0]); }}>
+          <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => setListOpen(true)}>
             📍 {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>
           </button>
         )}
@@ -1096,7 +1110,7 @@ export function ShoppingView(props: Props) {
             minutes={tripMinutes}
             elsewhere={notSold.map((i) => i.name)}
             toPlace={laterHere.map((i) => i.name)}
-            onReview={() => { setReviewing(true); setWhereFor(laterHere[0]); }}
+            onReview={() => setListOpen(true)}
             question={props.where.question}
             onAnswer={(o) => props.where.answer(props.where.question!, o)}
             onClear={newTrip}
@@ -1134,9 +1148,36 @@ export function ShoppingView(props: Props) {
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
           trail={aisleTrail}
+          onAskAtCheckout={() => {
+            setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
+            setWhereBarFor(null);
+            setAskAtCheckout(true);
+            setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `At ${layout.name} you’ll be asked at checkout, all in one list.` });
+          }}
           onSave={(clue) => saveWhere(whereBarFor, clue)}
           onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
+        />
+      )}
+      {listOpen && !whereFor && (
+        <WhereList
+          items={laterHere}
+          categoryOf={(i) => productFor(i, catalog)?.categoryId}
+          recentAisles={aislesUsed(catalog.products, layout.id)}
+          lastClue={lastClue}
+          trail={aisleTrail}
+          askAtCheckout={askAtCheckout}
+          onSave={(item, clue) => {
+            const snapshot = props.where.setClue(item, clue);
+            setLastClue(clue);
+            if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
+            setLaterHere((ids) => ids.filter((id) => id !== item.id));
+            setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
+          }}
+          onOther={(item) => setWhereFor(item)}
+          onSkip={(item) => setLaterHere((ids) => ids.filter((id) => id !== item.id))}
+          onAskAtCheckout={setAskAtCheckout}
+          onClose={() => setListOpen(false)}
         />
       )}
       {toast && !drag && !note && !whereBarFor && (

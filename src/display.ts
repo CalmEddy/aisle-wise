@@ -21,6 +21,8 @@ export interface Display {
   buildMoreTools?: boolean;
   /** Stores where the app doesn't ask "Where was it?" at check-off. */
   noAskStores?: string[];
+  /** Stores where "Where was it?" waits for checkout (one list) instead of asking at each check-off. */
+  askAtCheckout?: string[];
   /** The aisle brush's sides and walkway width. */
   brush?: { left: 'shelf' | 'wall' | 'gap'; right: 'shelf' | 'wall' | 'gap'; width: number; leftCategory?: string; rightCategory?: string; aisleLabel?: string };
 }

@@ -37,13 +37,17 @@ const WALLS: { wall: Wall; label: string }[] = [
  * buttons right here; "Other…" opens the full panel; ignoring it (checking
  * the next thing off) asks later.
  */
-export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], onSave, onOther, onLater }: {
+export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], laterLabel = 'Later', onAskAtCheckout, onSave, onOther, onLater }: {
   itemName: string;
   categoryId?: string;
   recentAisles: string[];
   lastClue?: Clue;
   /** Aisle numbers answered this trip, in order. */
   trail?: string[];
+  /** The "not now" link's text. */
+  laterLabel?: string;
+  /** Offer "ask me at checkout" (stop asking as you go at this store). */
+  onAskAtCheckout?: () => void;
   onSave: (clue: Clue) => void;
   onOther: () => void;
   onLater: () => void;
@@ -79,7 +83,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
             </button>
           ))}
         </span>
-        <button className="link" onClick={onLater}>Later</button>
+        <button className="link" onClick={onLater}>{laterLabel}</button>
       </div>
       {typing === undefined ? (
         <div className="where-bar-choices">
@@ -88,6 +92,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
           ))}
           <button className="btn" onClick={() => setTyping('')}># Aisle…</button>
           <button className="btn" onClick={onOther}>Other…</button>
+          {onAskAtCheckout && <button className="link where-bar-checkout" onClick={onAskAtCheckout}>Ask me at checkout</button>}
         </div>
       ) : (
         <div className="where-bar-pad" role="group" aria-label="Aisle number">
