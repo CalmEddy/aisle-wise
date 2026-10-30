@@ -43,7 +43,7 @@ import { parseLabel, type LabelStyle } from '../core/labels';
 import { isBlock, pendingPlacements } from '../core/placement';
 import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
-import { aisleShelves } from '../core/aisles';
+import { aisleShelves, runsUp, selectionRect } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
 import { DoorCard } from './DoorCard';
 import { DeptWallsSheet } from './DeptWallsSheet';
@@ -200,16 +200,43 @@ export function ShoppingView(props: Props) {
   const selectDrag = useBlockDrag(layout);
   const [selectedAisles, setSelectedAisles] = useState<string[]>([]);
   const selecting = building && tool === 'select';
-  const chosenAisles = selecting ? selectedAisles.filter((id) => layout.aisles?.some((a) => a.id === id)) : [];
+  const chosenAisles = selecting ? selectedAisles.filter((id) => layout.aisles?.some((a) => a.id === id) || layout.places.some((p) => p.id === id)) : [];
   function finishSelect() {
     const r = selectDrag.rect;
     selectDrag.up();
     selectDrag.clear();
     if (!r) return;
+    const isAisle = (id: string) => !!layout.aisles?.some((a) => a.id === id);
+    /** Shelves that come with these aisles anyway. */
+    const alongAisles = (ids: string[]) => new Set((layout.aisles ?? []).filter((a) => ids.includes(a.id)).flatMap((a) => aisleShelves(layout, a).map((x) => x.id)));
+    if (r.w === 1 && r.h === 1) {
+      // A tap adds or takes out the one thing under it: what's on that square, else the aisle's walkway, else a thin shelf just beside it.
+      const here = props.build.aisles.within(r);
+      const id = here.find((x) => !isAisle(x)) ?? here.find(isAisle) ?? placeUnder(layout, r.x + 0.5, r.y + 0.5)?.id;
+      if (!id) return;
+      setSelectedAisles((prev) => {
+        if (prev.includes(id)) return prev.filter((x) => x !== id);
+        // A shelf of a selected aisle: take that aisle out.
+        const owner = prev.filter((x) => isAisle(x) && alongAisles([x]).has(id));
+        if (owner.length) return prev.filter((x) => !owner.includes(x));
+        return [...prev, id];
+      });
+      return;
+    }
+    // A box picks everything it touches (aisles bring their shelves).
     const ids = props.build.aisles.within(r);
-    // A tap adds or takes out the aisle under it; a box picks everything it touches.
-    if (r.w === 1 && r.h === 1) setSelectedAisles((prev) => (ids.some((id) => prev.includes(id)) ? prev.filter((id) => !ids.includes(id)) : [...prev, ...ids]));
-    else setSelectedAisles(ids);
+    const along = alongAisles(ids);
+    setSelectedAisles(ids.filter((id) => !along.has(id)));
+  }
+  /** What's selected, in words: "Aisle 3", "3 aisles", "2 aisles, 4 shelves". */
+  function selectionTitle(ids: string[]): string {
+    const aisles = (layout.aisles ?? []).filter((a) => ids.includes(a.id));
+    const places = layout.places.filter((p) => ids.includes(p.id));
+    if (ids.length === 1) return aisles[0]?.label || places[0]?.label || (aisles.length ? '1 aisle' : places[0]?.kind === 'area' ? 'Area' : 'Shelf');
+    const shelves = places.filter((p) => p.kind === 'shelf').length;
+    const areas = places.length - shelves;
+    const n = (k: number, one: string, many: string) => (k ? [`${k} ${k === 1 ? one : many}`] : []);
+    return [...n(aisles.length, 'aisle', 'aisles'), ...n(shelves, 'shelf', 'shelves'), ...n(areas, 'area', 'areas')].join(', ');
   }
   /** The cut box: as dragged, with its thickness changed by the panel's Width. */
   const cutBox = cutDrag.rect && cutWidth !== undefined
@@ -267,19 +294,13 @@ export function ShoppingView(props: Props) {
       key: word, icon, label: `Move ${what} ${word}`,
       onClick: () => { if (!move(dx, dy)) say('Can’t move it that way: something’s in the way, or it’s at the wall.'); },
     }));
-  const aisleRect = (ids: string[]) => {
-    const labels = (layout.aisles ?? []).filter((a) => ids.includes(a.id));
-    const rects = [...labels, ...labels.flatMap((a) => aisleShelves(layout, a).map(footprint))];
-    if (!rects.length) return undefined;
-    const x = Math.min(...rects.map((r) => r.x));
-    const y = Math.min(...rects.map((r) => r.y));
-    return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
-  };
   function aisleTools(ids: string[], title: string, onGone: () => void) {
-    const anchor = aisleRect(ids);
+    const anchor = selectionRect(layout, ids);
     if (!anchor) return undefined;
-    const vertical = (layout.aisles ?? []).filter((a) => ids.includes(a.id)).every((a) => a.h >= a.w);
-    const what = ids.length === 1 ? 'aisle' : 'aisles';
+    const vertical = runsUp(layout, ids);
+    const aisleIds = ids.filter((id) => layout.aisles?.some((a) => a.id === id));
+    const onlyAisles = aisleIds.length === ids.length;
+    const what = !onlyAisles ? 'them' : ids.length === 1 ? 'aisle' : 'aisles';
     return {
       anchor, title,
       rows: [
@@ -290,19 +311,20 @@ export function ShoppingView(props: Props) {
             else say('No room to turn here: something’s in the way, or it would go past the walls.');
           } },
           ...arrows((dx, dy) => props.build.aisles.move(ids, dx, dy), what),
-          ...(layout.gen?.enabled && ids.length > 0 && ids.every((id) => id.startsWith('g-aisle-')) ? [{
+          ...(layout.gen?.enabled && aisleIds.length > 0 && aisleIds.every((id) => id.startsWith('g-aisle-')) ? [{
             key: 'block', icon: '⧉', label: 'Make these aisles a block', onClick: () => {
-              const snapshot = props.build.aisles.makeBlock(ids);
+              const snapshot = props.build.aisles.makeBlock(aisleIds);
               if (!snapshot) { say('Only numbered aisles from answers can be made into a block.'); return; }
               onGone();
               say(`${title} are their own block now: say where on the map.`, snapshot);
             },
           }] : []),
-          { key: 'delete', icon: '🗑', label: `Delete ${what} and shelves`, danger: true, onClick: () => {
+          { key: 'delete', icon: '🗑', label: onlyAisles ? `Delete ${what} and shelves` : `Delete ${title}`, danger: true, onClick: () => {
             const snapshot = props.build.aisles.deleteMany(ids);
             onGone();
             say(`Deleted ${title}.`, snapshot);
           } },
+          { key: 'clear', icon: '✕', label: 'Clear the selection', onClick: onGone },
         ],
       ] as MapAction[][],
     };
@@ -348,7 +370,7 @@ export function ShoppingView(props: Props) {
     };
   }
   const mapTools = !building ? undefined
-    : selecting && chosenAisles.length ? aisleTools(chosenAisles, chosenAisles.length === 1 ? (layout.aisles!.find((a) => a.id === chosenAisles[0])!.label || '1 aisle') : `${chosenAisles.length} aisles`, () => setSelectedAisles([]))
+    : selecting && chosenAisles.length ? aisleTools(chosenAisles, selectionTitle(chosenAisles), () => setSelectedAisles([]))
       : tool === 'walk' && editingAisle ? aisleTools([editingAisle.id], editingAisle.label || 'aisle', () => setEditingAisleId(undefined))
         : tool === 'walk' && editing ? placeTools(editing)
           : undefined;
@@ -821,7 +843,7 @@ export function ShoppingView(props: Props) {
   const toolInfo = TOOLS.find((t) => t.id === tool)!;
   const toolTitle = editing ? (editing.label || (editing.kind === 'shelf' ? 'Shelf' : 'Area'))
     : editingAisle ? (editingAisle.label || 'Aisle')
-      : chosenAisles.length ? `${chosenAisles.length} aisle${chosenAisles.length === 1 ? '' : 's'}`
+      : chosenAisles.length ? selectionTitle(chosenAisles)
         : toolInfo.label;
   const toolHint = editing || editingAisle ? 'Name, what’s stocked, fridge or freezer: tap to open.' : toolInfo.hint;
 

@@ -14,7 +14,7 @@ export type BuildTool = 'walk' | 'select' | 'brush' | 'shelf-v' | 'shelf-h' | 'b
 
 export const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
   { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
-  { id: 'select', icon: '⬚', label: 'Select aisles', hint: 'Drag a box over aisles to select them, or tap an aisle to add it or take it out. Then turn, move or delete them together.' },
+  { id: 'select', icon: '⬚', label: 'Select', hint: 'Drag a box over aisles, shelves or areas to select them all, or tap one to add it or take it out. Then turn, move or delete them together.' },
   { id: 'brush', icon: '🖌', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
   { id: 'shelf-v', icon: '▮↕', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
   { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },

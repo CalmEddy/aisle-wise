@@ -169,3 +169,31 @@ describe('groups of aisles, and moving shelves without losing the aisle', () => 
     expect(moveShelf(gap, 'a2', { x: 6 }).ok).toBe(true);
   });
 });
+
+describe('selecting shelves and areas, not only aisles', () => {
+  const area = { kind: 'area' as const, id: 'deli', label: 'Deli', x: 12, y: 2, w: 4, h: 3, categories: [] };
+  const l = store([v('a', 3), v('b', 6), area]); // no aisle labels at all (like a store using shelf codes)
+
+  it('a box picks the shelves and areas it touches', async () => {
+    const { selectionIn } = await import('./aisles');
+    expect(selectionIn(l, { x: 2, y: 5, w: 6, h: 1 }).sort()).toEqual(['a', 'b']);
+    expect(selectionIn(l, { x: 0, y: 0, w: 20, h: 20 }).sort()).toEqual(['a', 'b', 'deli']);
+  });
+
+  it('moves, turns and deletes them together', async () => {
+    const { moveAisles, turnAisles, deleteAisles, runsUp } = await import('./aisles');
+    const moved = moveAisles(l, ['a', 'b', 'deli'], 1, 0);
+    expect(moved.ok).toBe(true);
+    expect(moved.layout.places.map((p) => p.x)).toEqual([4, 7, 13]);
+    // Not past the wall, or onto something else.
+    expect(moveAisles(l, ['deli'], 5, 0).ok).toBe(false);
+    expect(moveAisles(l, ['a'], 3, 0).ok).toBe(false); // onto b
+    expect(runsUp(l, ['a', 'b'])).toBe(true);
+    const turned = turnAisles(l, ['a', 'b']);
+    expect(turned.ok).toBe(true);
+    expect(turned.layout.places.filter((p) => p.kind === 'shelf').every((p) => p.kind === 'shelf' && p.orientation === 'horizontal')).toBe(true);
+    const deli = turnAisles(l, ['deli']).layout.places.find((p) => p.id === 'deli')!;
+    expect(deli.kind === 'area' && [deli.w, deli.h]).toEqual([3, 4]);
+    expect(deleteAisles(l, ['b', 'deli']).places.map((p) => p.id)).toEqual(['a']);
+  });
+});

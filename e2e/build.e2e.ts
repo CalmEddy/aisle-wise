@@ -146,7 +146,7 @@ test('select a group of aisles with a box, turn it as one block, then delete it 
   const ok = noPageErrors(page);
   await fresh(page, threeAisles());
   await page.getByRole('button', { name: 'Build mode' }).click();
-  await page.getByRole('button', { name: 'Select aisles' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
   await dragMap(page, [12, 10], [19, 11]);
   const tools = page.getByRole('toolbar', { name: 'Change 3 aisles' });
   await expect(tools).toBeVisible();
@@ -171,6 +171,29 @@ test('select a group of aisles with a box, turn it as one block, then delete it 
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   l = await layout(page);
   expect([l.aisles.length, l.places.length]).toEqual([3, 6]);
+  ok();
+});
+
+test('select works without aisle labels: shelves and an area by box, tap one out, move them, clear', async ({ page }) => {
+  const ok = noPageErrors(page);
+  const data = threeAisles();
+  data.layouts[0].aisles = [];
+  (data.layouts[0].places as any[]).push({ kind: 'area', id: 'deli', label: 'Deli', x: 24, y: 6, w: 4, h: 3, categories: [] });
+  await fresh(page, data);
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await dragMap(page, [9, 7], [26, 8]);
+  await expect(page.getByRole('toolbar', { name: 'Change 6 shelves, 1 area' })).toBeVisible();
+  // Tap the area to take it out.
+  await tapMap(page, 25, 7);
+  const tools = page.getByRole('toolbar', { name: 'Change 6 shelves' });
+  await expect(tools).toBeVisible();
+  await tools.getByRole('button', { name: 'Move them down' }).click();
+  const l = await layout(page);
+  expect(l.places.filter((p: any) => p.kind === 'shelf').every((p: any) => p.y === 7)).toBe(true);
+  expect(l.places.find((p: any) => p.id === 'deli').y).toBe(6);
+  await tools.getByRole('button', { name: 'Clear the selection' }).click();
+  await expect(page.getByRole('toolbar', { name: /^Change/ })).toHaveCount(0);
   ok();
 });
 
@@ -233,7 +256,7 @@ test('make some aisles their own block: side to side, placed on the mini-map, jo
   const ok = noPageErrors(page);
   await fresh(page, cornerStore());
   await page.getByRole('button', { name: 'Build mode' }).click();
-  await page.getByRole('button', { name: 'Select aisles' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
   // Aisles 4 and 5 are the leftmost two.
   const l0 = await layout(page);
   const a = (l: any, n: number) => l.aisles.find((x: any) => x.id === `g-aisle-${n}`);

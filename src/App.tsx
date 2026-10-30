@@ -15,7 +15,7 @@ import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
-import { addAisle, clipAisles, removeAisle, renameAisle, aislesIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
+import { addAisle, clipAisles, removeAisle, renameAisle, selectionIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut';
@@ -605,8 +605,8 @@ export default function App() {
       replaceLayout(deleteAisles(layout, ids));
       return snapshot;
     },
-    /** The aisles a dragged box touches. */
-    within: (box: Rect) => aislesIn(layout, box),
+    /** What a dragged box touches: aisles and places. */
+    within: (box: Rect) => selectionIn(layout, box),
     /**
      * Makes generated aisles (by label id "g-aisle-7"…) their own block, running side to side to
      * start; the map then asks where the block is. Undefined if they aren't a run of numbered aisles.

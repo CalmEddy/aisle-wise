@@ -1,5 +1,5 @@
 import { shelvesAcross } from './build';
-import type { AisleLabel, Rect, Shelf, StoreLayout } from './types';
+import type { AisleLabel, Place, Rect, Shelf, StoreLayout } from './types';
 
 /**
  * Aisle labels: names for walkways ("Aisle 5"), drawn along the floor
@@ -113,31 +113,40 @@ function fits(l: StoreLayout, places: Set<string>, aisles: Set<string>, rects: R
   return rects.every((r) => inside(l, r) && !others.some((o) => overlaps(o, r)));
 }
 
-/** The aisles with these ids, and every shelf along them. */
+/**
+ * A selection: aisles (with every shelf along them) and any places picked
+ * on their own (shelves, departments, areas), by id.
+ */
 function group(l: StoreLayout, ids: string[]) {
   const labels = (l.aisles ?? []).filter((a) => ids.includes(a.id));
-  const shelves = new Map<string, Shelf>();
-  for (const a of labels) for (const s of aisleShelves(l, a)) shelves.set(s.id, s);
-  return { labels, shelves: [...shelves.values()] };
+  const places = new Map<string, Place>();
+  for (const a of labels) for (const s of aisleShelves(l, a)) places.set(s.id, s);
+  for (const p of l.places) if (ids.includes(p.id)) places.set(p.id, p);
+  return { labels, places: [...places.values()] };
 }
 
-/** The aisles whose walkways a box touches (for selecting a group by dragging). */
+/** What a dragged box touches: aisles' walkways and places. */
+export function selectionIn(l: StoreLayout, box: Rect): string[] {
+  return [...(l.aisles ?? []).filter((a) => overlaps(a, box)).map((a) => a.id), ...l.places.filter((p) => overlaps(placeRect(p), box)).map((p) => p.id)];
+}
+
+/** The aisles whose walkways a box touches. */
 export function aislesIn(l: StoreLayout, box: Rect): string[] {
   return (l.aisles ?? []).filter((a) => overlaps(a, box)).map((a) => a.id);
 }
 
-/** Moves aisles (labels and shelves) by dx, dy squares. Unchanged if they'd hit something or leave the store. */
+/** Moves a selection (aisles with their shelves, and places) by dx, dy squares. Unchanged if they'd hit something or leave the store. */
 export function moveAisles(l: StoreLayout, ids: string[], dx: number, dy: number): { layout: StoreLayout; ok: boolean } {
-  const { labels, shelves } = group(l, ids);
-  if (!labels.length) return { layout: l, ok: false };
-  const placeIds = new Set(shelves.map((s) => s.id));
+  const { labels, places } = group(l, ids);
+  if (!labels.length && !places.length) return { layout: l, ok: false };
+  const placeIds = new Set(places.map((s) => s.id));
   const labelIds = new Set(labels.map((a) => a.id));
-  const shift = <T extends Rect | Shelf>(r: T): T => ({ ...r, x: r.x + dx, y: r.y + dy });
-  if (!fits(l, placeIds, labelIds, [...labels.map(shift), ...shelves.map((s) => shift(shelfRect(s)))])) return { layout: l, ok: false };
+  const shift = <T extends Rect | Place>(r: T): T => ({ ...r, x: r.x + dx, y: r.y + dy });
+  if (!fits(l, placeIds, labelIds, [...labels.map(shift), ...places.map((s) => shift(placeRect(s)))])) return { layout: l, ok: false };
   return {
     layout: {
       ...l,
-      places: l.places.map((p) => (placeIds.has(p.id) ? shift(p as Shelf) : p)),
+      places: l.places.map((p) => (placeIds.has(p.id) ? shift(p) : p)),
       aisles: (l.aisles ?? []).map((x) => (labelIds.has(x.id) ? shift(x) : x)),
     },
     ok: true,
@@ -145,6 +154,25 @@ export function moveAisles(l: StoreLayout, ids: string[], dx: number, dy: number
 }
 
 export const moveAisle = (l: StoreLayout, id: string, dx: number, dy: number) => moveAisles(l, [id], dx, dy);
+
+/** Whether a selection mostly runs up and down (its aisles, else its shelves). */
+export function runsUp(l: StoreLayout, ids: string[]): boolean {
+  const { labels, places } = group(l, ids);
+  if (labels.length) return labels.filter((a) => a.h >= a.w).length * 2 >= labels.length;
+  const shelves = places.filter((p): p is Shelf => p.kind === 'shelf');
+  if (shelves.length) return shelves.filter((s) => s.orientation === 'vertical').length * 2 >= shelves.length;
+  return true;
+}
+
+/** The box round a selection (undefined: nothing selected). */
+export function selectionRect(l: StoreLayout, ids: string[]): Rect | undefined {
+  const { labels, places } = group(l, ids);
+  const rects = [...labels, ...places.map(placeRect)];
+  if (!rects.length) return undefined;
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  return { x, y, w: Math.max(...rects.map((r) => r.x + r.w)) - x, h: Math.max(...rects.map((r) => r.y + r.h)) - y };
+}
 
 /**
  * Turns aisles a quarter turn as one block about its middle (up-and-down ↔
@@ -154,11 +182,11 @@ export const moveAisle = (l: StoreLayout, id: string, dx: number, dy: number) =>
  * away from the walkway. Unchanged if the turned block would hit something.
  */
 export function turnAisles(l: StoreLayout, ids: string[]): { layout: StoreLayout; ok: boolean } {
-  const { labels, shelves } = group(l, ids);
-  if (!labels.length) return { layout: l, ok: false };
+  const { labels, places } = group(l, ids);
+  if (!labels.length && !places.length) return { layout: l, ok: false };
   // Turn the way most of the group runs now.
-  const wasVertical = labels.filter((a) => a.h >= a.w).length * 2 >= labels.length;
-  const moving = [...labels, ...shelves.map(shelfRect)];
+  const wasVertical = runsUp(l, ids);
+  const moving = [...labels, ...places.map(placeRect)];
   const x0 = Math.min(...moving.map((r) => r.x));
   const y0 = Math.min(...moving.map((r) => r.y));
   const GW = Math.max(...moving.map((r) => r.x + r.w)) - x0;
@@ -175,8 +203,9 @@ export function turnAisles(l: StoreLayout, ids: string[]): { layout: StoreLayout
       : { x: nx0 + (GH - (ry + r.h)), y: ny0 + rx, w: r.h, h: r.w };
   };
   const turnedLabels = new Map(labels.map((a) => [a.id, { ...a, ...turn(a) }]));
-  const turned = new Map(shelves.map((s) => {
-    const r = turn(shelfRect(s));
+  const turned = new Map(places.map((s): [string, Place] => {
+    const r = turn(placeRect(s));
+    if (s.kind !== 'shelf') return [s.id, { ...s, ...r }];
     const vertical = s.orientation === 'vertical';
     const next: Shelf = {
       ...s, x: r.x, y: r.y, orientation: vertical ? 'horizontal' : 'vertical',
@@ -184,7 +213,7 @@ export function turnAisles(l: StoreLayout, ids: string[]): { layout: StoreLayout
     };
     return [s.id, next];
   }));
-  const ok = fits(l, new Set(turned.keys()), new Set(turnedLabels.keys()), [...turnedLabels.values(), ...[...turned.values()].map(shelfRect)]);
+  const ok = fits(l, new Set(turned.keys()), new Set(turnedLabels.keys()), [...turnedLabels.values(), ...[...turned.values()].map(placeRect)]);
   if (!ok) return { layout: l, ok: false };
   return {
     layout: {
@@ -198,13 +227,13 @@ export function turnAisles(l: StoreLayout, ids: string[]): { layout: StoreLayout
 
 export const turnAisle = (l: StoreLayout, id: string) => turnAisles(l, [id]);
 
-/** Deletes aisles: their labels, and their shelves unless a remaining aisle also uses them. */
+/** Deletes a selection: aisles' labels, their shelves unless a remaining aisle also uses them, and places picked on their own. */
 export function deleteAisles(l: StoreLayout, ids: string[]): StoreLayout {
-  const { labels, shelves } = group(l, ids);
+  const { labels, places } = group(l, ids);
   const labelIds = new Set(labels.map((a) => a.id));
   const keep = (l.aisles ?? []).filter((a) => !labelIds.has(a.id));
   const shared = new Set(keep.flatMap((a) => aisleShelves(l, a).map((s) => s.id)));
-  const gone = new Set(shelves.map((s) => s.id).filter((id) => !shared.has(id)));
+  const gone = new Set(places.map((s) => s.id).filter((id) => ids.includes(id) || !shared.has(id)));
   return { ...l, places: l.places.filter((p) => !gone.has(p.id)), aisles: keep };
 }
 

@@ -118,7 +118,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           place={place}
           backs={place.kind === 'shelf' ? shelfBacks(layout, place) : []}
           highlighted={highlightId === place.id}
-          selected={selectedId === place.id || aisleShelfIds.has(place.id)}
+          selected={selectedId === place.id || aisleShelfIds.has(place.id) || chosen.has(place.id)}
           changed={changed.has(place.id)}
           look={look}
           onTap={onPlaceTap}
