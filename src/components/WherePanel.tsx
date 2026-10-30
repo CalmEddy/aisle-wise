@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { DEPTS, describeClue, guessDept, NEAR_WORD } from '../core/clues';
+import { acrossRect, DEPTS, describeClue, guessDept, NEAR_WORD } from '../core/clues';
+import { StoreMap } from './StoreMap';
 import { guessTemp } from './WhereBar';
 import { looksLikeShelfCode, parseLabel, type LabelStyle } from '../core/labels';
-import type { AislePos, AisleSide, Clue, Dept, Fixture, OpenNear, Temp, Wall, WallPart } from '../core/types';
+import type { AislePos, AisleSide, Clue, Dept, Fixture, OpenNear, StoreLayout, Temp, Wall, WallPart } from '../core/types';
 
 type Tab = 'aisle' | 'wall' | 'open' | 'dept' | 'endcap' | 'checkout';
 
@@ -30,12 +31,14 @@ function tabFor(c: Clue): Tab {
  * checked off. Most answers take one or two taps: a department, or an aisle
  * number (recent ones are chips) with optional side and how far along.
  */
-export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabels, recentAisles, lastClue, current, onSave, onLater, onSkip, onStopAsking, queued }: {
+export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabels, layout, recentAisles, lastClue, current, onSave, onLater, onSkip, onStopAsking, queued }: {
   itemName: string;
   categoryId?: string;
   storeName: string;
   /** How this store labels its shelves ("B12"), if not by aisle number. */
   labels?: LabelStyle;
+  /** The store's map (to pick aisles on for "across"). */
+  layout?: StoreLayout;
   /** A shelf label was typed in a store not set up for them. */
   onNeedLabels?: (code: string) => void;
   /** Aisle numbers already used in this store, most used first. */
@@ -138,6 +141,15 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
   const [to, setTo] = useState(current?.kind === 'open' && current.across ? current.across.to : recentAisles[0] ?? '');
   const [acrossPart, setAcrossPart] = useState<AislePos | undefined>(current?.kind === 'open' && current.across ? current.across.part : 'middle');
   const acrossOk = acrossOn && from.trim() && (to.trim() || from.trim());
+  // Picking on the map: the first tap is where it starts, the next where it ends (then start again).
+  const [tapsAcross, setTapsAcross] = useState(0);
+  const tapAcross = (x: string) => {
+    if (tapsAcross % 2 === 0) { setFrom(x); setTo(x); } else setTo(x);
+    setTapsAcross((n) => n + 1);
+  };
+  const acrossPreview = acrossOn && layout && from.trim()
+    ? acrossRect(layout, { from: from.trim().toUpperCase(), to: (to.trim() || from.trim()).toUpperCase(), ...(acrossPart && { part: acrossPart }) })
+    : undefined;
   const openClue: Clue = acrossOn
     ? { kind: 'open', across: { from: from.trim().toUpperCase(), to: (to.trim() || from.trim()).toUpperCase(), ...(acrossPart && { part: acrossPart }) }, ...(fixture && { fixture }), ...withTemp }
     : { kind: 'open', ...(near && !aisle.trim() && { near }), ...(aisle.trim() && { aisle: aisle.trim() }), ...(fixture && { fixture }), ...withTemp };
@@ -200,6 +212,24 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
                 (n) => { if (n === 'across') { setAcrossOn(true); setAisle(''); } else { setAcrossOn(false); setNear(n); setAisle(''); } })}
               {acrossOn ? (
                 <>
+                  {layout && layout.places.some((p) => /^g-(shelf|sec)-/.test(p.id)) && (
+                    <div className="placement-map across-map">
+                      <p className="muted small where-note">Tap the first and last aisle it goes across.</p>
+                      <StoreMap
+                        layout={layout}
+                        ghosts={acrossPreview ? [{ rect: acrossPreview, kind: 'preview' }] : []}
+                        onAisleTap={(id) => {
+                          const a = layout.aisles?.find((x) => x.id === id);
+                          const n = a && /(\d+[A-Z]?)\s*$/i.exec(a.label)?.[1];
+                          if (n) tapAcross(n.toUpperCase());
+                        }}
+                        onPlaceTap={(p) => {
+                          const m = /^g-sec-(.+)-\d+/.exec(p.id) ?? /^g-shelf-([^-~]+)-[LR]/.exec(p.id);
+                          if (m) tapAcross(m[1].toUpperCase());
+                        }}
+                      />
+                    </div>
+                  )}
                   <div className="where-row">
                     <span className="where-label">Across</span>
                     <input className="where-num" value={from} onChange={(e) => setFrom(e.target.value.slice(0, 6))} placeholder="#" aria-label="From aisle or section" />

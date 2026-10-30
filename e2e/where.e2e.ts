@@ -351,3 +351,25 @@ test('where’s the door? asked once at the end of a trip, with the likely spot'
   await expect.poll(async () => { const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner'); return l.entrance.x / l.width; }).toBeGreaterThan(0.8);
   await expect(door).toHaveCount(0);
 });
+
+test('across aisles picked on the mini-map, with a preview of where it goes', async ({ page }) => {
+  await addItems(page, 'Cereal, Promo crisps');
+  const bar = page.locator('.where-bar');
+  await tick(page, 'Cereal');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: '4', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  await tick(page, 'Promo crisps');
+  await bar.getByRole('button', { name: 'Other…' }).click();
+  await page.getByRole('tab', { name: 'Open' }).click();
+  await page.getByRole('button', { name: 'Across aisles…' }).click();
+  const map = page.locator('.where-panel .across-map svg.map');
+  await map.locator('.aisle-label', { hasText: /AISLE 2/i }).locator('text').click({ force: true });
+  await map.locator('.aisle-label', { hasText: /AISLE 3/i }).locator('text').click({ force: true });
+  await expect(page.getByLabel('From aisle or section')).toHaveValue('2');
+  await expect(page.getByLabel('To aisle or section')).toHaveValue('3');
+  await expect(map.locator('.map-ghost.preview')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await page.getByRole('button', { name: /^Save · Out in the open across aisles 2–3 \(back\)/ }).click();
+  await expect.poll(async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places.some((p: any) => p.id.startsWith('g-open-x2-3-back'))).toBe(true);
+});

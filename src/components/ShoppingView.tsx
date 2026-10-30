@@ -1057,6 +1057,7 @@ export function ShoppingView(props: Props) {
           categoryId={productFor(whereFor, catalog)?.categoryId}
           storeName={layout.name}
           labels={layout.labels}
+          layout={layout}
           onNeedLabels={(code) => setLabelSetup({ code, item: whereFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
