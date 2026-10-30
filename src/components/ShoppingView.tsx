@@ -695,6 +695,8 @@ export function ShoppingView(props: Props) {
     if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
     if (clue.kind === 'shelf') setShelfTrail((t) => [...t.slice(-5), { section: clue.section, shelf: clue.shelf }]);
   };
+  /** The store's sections of labelled shelves (from the map), in order. */
+  const storeSections = useMemo(() => [...new Set(layout.places.map((p) => /^g-sec-(.+)-\d+$/.exec(p.id)?.[1]).filter((x): x is string => !!x))].sort(), [layout.places]);
   /** Setting up the store's shelf labels, from a label just typed (and the item it's for). */
   const [labelSetup, setLabelSetup] = useState<{ code?: string; item?: ListItem } | null>(null);
   /**
@@ -1327,6 +1329,7 @@ export function ShoppingView(props: Props) {
           categoryId={productFor(whereBarFor, catalog)?.categoryId}
           labels={layout.labels}
           shelfTrail={shelfTrail}
+          sections={storeSections}
           onNeedLabels={(code) => setLabelSetup({ code, item: whereBarFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
@@ -1396,6 +1399,7 @@ export function ShoppingView(props: Props) {
           trail={aisleTrail}
           labels={layout.labels}
           shelfTrail={shelfTrail}
+          sections={storeSections}
           onNeedLabels={(item, code) => setLabelSetup({ code, item })}
           askAtCheckout={askAtCheckout}
           onSave={(item, clue) => {

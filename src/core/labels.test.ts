@@ -31,7 +31,9 @@ describe('shelf labels taught by example', () => {
   });
 
   it('offers the next shelves the way you’re going', () => {
-    expect(nextShelves([{ section: 'B', shelf: 3 }, { section: 'B', shelf: 5 }]).map((s) => s.shelf)).toEqual([5, 7, 9, 4]);
+    expect(nextShelves([{ section: 'B', shelf: 3 }, { section: 'B', shelf: 5 }]).map((s) => s.shelf)).toEqual([5, 6, 7, 9]);
+    // The next one up is always offered, even after a jump (B4 then B7 → B8).
+    expect(nextShelves([{ section: 'B', shelf: 4 }, { section: 'B', shelf: 7 }]).map((s) => s.shelf)).toEqual([7, 8, 9, 11]);
     expect(nextShelves([{ section: 'B' }])).toEqual([]);
   });
 

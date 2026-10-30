@@ -88,8 +88,10 @@ export function nextShelves(trail: { section: string; shelf?: number }[]): { sec
   const prev = trail.length > 1 ? trail[trail.length - 2] : undefined;
   const step = prev && prev.section === last.section && prev.shelf && prev.shelf !== last.shelf
     ? Math.max(-2, Math.min(2, last.shelf - prev.shelf)) : 1;
-  const nums = [last.shelf, last.shelf + step, last.shelf + 2 * step, last.shelf - Math.sign(step)].filter((n) => n > 0);
-  return [...new Set(nums)].map((shelf) => ({ section: last.section, shelf }));
+  // This one, the next one along either way you've been going, then further on, then the one behind.
+  const dir = Math.sign(step) || 1;
+  const nums = [last.shelf, last.shelf + dir, last.shelf + step, last.shelf + 2 * step, last.shelf - dir].filter((n) => n > 0);
+  return [...new Set(nums)].slice(0, 4).map((shelf) => ({ section: last.section, shelf }));
 }
 
 /**

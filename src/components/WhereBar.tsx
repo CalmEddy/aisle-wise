@@ -38,7 +38,7 @@ const WALLS: { wall: Wall; label: string }[] = [
  * buttons right here; "Other…" opens the full panel; ignoring it (checking
  * the next thing off) asks later.
  */
-export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onOther, onLater }: {
+export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onOther, onLater }: {
   itemName: string;
   categoryId?: string;
   recentAisles: string[];
@@ -49,6 +49,8 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   labels?: LabelStyle;
   /** Shelves answered this trip, in order. */
   shelfTrail?: { section: string; shelf?: number }[];
+  /** Sections this store has (for one-tap section keys). */
+  sections?: string[];
   /** A shelf label was typed but the store's style isn't set up: set it up from this example. */
   onNeedLabels?: (code: string) => void;
   /** The "not now" link's text. */
@@ -78,6 +80,12 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
     else if (looksLikeShelfCode(v) && onNeedLabels) onNeedLabels(v.trim().toUpperCase());
     else onSave(aisleClue(v));
   }
+  // Sections to offer as one-tap keys: the ones answered this trip first, then the rest of the store's.
+  // Plus the letters either side of them (a new section is usually next door: A or C after B).
+  const known = [...new Set([...shelfTrail.map((x) => x.section).reverse(), ...sections])];
+  const nextDoor = known.filter((x) => /^[A-Z]$/.test(x)).flatMap((x) => [x.charCodeAt(0) - 1, x.charCodeAt(0) + 1])
+    .filter((c) => c >= 65 && c <= 90).map((c) => String.fromCharCode(c));
+  const knownSections = [...new Set([...known, ...nextDoor])].sort((a, b) => a.localeCompare(b)).slice(0, 8);
   const shelfChips = labels ? nextShelves(shelfTrail).map((x, i) => {
     const code = formatLabel(labels, x.section, x.shelf);
     return { key: `s-${code}`, label: `${cold}${code}`, clue: shelfClue(code)!, primary: !d && i === 0 };
@@ -113,7 +121,11 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
           {quick.map((q) => (
             <button key={q.key} className={`btn${q.primary ? ' primary' : ''}`} onClick={() => onSave(q.clue)}>{q.label}</button>
           ))}
-          <button className="btn" onClick={() => setTyping('')}>{labels ? '# Shelf…' : '# Aisle…'}</button>
+          <button className="btn" onClick={() => {
+            // A shelf label: start with the section you're in ("B"), so it's just the number.
+            const here = shelfTrail[shelfTrail.length - 1]?.section;
+            setTyping(labels && here ? formatLabel(labels, here) : '');
+          }}>{labels ? '# Shelf…' : '# Aisle…'}</button>
           <button className="btn" onClick={onOther}>Other…</button>
           {onAskAtCheckout && <button className="link where-bar-checkout" onClick={onAskAtCheckout}>Ask me at checkout</button>}
         </div>
@@ -124,9 +136,21 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
             <span className="where-bar-pad-value" aria-live="polite">{cold}{labels ? 'Shelf' : 'Aisle'} <b>{typing || '_'}</b></span>
             <button className="btn primary" disabled={!typing} onClick={() => typing && saveTyped(typing)}>Save</button>
           </div>
+          {labels && knownSections.length > 0 && (
+            <div className="where-bar-sections" role="group" aria-label="Section">
+              {knownSections.map((sec) => (
+                <button key={sec} className={`btn key${typing?.startsWith(formatLabel(labels, sec)) ? ' active' : ''}`} aria-label={`Section ${sec}`}
+                  onClick={() => setTyping(formatLabel(labels, sec))}>{sec}</button>
+              ))}
+            </div>
+          )}
           <div className="where-bar-keys">
             {(letters ? 'ABCDEFGHIJKLMNOPQRSTUVWXYZ-'.split('') : ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-']).map((k) => (
-              <button key={k} className="btn key" onClick={() => setTyping((v) => ((v ?? '') + k).replace(/^0+(?=\d)/, '').slice(0, 8))}>{k}</button>
+              <button key={k} className="btn key" onClick={() => setTyping((v) => {
+                // A letter while only the section that was filled in is there: a different section.
+                if (/[A-Z]/.test(k) && v && labels && knownSections.some((sec) => formatLabel(labels, sec) === v)) return k;
+                return ((v ?? '') + k).replace(/^0+(?=\d)/, '').slice(0, 8);
+              })}>{k}</button>
             ))}
             <button className={`btn key${letters ? ' active' : ''}`} aria-pressed={letters} onClick={() => setLetters((x) => !x)}>{letters ? '123' : 'ABC'}</button>
             <button className="btn key" aria-label="Delete" disabled={!typing} onClick={() => setTyping((v) => (v ?? '').slice(0, -1))}>⌫</button>

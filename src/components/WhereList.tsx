@@ -7,7 +7,7 @@ import type { LabelStyle } from '../core/labels';
  * with the quick bar's one-tap answers. Used at checkout (or whenever the
  * shopper reviews what they left for later).
  */
-export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, onNeedLabels, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
+export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, sections = [], onNeedLabels, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
   items: ListItem[];
   categoryOf: (item: ListItem) => string | undefined;
   recentAisles: string[];
@@ -15,6 +15,7 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, la
   trail: string[];
   labels?: LabelStyle;
   shelfTrail: { section: string; shelf?: number }[];
+  sections?: string[];
   onNeedLabels: (item: ListItem, code: string) => void;
   /** This store asks at checkout instead of at each check-off. */
   askAtCheckout: boolean;
@@ -44,6 +45,7 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, la
             trail={trail}
             labels={labels}
             shelfTrail={shelfTrail}
+            sections={sections}
             onNeedLabels={(code) => onNeedLabels(item, code)}
             laterLabel="Skip"
             onSave={(clue) => onSave(item, clue)}

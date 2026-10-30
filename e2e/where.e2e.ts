@@ -300,3 +300,36 @@ test('a stand across aisles 2–3 at the front: the map puts it there and the sh
   expect(len('g-shelf-4-L')).toBe(14);
   await expect(page.getByRole('group', { name: /Where’s/ })).toHaveCount(0); // nothing to place: it's where it was said
 });
+
+test('shelf codes in 2–3 taps: the section is already in, known sections are one key', async ({ page }) => {
+  await addItems(page, 'Water, Cereal, Coffee, Batteries');
+  const bar = page.locator('.where-bar');
+  // Set up B-style labels with the first one.
+  await tick(page, 'Water');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: 'ABC' }).click();
+  await bar.getByRole('button', { name: 'B', exact: true }).click();
+  await bar.getByRole('button', { name: '123' }).click();
+  await bar.getByRole('button', { name: '4', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('dialog', { name: 'Shelf labels' }).getByRole('button', { name: 'Save' }).click();
+  // B7: "# Shelf…" opens with B already in → 7 → Save.
+  await tick(page, 'Cereal');
+  await bar.getByRole('button', { name: '# Shelf…' }).click();
+  await expect(bar.locator('.where-bar-pad-value')).toContainText('Shelf B');
+  await bar.getByRole('button', { name: '7', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  // B8 is offered after a jump to B7.
+  await tick(page, 'Coffee');
+  await bar.getByRole('button', { name: 'B8', exact: true }).click();
+  // Another section: one key for the letter (section keys come from the map).
+  await tick(page, 'Batteries');
+  await bar.getByRole('button', { name: '# Shelf…' }).click();
+  await bar.getByRole('button', { name: 'Section A' }).click();
+  await expect(bar.locator('.where-bar-pad-value')).toContainText('Shelf A');
+  await bar.getByRole('button', { name: '2', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  const products = await saved<any[]>(page, 'products');
+  const code = (n: string) => (Object.values(products.find((x) => x.name === n).clues)[0] as any).code;
+  expect([code('Cereal'), code('Coffee'), code('Batteries')]).toEqual(['B7', 'B8', 'A2']);
+});
