@@ -244,6 +244,8 @@ test('make some aisles their own block: side to side, placed on the mini-map, jo
   await expect(card.getByRole('button', { name: '↔ Side to side' })).toHaveAttribute('aria-pressed', 'true');
   await card.locator('.placement-options .chip', { hasText: 'In front of aisles 1–3' }).click();
   await card.getByRole('button', { name: 'Place here' }).click();
+  // The map is rebuilt just after: wait for it.
+  await expect.poll(async () => { const x = await layout(page); return a(x, 4).y - (a(x, 1).y + a(x, 1).h); }).toBeGreaterThan(0);
   let l = await layout(page);
   expect(a(l, 4).w).toBeGreaterThan(a(l, 4).h);
   expect(a(l, 4).y).toBeGreaterThan(a(l, 1).y + a(l, 1).h);
@@ -252,7 +254,6 @@ test('make some aisles their own block: side to side, placed on the mini-map, jo
   await page.locator('.build-sheet').getByRole('tab', { name: 'Store' }).click();
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'Join back' }).click();
-  l = await layout(page);
-  expect(a(l, 4).h).toBeGreaterThan(a(l, 4).w);
+  await expect.poll(async () => { const x = await layout(page); return a(x, 4).h - a(x, 4).w; }).toBeGreaterThan(0);
   ok();
 });

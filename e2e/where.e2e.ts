@@ -212,6 +212,11 @@ test('where’s the Bakery? tap a spot on the mini-map, see the preview, place i
   await expect(card.locator('svg.map .place.changed')).toHaveCount(1); // Bakery outlined in the preview
   await card.getByRole('button', { name: 'Place here' }).click();
   await expect(card).toHaveCount(0);
+  await expect.poll(async () => {
+    const c = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+    const f = (id: string) => c.places.find((x: any) => x.id === id);
+    return f('g-dept-bakery') && f('g-dept-produce') ? f('g-dept-produce').y - f('g-dept-bakery').y : -1;
+  }).toBeGreaterThan(0);
   const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
   expect(l.gen.placements).toEqual({ 'sec:bakery': { of: 'sec:produce', side: 'after' } });
   const p = (id: string) => l.places.find((x: any) => x.id === id);
@@ -256,7 +261,11 @@ test('a store that labels shelves like B12: set up by example, one-tap next shel
   const card = page.getByRole('group', { name: 'Where’s Section C?' });
   await card.locator('.placement-options .chip', { hasText: 'In front of section B' }).click();
   await card.getByRole('button', { name: 'Place here' }).click();
-  const l = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  // The map is rebuilt just after Place here: wait for it.
+  const corner = async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  const below = async () => { const c = await corner(); const f = (lb: string) => c.places.find((x: any) => x.label === lb); return f('C1') && f('B1') ? f('C1').y - f('B1').y : -1; };
+  await expect.poll(below).toBeGreaterThan(9);
+  const l = await corner();
   expect(l.labels).toMatchObject({ example: 'B12', roles: ['section', 'shelf'], pairing: 'facing' });
   const labels = l.places.filter((p: any) => p.id.startsWith('g-sec-')).map((p: any) => p.label);
   expect(labels).toEqual(expect.arrayContaining(['B1', 'B12', 'B13', 'C1', 'C4']));
