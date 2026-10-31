@@ -2,7 +2,7 @@ import { forwardRef, type ReactNode, type SVGProps } from 'react';
 import { aisleShelves } from '../core/aisles';
 import { footprint, placeNear, sectionShapes, shelfBacks, type Segment } from '../core/geometry';
 import type { SectionLook } from '../display';
-import type { Place, Point, Rect, StoreLayout } from '../core/types';
+import type { AisleLabel, Place, Point, Rect, StoreLayout } from '../core/types';
 
 /**
  * A faint, dashed shape for something that could be built: `preview` is what
@@ -77,6 +77,63 @@ export function placeUnder(layout: StoreLayout, x: number, y: number): Place | u
   return placeNear(layout, x, y);
 }
 
+/**
+ * A place's name. Drawn in a layer above every place, so a neighbouring shelf, an outline or the checkouts
+ * never cover it.
+ */
+function PlaceLabel({ place, look }: { place: Place; look?: SectionLook }) {
+  if (!place.label) return null;
+  const f = footprint(place);
+  const isShelf = place.kind === 'shelf';
+  const vertical = isShelf ? place.orientation === 'vertical' : f.h > f.w * 1.6;
+  const cx = f.x + f.w / 2;
+  const cy = f.y + f.h / 2;
+  const run = vertical ? f.h : f.w;
+  const thick = vertical ? f.w : f.h;
+  const chars = Math.max(1, place.label.length);
+  // Shelf labels sit on the shelf itself, so they're as tall as the shelf allows; area labels fit inside the area.
+  const size = isShelf
+    ? Math.min(0.78, (run / chars) * 1.6)
+    : Math.min(1.5, Math.max(0.6, thick * 0.4), (run / chars) * 1.7, thick * 0.8);
+  return (
+    <text x={cx} y={cy} className={labelClass(place, look)} textAnchor="middle" dominantBaseline="central"
+      fontSize={size} transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}>
+      {place.label}
+    </text>
+  );
+}
+
+/** A name's classes: as its place's (a wall shelf's name is light on dark, a guess's is faint…). */
+function labelClass(place: Place, look?: SectionLook): string {
+  const isShelf = place.kind === 'shelf';
+  const icons = !!look?.iconOf && sectionShapes(place).some((sec) => look.iconOf!(sec.categoryId));
+  return ['place-label', isShelf && 'shelf-label', isShelf && place.back && 'wall', place.temp, place.guess && 'guess', icons && 'with-icons'].filter(Boolean).join(' ');
+}
+
+/**
+ * Where an aisle's name goes: the middle of the longest stretch of its walkway not covered by an area (a stand
+ * across the aisle, say). Undefined if it's all covered.
+ */
+function aisleLabelSpot(a: AisleLabel, places: Place[]): { cx: number; cy: number; run: number } | undefined {
+  const vertical = a.h > a.w;
+  const lo = vertical ? a.y : a.x;
+  const hi = lo + (vertical ? a.h : a.w);
+  const covers = places.filter((p) => p.kind === 'area').map(footprint)
+    .filter((r) => r.x < a.x + a.w && a.x < r.x + r.w && r.y < a.y + a.h && a.y < r.y + r.h)
+    .map((r) => (vertical ? [r.y, r.y + r.h] : [r.x, r.x + r.w]) as [number, number])
+    .sort((p, q) => p[0] - q[0]);
+  let best: [number, number] | undefined;
+  let at = lo;
+  for (const [c0, c1] of [...covers, [hi, hi] as [number, number]]) {
+    const gap: [number, number] = [at, Math.min(c0, hi)];
+    if (gap[1] - gap[0] > (best ? best[1] - best[0] : 0)) best = gap;
+    at = Math.max(at, c1);
+  }
+  if (!best || best[1] - best[0] < 2) return undefined;
+  const mid = (best[0] + best[1]) / 2;
+  return vertical ? { cx: a.x + a.w / 2, cy: mid, run: best[1] - best[0] } : { cx: mid, cy: a.y + a.h / 2, run: best[1] - best[0] };
+}
+
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
   { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
@@ -131,16 +188,19 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
       {(layout.aisles ?? []).map((a) => {
         const vertical = a.h > a.w;
         const thick = vertical ? a.w : a.h;
-        const run = vertical ? a.h : a.w;
+        const spot = aisleLabelSpot(a, layout.places);
+        const run = spot?.run ?? 0;
         const size = Math.max(0.45, Math.min(1, thick * 0.6, (run / Math.max(4, a.label.length)) * 1.4));
-        const cx = a.x + a.w / 2;
-        const cy = a.y + a.h / 2;
+        const cx = spot?.cx ?? 0;
+        const cy = spot?.cy ?? 0;
         return (
           <g key={a.id} className={`aisle-label${a.guess ? ' guess' : ''}${chosen.has(a.id) ? ' selected' : ''}${changed.has(a.id) ? ' changed' : ''}${onAisleTap ? ' tappable' : ''}`}
             onClick={onAisleTap ? () => onAisleTap(a.id) : undefined}>
             <rect className="aisle-area" x={a.x + 0.1} y={a.y + 0.1} width={a.w - 0.2} height={a.h - 0.2} rx={0.35} />
-            <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={size}
-              transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}>{a.label}</text>
+            {spot && (
+              <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={size}
+                transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}>{a.label}</text>
+            )}
           </g>
         );
       })}
@@ -154,6 +214,10 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
         const h = Math.max(...parts.map((r) => r.y + r.h)) - y;
         return <rect key={`sel-${a.id}`} className="aisle-group-outline" x={x - 0.2} y={y - 0.2} width={w + 0.4} height={h + 0.4} rx={0.5} />;
       })}
+
+      <g className="place-labels" aria-hidden="true">
+        {layout.places.map((place) => <PlaceLabel key={`l-${place.id}`} place={place} look={look} />)}
+      </g>
 
       {ghosts.map((g, i) => {
         const r = g.rect;
@@ -218,13 +282,8 @@ function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap,
   const vertical = isShelf ? place.orientation === 'vertical' : f.h > f.w * 1.6;
   const cx = f.x + f.w / 2;
   const cy = f.y + f.h / 2;
-  const run = vertical ? f.h : f.w;
-  const thick = vertical ? f.w : f.h;
-  const chars = Math.max(1, place.label.length);
-  // Shelf labels sit on the shelf itself, so they're as tall as the shelf allows.
-  const size = isShelf
-    ? Math.min(0.78, (run / chars) * 1.6)
-    : Math.min(1.5, Math.max(0.8, thick * 0.4), (run / chars) * 1.7);
+  // The label's size (drawn by PlaceLabel), so section icons can keep clear of it.
+  const size = isShelf ? Math.min(0.78, ((vertical ? f.h : f.w) / Math.max(1, place.label.length)) * 1.6) : 0;
   const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, changed && 'changed', place.guess && 'guess', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
   const pad = 0.6; // easier to tap a thin shelf
@@ -254,19 +313,6 @@ function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap,
         const inY = b.y1 === b.y2 ? (b.y1 === f.y ? 0.12 : -0.12) : 0;
         return <line key={`b${i}`} className="shelf-back" x1={b.x1 + inX} y1={b.y1 + inY} x2={b.x2 + inX} y2={b.y2 + inY} />;
       })}
-      {place.label && (
-        <text
-          x={cx}
-          y={cy}
-          className={isShelf ? 'place-label shelf-label' : 'place-label'}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={size}
-          transform={vertical ? `rotate(-90 ${cx} ${cy})` : undefined}
-        >
-          {place.label}
-        </text>
-      )}
       {place.temp && (
         <>
           <rect className="temp-frame" x={f.x + 0.05} y={f.y + 0.05} width={f.w - 0.1} height={f.h - 0.1} rx={isShelf ? 0.25 : 0.6} />

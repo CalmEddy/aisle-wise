@@ -68,4 +68,15 @@ describe('learning the arrangement from trips', () => {
     expect(describeArrangement({ aisleOne: 'far' })).toBe('aisle 1 is on the left');
     expect(describeArrangement({ produce: 'far' })).toBe('Produce is along the left wall');
   });
+
+  it('asks instead of turning the map round after only one trip, or once it has been edited by hand', () => {
+    const walk = ['apples', 'a6', 'a5', 'a4', 'a3', 'a2', 'a1'];
+    const one = learnArrangement(store, products, [trip(walk)], catalog);
+    expect(one.apply).toEqual({});
+    expect(one.question?.setting).toBe('aisleOne');
+    const edited = { ...store, gen: { ...store.gen!, locked: ['g-shelf-3-R'] } };
+    const two = learnArrangement(edited, products, [trip(walk), trip(walk, 1e9)], catalog);
+    expect(two.apply).toEqual({});
+    expect(two.question?.setting).toBe('aisleOne');
+  });
 });

@@ -122,6 +122,8 @@ export interface GeneratedMap extends Arrangement {
   door?: number;
   /** Which way each block's shelves run ("block:C", "aisles:7"); unset: up and down (aisle groups: side to side). */
   directions?: Record<string, Orientation>;
+  /** How a section's shelves are shaped ("block:A" → short stubs, or split in two by a walkway); long when not said. */
+  shapes?: Record<string, SectionShape>;
 }
 
 /**
@@ -233,7 +235,9 @@ export type MainWall = Exclude<Wall, 'front'>;
 /** Where along a wall: front/middle/back for the side walls, left/middle/right for the back wall. */
 export type WallPart = 'front' | 'middle' | 'back' | 'left' | 'right';
 /** Where out in the open. */
-export type OpenNear = 'entrance' | 'middle' | 'far';
+/** A section's shelves: full length, short stubs, or two short runs with a walkway between. */
+export type SectionShape = 'long' | 'short' | 'split';
+export type OpenNear = 'entrance' | 'middle' | 'far' | 'back';
 export type Fixture = 'table' | 'case' | 'stand';
 /** Out in the middle of a block, across aisles (or sections) `from`–`to`, at its front, middle or back: the shelves there make way. */
 export interface Across { from: string; to: string; part?: AislePos }

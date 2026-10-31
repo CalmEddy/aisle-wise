@@ -233,3 +233,53 @@ describe('the edges of the store', () => {
     for (const q of l.places) expect(floor.reachable(l.entrance, { x: q.x, y: q.y })).toBe(true);
   });
 });
+
+describe('sample-store fixes', () => {
+  const blank3: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
+    gen: { enabled: true, entrance: 'left', locked: [] } };
+  const aisleAt = (id: string, n: string, categoryId = 'snacks'): Product => ({ id, name: id, categoryId, clues: { s: { kind: 'aisle', aisle: n } } });
+
+  it('the back wall stops at the outermost shelf on a side with nothing along its wall', () => {
+    const ps: Product[] = [aisleAt('a', '1'), aisleAt('b', '2'), { id: 'milk', name: 'Milk', categoryId: 'dairy', clues: { s: { kind: 'dept', dept: 'dairy' } } }];
+    const l = regenerate(blank3, buildModel(ps, 's'));
+    const shelves = l.places.filter((p) => p.id.startsWith('g-shelf-')).map(footprint);
+    const back = footprint(l.places.find((p) => p.id === 'g-dept-dairy')!);
+    expect(back.x).toBe(Math.min(...shelves.map((r) => r.x)));
+    expect(back.x + back.w).toBe(Math.max(...shelves.map((r) => r.x + r.w)));
+  });
+
+  it('a stand by the back wall goes in a strip under it, its answer finds it, and it doesn’t take the whole category', () => {
+    const ps: Product[] = [
+      aisleAt('a', '1'), aisleAt('b', '2'),
+      { id: 'apples', name: 'Apples', categoryId: 'fruit', clues: { s: { kind: 'dept', dept: 'produce' } } },
+      { id: 'melon', name: 'Melon', categoryId: 'fruit', clues: { s: { kind: 'open', near: 'back', fixture: 'stand' } } },
+    ];
+    let l = regenerate(blank3, buildModel(ps, 's'));
+    const stand = l.places.find((p) => p.id.startsWith('g-open-'))!;
+    const shelfTop = Math.min(...l.places.filter((p) => p.id.startsWith('g-shelf-')).map((p) => p.y));
+    expect(stand.y + footprint(stand).h).toBeLessThan(shelfTop);
+    expect(stand.categories).toEqual([]); // a display: other fruit stays in Produce
+    expect(resolveClue(ps[3].clues!.s, l)).toMatch(new RegExp(`^${stand.id}`));
+    // Put in the back right corner (the spot card's option): its answer still finds it.
+    l = regenerate({ ...l, gen: { ...l.gen!, placements: { [`isl:${stand.id.slice(7)}`]: { of: 'back:right' } } } }, buildModel(ps, 's'));
+    const moved = l.places.find((p) => p.id === stand.id)!;
+    expect(moved.x + footprint(moved).w).toBe(l.width - 2); // against the right wall
+    expect(resolveClue(ps[3].clues!.s, l)).toMatch(new RegExp(`^${stand.id}`));
+  });
+
+  it('sections can be short stubs, or split in two by a walkway', () => {
+    const style = { example: 'B12', roles: ['section', 'shelf'] as ('section' | 'shelf')[], pairing: 'backToBack' as const };
+    const code = (id: string, c: string): Product => ({ id, name: id, clues: { s: { kind: 'shelf', code: c, section: c[0], shelf: Number(c.slice(1)) } } });
+    const ps = [code('x', 'A2'), code('y', 'B4')];
+    const base = { ...blank3, labels: style };
+    const long = regenerate(base, buildModel(ps, 's'));
+    const len = (l: StoreLayout, id: string) => (l.places.find((p) => p.id === id) as Shelf).length;
+    const short = regenerate({ ...base, gen: { ...base.gen!, shapes: { 'block:A': 'short' } } }, buildModel(ps, 's'));
+    expect(len(short, 'g-sec-A-1')).toBeLessThan(len(long, 'g-sec-A-1'));
+    const split = regenerate({ ...base, gen: { ...base.gen!, shapes: { 'block:B': 'split' } } }, buildModel(ps, 's'));
+    const halves = split.places.filter((p) => p.id === 'g-sec-B-1' || p.id === 'g-sec-B-1~2') as Shelf[];
+    expect(halves).toHaveLength(2);
+    expect(halves.map((h) => h.label)).toEqual(['B1', 'B1']);
+    expect(Math.abs(halves[1].y - halves[0].y)).toBeGreaterThan(halves[0].length); // a walkway between
+  });
+});

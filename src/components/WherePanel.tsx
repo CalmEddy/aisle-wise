@@ -208,7 +208,7 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
           {tab === 'open' && (
             <>
               {choice<Fixture>('What', [['table', 'Table'], ['case', 'Case'], ['stand', 'Stand / display']], fixture, setFixture)}
-              {choice<OpenNear | 'across'>('Where', [...(['entrance', 'middle', 'far'] as const).map((n) => [n, NEAR_WORD[n][0].toUpperCase() + NEAR_WORD[n].slice(1)] as [OpenNear, string]), ['across', 'Across aisles…']],
+              {choice<OpenNear | 'across'>('Where', [...(['entrance', 'middle', 'far', 'back'] as const).map((n) => [n, NEAR_WORD[n][0].toUpperCase() + NEAR_WORD[n].slice(1)] as [OpenNear, string]), ['across', 'Across aisles…']],
                 acrossOn ? 'across' : aisle.trim() ? undefined : near,
                 (n) => { if (n === 'across') { setAcrossOn(true); setAisle(''); } else { setAcrossOn(false); setNear(n); setAisle(''); } })}
               {acrossOn ? (

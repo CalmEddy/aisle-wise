@@ -156,6 +156,9 @@ export function placementOptions(layout: StoreLayout, products: Product[], subje
     for (const a of model.aisles) candidates.push({ placement: { of: `aisle:${a.label}` }, label: `By aisle ${a.label}` });
     candidates.push({ placement: { of: 'wall:left' }, label: 'Left side, in front of the aisles' });
     candidates.push({ placement: { of: 'wall:right' }, label: 'Right side, in front of the aisles' });
+    candidates.push({ placement: { of: 'back:left' }, label: 'Back left corner' });
+    candidates.push({ placement: { of: 'back:middle' }, label: 'By the back wall' });
+    candidates.push({ placement: { of: 'back:right' }, label: 'Back right corner' });
   }
   // Same map, same spot (whatever was asked): offered once, named after what it's really next to.
   const byMap = new Map<string, { option: PlacementOption; touching: boolean }>();

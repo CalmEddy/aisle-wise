@@ -7,7 +7,7 @@ import { BRUSH_LENGTH, BRUSH_PRESETS, MAX_AISLE, MIN_AISLE, type Brush, type Sid
 import type { StoreLayout } from '../core/types';
 import { NumberField } from './PlacePanel';
 import { CategoryPicker } from './CategoryPicker';
-import type { Category, GeneratedMap } from '../core/types';
+import type { Category, GeneratedMap, SectionShape } from '../core/types';
 
 /** What tapping or dragging on the map does in build mode. */
 export type BuildTool = 'walk' | 'select' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'cut' | 'area' | 'entrance' | 'checkout';
@@ -81,7 +81,7 @@ export interface StoreApi {
   /** Which arrangement settings apply to this store; backWall names its two ends. */
   layoutHas: { aisles: boolean; produce: boolean; backWall?: [string, string] };
   /** Blocks of shelving made from answers: aisle runs made into a block, and sections. */
-  blocks: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean }[];
+  blocks: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean; shape?: SectionShape }[];
 }
 
 type GenKey = 'entrance' | 'aisleOne' | 'produce' | 'backWall';
@@ -223,6 +223,16 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
                           </button>
                         ))}
                       </div>
+                      {b.shape && (
+                        <div className="segmented mini-seg" role="group" aria-label={`Shape of ${b.name}`}>
+                          {(['long', 'short', 'split'] as const).map((sh) => (
+                            <button key={sh} className={b.shape === sh ? 'active' : ''} aria-pressed={b.shape === sh}
+                              onClick={() => onUndoable(`${b.name}: ${sh === 'long' ? 'long shelves' : sh === 'short' ? 'short shelves' : 'split by a walkway'}.`, store.setGen({ shapes: { ...store.gen!.shapes, [b.ref]: sh } }))}>
+                              {sh === 'long' ? 'Long' : sh === 'short' ? 'Short' : 'Split'}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {onPlaceBlock && <button className="link" onClick={() => onPlaceBlock(b.ref)}>Place…</button>}
                       {b.group && (
                         <button className="link" onClick={() => {

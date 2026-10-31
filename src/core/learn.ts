@@ -166,11 +166,18 @@ export function learnArrangement(layout: StoreLayout, products: Product[], trips
 
   const apply: Arrangement = {};
   let question: LayoutQuestion | undefined;
+  // The map only turns itself round on its own after two trips, and never once it has been edited by hand
+  // (cut, moved, made into blocks or placed): redrawing it then would leave those edits behind. It asks instead.
+  const edited = gen.locked.length > 0 || !!gen.aisleGroups?.length || Object.keys(gen.placements ?? {}).some((r) => !r.startsWith('isl:'));
+  const onItsOwn = mine.length >= 2 && !edited;
   for (const k of free) {
     const flipped = { ...best, [k]: CHOICES[k].find((v) => v !== best[k]) };
     const other = scores[combos.findIndex((c) => same(c, flipped))];
     const margin = (other - bestScore) / bestScore;
-    if (margin >= CLEAR_MARGIN) {
+    if (margin >= CLEAR_MARGIN && !onItsOwn) {
+      // Clear, but not to be changed by itself: ask (if it's not already that way round).
+      if (best[k] !== current(gen, k) && !skipped.has(k) && !question) question = questionFor(k, model);
+    } else if (margin >= CLEAR_MARGIN) {
       if (best[k] !== current(gen, k)) (apply as Record<string, string>)[k] = best[k]!;
     } else if (other !== bestScore && !skipped.has(k) && !question) {
       // The trips say something about this, but not clearly.

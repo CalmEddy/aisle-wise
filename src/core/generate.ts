@@ -1,7 +1,7 @@
-import { acrossRect, aisleNumber, DEPTS, findAisle, guessDept, sectionNumber } from './clues';
+import { acrossRect, aisleNumber, DEPTS, findAisle, guessDept, islandKey, sectionNumber } from './clues';
 import { formatLabel, shelfOffsets, type LabelStyle } from './labels';
 import { footprint } from './geometry';
-import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, MainWall, Place, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, MainWall, Place, Product, Rect, SectionShape, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -175,8 +175,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
         if (c.aisle) aisle(c.aisle);
         const near = c.near ?? 'middle';
         const across = c.across && { from: c.across.from.trim().toUpperCase(), to: c.across.to.trim().toUpperCase(), ...(c.across.part && { part: c.across.part }) };
-        const where = across ? `x${across.from}-${across.to}-${across.part ?? 'middle'}` : c.aisle ? `a${c.aisle.trim().toUpperCase()}` : near;
-        const key = `${where}-${c.fixture ?? 'any'}-${c.temp ?? 'room'}`;
+        const key = islandKey(c);
         let isl = islands.get(key);
         if (!isl) islands.set(key, (isl = { key, near, ...(c.aisle && { aisle: c.aisle.trim().toUpperCase() }), ...(across && { across }), ...(c.fixture && { fixture: c.fixture }), ...(c.temp && { temp: c.temp }), categories: [] }));
         addCat(isl.categories, p.categoryId);
@@ -232,7 +231,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
 }
 
 /** What a map is generated with: the entrance corner and the arrangement. */
-export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions' | 'door' | 'wallOrder'> & { labels?: LabelStyle };
+export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placements' | 'aisleGroups' | 'directions' | 'shapes' | 'door' | 'wallOrder'> & { labels?: LabelStyle };
 
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
@@ -247,6 +246,7 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
     ...(settings.door !== undefined && { door: settings.door }),
     ...(settings.wallOrder && { wo: settings.wallOrder }),
     ...(settings.directions && Object.keys(settings.directions).length && { dr: settings.directions }),
+    ...(settings.shapes && Object.keys(settings.shapes).length && { sh: settings.shapes }),
     a: model.aisles.map((a) => [a.label, a.seen ? 1 : 0, a.freezer ? 1 : a.chilled ? 2 : 0, cats(a, 'L'), cats(a, 'R')]),
     d: [...model.depts].sort(),
     ...(model.blocks.length && { bl: model.blocks.map((b) => [b.section, b.seen ? 1 : 0, b.max, b.shelves, b.temp ?? '']) }),
@@ -267,7 +267,7 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; door?: number; wallOrder?: Record<MainWall, string[]> } = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; shapes?: Record<string, SectionShape>; door?: number; wallOrder?: Record<MainWall, string[]> } = {}) {
   const placements = arrangement.placements ?? {};
   const L = AISLE_LENGTH;
   // Blocks of shelving: the numbered aisles, runs of aisles the shopper made into their own block,
@@ -290,7 +290,7 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   let prevSection: string | undefined = mainAisles.length ? 'aisles:main' : undefined;
   for (const b of model.blocks) {
     const ref = `block:${b.section}`;
-    items.push({ ref, ...sectionSize(b, pairing, dirs[ref] ?? 'vertical'), default: prevSection ? { of: prevSection, side: 'left' } : undefined });
+    items.push({ ref, ...sectionSize(b, pairing, dirs[ref] ?? 'vertical', arrangement.shapes?.[ref]), default: prevSection ? { of: prevSection, side: 'left' } : undefined });
     prevSection = ref;
   }
   const arranged = arrangeBlocks(items, placements);
@@ -303,9 +303,15 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   let width = Math.max(xBlocks + bw + 4, 14);
   let xRightWall = width - 2;
   // Down: back wall shelf (y 1), a 3-square cross aisle, the aisles, the front cross aisle, things in the open, checkout.
-  const yShelf = 5;
+  // Tables, cases and stands by the back wall get a strip of their own, between the back cross aisle and the shelves.
+  const atBack = (isl: IslandModel) => {
+    const pl = placements[`isl:${isl.key}`];
+    return !isl.across && (pl ? pl.of.startsWith('back:') : isl.near === 'back' && !isl.aisle);
+  };
+  const backBand = model.islands.some(atBack) ? 3 : 0;
+  const yShelf = 5 + backBand;
   const H = Math.max(bh, L); // how deep the aisles and sections run
-  const band = model.islands.some((i) => !i.across) ? 4 : 0;
+  const band = model.islands.some((i) => !i.across && !atBack(i)) ? 4 : 0;
   const front = yShelf + H + 3 + band;
   // The bottom row is the front of the store: the door, and any front wall shelving either side of it.
   const height = front + 3;
@@ -367,11 +373,12 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
     const across = dirs[ref] === 'horizontal';
     const offs = shelfOffsets(pairing, block.max);
     const row = pairing === 'row';
+    const shape = row ? 'long' : arrangement.shapes?.[ref] ?? 'long';
     for (let k = 1; k <= block.max; k++) {
-      const len = row ? ROW_BAY : SECTION_SHELF;
+      const len = row ? ROW_BAY : shape === 'short' ? SHORT_SHELF : SECTION_SHELF;
       const step = row ? (block.max - k) * ROW_BAY : 0; // along a row
       const off = row ? 0 : (across ? rect.h : rect.w) - 1 - offs[k - 1]; // across the section
-      places.push({
+      const shelf: Shelf = {
         kind: 'shelf', id: `g-sec-${block.section}-${k}`, label: formatLabel(arrangement.labels, block.section, k),
         orientation: across ? 'horizontal' : 'vertical',
         x: xBlocks + rect.x + (across ? (row ? rect.w - len - step : 0) : off),
@@ -380,7 +387,13 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
         categories: block.shelves[k] ?? [],
         ...(!block.seen || !block.seenShelves.includes(k) ? { guess: true } : {}),
         ...(block.temp && { temp: block.temp }),
-      });
+      };
+      if (shape !== 'split') { places.push(shelf); continue; }
+      // Split by a walkway across the middle: two short runs, both with the shelf's label.
+      const piece = Math.floor((len - SPLIT_GAP) / 2);
+      const far = piece + SPLIT_GAP;
+      places.push({ ...shelf, length: piece });
+      places.push({ ...shelf, id: `${shelf.id}~2`, length: len - far, categories: [], ...(across ? { x: shelf.x + far } : { y: shelf.y + far }) });
     }
   }
   // Things out in the middle of a block (across aisles 3–5, front): the shelves there make way.
@@ -400,7 +413,7 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
         ...sh, id: k === 0 ? sh.id : `${sh.id}~2`, length: q.to - q.from, ...(v ? { y: q.from } : { x: q.from }),
       })));
     }
-    places.push({ kind: 'area', id: `g-open-${isl.key}`, label: islandLabel(isl), ...r, categories: [...isl.categories], ...(isl.temp && { temp: isl.temp }) });
+    places.push({ kind: 'area', id: `g-open-${isl.key}`, label: islandLabel(isl), ...r, categories: islandStock(isl), ...(isl.temp && { temp: isl.temp }) });
   }
   const produceFar = arrangement.produce === 'far';
   const back = BACK_WALL.filter((d) => model.depts.includes(d));
@@ -472,6 +485,16 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   const rightMerge = wallEdge('right');
   if (leftMerge !== undefined) xLeftWall = leftMerge;
   if (rightMerge !== undefined) { xRightWall = rightMerge; width = rightMerge + 2; }
+  // A side with nothing along its wall: the outermost shelf there is the edge of the store, and the back wall
+  // stops at it (no strip of empty floor beyond).
+  const blockShelves = places.filter(blockShelf);
+  if (blockShelves.length) {
+    if (!placed.some((p) => p.wall === 'left')) xLeftWall = Math.min(...blockShelves.map((sh) => sh.x));
+    if (!placed.some((p) => p.wall === 'right')) {
+      xRightWall = Math.max(...blockShelves.map((sh) => { const f = footprint(sh); return f.x + f.w - 1; }));
+      width = xRightWall + 2;
+    }
+  }
   const backRun = { from: xLeftWall, len: xRightWall - xLeftWall + 1 };
   const weight = (sec: SectionModel) => 1 + 0.25 * Math.min(sec.count - 1, 8);
   for (const wall of ['left', 'back', 'right'] as Wall[]) {
@@ -523,7 +546,7 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   // Out in the open: tables, cases and stands in a band between the aisles and the checkouts.
   const mid = Math.floor(width / 2);
   if (model.islands.some((i) => !i.across)) {
-    const yIsland = yShelf + H + 3;
+    const yFront = yShelf + H + 3;
     const taken: Rect[] = [];
     const walkX = (label: string) => aisles.find((x) => x.id === `g-aisle-${label}`)?.x;
     for (const isl of model.islands.filter((i) => !i.across)) {
@@ -531,21 +554,23 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
       let x: number;
       const pl = placements[`isl:${isl.key}`];
       const byAisle = pl?.of.startsWith('aisle:') ? pl.of.slice(6) : isl.aisle;
-      if (pl?.of === 'wall:left') x = 2;
-      else if (pl?.of === 'wall:right') x = width - 5;
+      const back = atBack(isl);
+      if (pl?.of === 'wall:left' || pl?.of === 'back:left') x = 2;
+      else if (pl?.of === 'wall:right' || pl?.of === 'back:right') x = width - 5;
+      else if (back) x = mid - 1;
       else if (byAisle && walkX(byAisle) !== undefined) x = walkX(byAisle)! - 0.5;
       else if (isl.near === 'entrance') x = mid - 1;
       else if (isl.near === 'far') x = 2;
       else x = mid - 1;
       x = Math.round(x);
-      let r: Rect = { x, y: yIsland, w: 3, h: 2 };
+      let r: Rect = { x, y: back ? 5 : yFront, w: 3, h: 2 };
       for (let k = 1; k < 30 && (taken.some((t) => overlaps(t, r)) || r.x < 1 || r.x + r.w > width - 1); k++) {
         r = { ...r, x: x + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 4 };
       }
       taken.push(r);
       places.push({
         kind: 'area', id: `g-open-${isl.key}`, label: islandLabel(isl), ...r,
-        categories: [...isl.categories], ...(isl.temp && { temp: isl.temp }),
+        categories: islandStock(isl), ...(isl.temp && { temp: isl.temp }),
       });
     }
   }
@@ -681,6 +706,18 @@ export function changedParts(before: StoreLayout, after: StoreLayout): string[] 
 /** Squares along a section's shelf (stood up and down), and along one bay of a section in a row. */
 export const SECTION_SHELF = 10;
 export const ROW_BAY = 4;
+/** Squares along a short section's shelves (stubs), and a split section's walkway across the middle. */
+export const SHORT_SHELF = 4;
+const SPLIT_GAP = 2;
+
+/**
+ * What a table, case or stand out on the floor stocks, for placing other things of the same kind: a case (a
+ * freezer or fridge case) holds its kind of thing; a stand or table is a display of a few things this week, so
+ * the rest of its kind stay where they are (only the items said to be there go to it).
+ */
+function islandStock(isl: IslandModel): string[] {
+  return isl.fixture === 'stand' || isl.fixture === 'table' ? [] : [...isl.categories];
+}
 
 /** A block to lay out: its size, and where it goes when the shopper hasn't said. */
 interface BlockItem { ref: string; w: number; h: number; default?: Placement }
@@ -691,10 +728,10 @@ function aisleBlockSize(m: number, dir: Orientation, L: number) {
 }
 
 /** A section's size in squares, standing up and down or turned side to side. */
-function sectionSize(b: BlockModel, pairing: LabelStyle['pairing'], dir: Orientation) {
+function sectionSize(b: BlockModel, pairing: LabelStyle['pairing'], dir: Orientation, shape: SectionShape = 'long') {
   const offs = shelfOffsets(pairing, b.max);
   const across = pairing === 'row' ? 1 : Math.max(...offs) + 1;
-  const along = pairing === 'row' ? b.max * ROW_BAY : SECTION_SHELF;
+  const along = pairing === 'row' ? b.max * ROW_BAY : shape === 'short' ? SHORT_SHELF : SECTION_SHELF;
   return dir === 'vertical' ? { w: across, h: along } : { w: along, h: across };
 }
 

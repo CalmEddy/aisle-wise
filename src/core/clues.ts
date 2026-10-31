@@ -36,7 +36,15 @@ export function aisleNumber(aisle: string): number {
 const POS_WORD: Record<AislePos, string> = { front: 'front', middle: 'middle', back: 'back' };
 const SIDE_WORD: Record<AisleSide, string> = { L: 'left', R: 'right' };
 export const WALL_WORD: Record<Wall, string> = { left: 'Left', back: 'Back', right: 'Right', front: 'Front' };
-export const NEAR_WORD: Record<OpenNear, string> = { entrance: 'near the door', middle: 'in the middle', far: 'on the far side' };
+export const NEAR_WORD: Record<OpenNear, string> = { entrance: 'near the door', middle: 'in the middle', far: 'on the far side', back: 'by the back wall' };
+
+/** Which table, case or stand an "out in the open" answer means (answers alike share one): its key on the map ("g-open-<key>"). */
+export function islandKey(c: Extract<Clue, { kind: 'open' }>): string {
+  const near = c.near ?? 'middle';
+  const across = c.across && { from: c.across.from.trim().toUpperCase(), to: c.across.to.trim().toUpperCase(), part: c.across.part ?? 'middle' };
+  const where = across ? `x${across.from}-${across.to}-${across.part}` : c.aisle ? `a${c.aisle.trim().toUpperCase()}` : near;
+  return `${where}-${c.fixture ?? 'any'}-${c.temp ?? 'room'}`;
+}
 const FIXTURE_WORD = { table: 'Table', case: 'Case', stand: 'Stand' } as const;
 
 /** "Aisle 7 · left · middle", "Produce", "Freezer, aisle 14", "End of aisle 7 (front)". */
@@ -116,7 +124,7 @@ export function clueRank(c: Clue): number {
     case 'shelf': return 100 + sectionNumber(c.section) * 10 + Math.min(c.shelf ?? 0, 99) / 10;
     // Walls: after the aisles, round from the left wall's front to the right wall's front.
     case 'wall': return 9100 + WALL_ORDER[c.wall] * 10 + partRank(c.wall, c.part);
-    case 'open': return c.across ? acrossRank(c.across) : c.aisle ? aisle(c.aisle, 0) : c.near === 'entrance' ? 5 : c.near === 'far' ? 8700 : 4900;
+    case 'open': return c.across ? acrossRank(c.across) : c.aisle ? aisle(c.aisle, 0) : c.near === 'entrance' ? 5 : c.near === 'far' ? 8700 : c.near === 'back' ? 8600 : 4900;
     case 'display': return c.aisle ? aisle(c.aisle, 4) : c.dept ? deptRank(c.dept) + 0.5 : 8900;
     case 'dept': return deptRank(c.dept);
     case 'checkout': return 9999;
@@ -208,7 +216,12 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
     case 'endcap': return inAisle(c.aisle, undefined, c.end === 'front' ? 0.02 : 0.98);
     case 'wall': return onWall(l, c.wall, c.part, c.temp);
     case 'shelf': return labelledShelf(l, c.code, c.section, c.shelf);
-    case 'open': return c.across ? inAcross(l, c.across, c.temp) : c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
+    case 'open': {
+      // The map's own table, case or stand for this answer, wherever it was put.
+      const own = l.places.find((p) => p.id === `g-open-${islandKey(c)}`);
+      if (own) { const f = footprint(own); return nearest({ x: f.x + f.w / 2, y: f.y + f.h / 2 }, [own]); }
+      return c.across ? inAcross(l, c.across, c.temp) : c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
+    }
     case 'display': return c.aisle ? inAisle(c.aisle, undefined, 0.5) : c.dept ? findDept(l, c.dept, product?.categoryId) : undefined;
     case 'dept': return findDept(l, c.dept, product?.categoryId);
     case 'checkout': return l.places.find((p) => /checkout/i.test(p.label))?.id;
@@ -288,6 +301,7 @@ function inOpen(l: StoreLayout, near?: OpenNear, t?: Temp): string | undefined {
   const door = frame.toStore(l.entrance);
   const target = near === 'entrance' ? frame.toMap(door.u, 0.15)
     : near === 'far' ? frame.toMap(1 - door.u, 0.15)
+      : near === 'back' ? frame.toMap(0.5, 0.9)
       : frame.toMap(0.5, 0.5);
   const walls: Wall[] = ['left', 'back', 'right'];
   const open = l.places.filter((p) => {

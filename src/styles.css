@@ -325,7 +325,7 @@ button { cursor: pointer; }
 .section-shelf { opacity: 0.9; }
 .section-band { opacity: 0.35; }
 .section-icon { pointer-events: none; user-select: none; }
-.place:has(.section-icon) .place-label { opacity: 0.55; }
+.place-label.with-icons { opacity: 0.55; }
 /* Display switches: one compact row (scrolls sideways only if the screen is very narrow). */
 .toggles { display: flex; gap: 5px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 6px 0 0; align-items: center; }
 .toggles::-webkit-scrollbar { display: none; }
@@ -589,7 +589,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 
 /* Wall shelves (stocked from one side) */
 .place.shelf.wall .place-bg { fill: var(--shelf-back); }
-.place.shelf.wall .shelf-label { fill: var(--surface); stroke: var(--shelf-back); }
+.shelf-label.wall { fill: var(--surface); stroke: var(--shelf-back); }
 .place.shelf.wall .shelf-back { stroke-width: 0.34; }
 
 /* Aisle brush */
@@ -714,7 +714,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 
 /* Generated map: guesses (no answer mentions them yet) are dashed and faint */
 .place.guess .place-bg { fill-opacity: 0.35; stroke: var(--muted); stroke-width: 0.12; stroke-dasharray: 0.35 0.3; }
-.place.guess .shelf-label { opacity: 0.5; }
+.shelf-label.guess { opacity: 0.5; }
 .aisle-label.guess text { opacity: 0.4; }
 .gen-field p { margin: 2px 0 6px; }
 
@@ -822,7 +822,7 @@ main { padding-bottom: 110px; }
 /* ---- Cut aisles ---- */
 .map-cut-outline { fill: rgba(192, 57, 43, 0.12); stroke: var(--danger); stroke-width: 0.2; stroke-dasharray: 0.5 0.3; pointer-events: none; }
 .map-ghost.cut rect:not(.hit) { fill: var(--danger); fill-opacity: 0.55; stroke: none; }
-.place.shelf.wall.chilled .shelf-label, .place.shelf.wall.frozen .shelf-label { fill: var(--text); stroke: var(--surface); }
+.shelf-label.wall.chilled, .shelf-label.wall.frozen { fill: var(--text); stroke: var(--surface); }
 .aisle-group-outline { fill: color-mix(in srgb, var(--you) 8%, transparent); stroke: var(--you); stroke-width: 0.22; stroke-dasharray: 0.6 0.35; pointer-events: none; }
 
 /* ---- Intro ---- */

@@ -28,7 +28,7 @@ import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Clue, GeoPoint, Rect } from './core/types';
+import type { Clue, GeoPoint, Rect, SectionShape } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
 import { clampPlace } from './core/geometry';
@@ -451,9 +451,9 @@ export default function App() {
   const storeBlocks = useMemo(() => {
     const m = buildModel(products, layout.id);
     const gen = layout.gen;
-    const out: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean }[] = [];
+    const out: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean; shape?: SectionShape }[] = [];
     for (const g of gen?.aisleGroups ?? []) out.push({ ref: `aisles:${g.from}`, name: `Aisles ${g.from}–${g.to}`, dir: gen?.directions?.[`aisles:${g.from}`] ?? 'horizontal', group: true });
-    for (const b of m.blocks) out.push({ ref: `block:${b.section}`, name: `Section ${b.section}`, dir: gen?.directions?.[`block:${b.section}`] ?? 'vertical', group: false });
+    for (const b of m.blocks) out.push({ ref: `block:${b.section}`, name: `Section ${b.section}`, dir: gen?.directions?.[`block:${b.section}`] ?? 'vertical', group: false, shape: gen?.shapes?.[`block:${b.section}`] ?? 'long' });
     return out;
   }, [products, layout.id, layout.gen]);
   /** Which arrangement settings this store's map has (for Store settings). */
