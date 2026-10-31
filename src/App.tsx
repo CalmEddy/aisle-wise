@@ -48,6 +48,8 @@ export interface QuickAddResult {
     alreadyOnList: boolean;
     /** The item was put in the cart away from its saved location: ask before moving it. */
     conflict?: { savedKey: string; hereKey: string };
+    /** The list entry it's on (new or already there). */
+    itemId?: string;
   }[];
 }
 
@@ -242,15 +244,17 @@ export default function App() {
 
       const pid = product.id;
       const waiting = nextItems.find((i) => !i.done && (i.productId === pid || productFor(i, catalog)?.id === pid));
+      let itemId = waiting?.id;
       if (waiting && mode === 'cart') {
         nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, ...extra, done: true, productId: pid } : i));
       } else if (waiting) {
         // Already on the list: a new amount or note replaces the old one.
         if (amount.qty || amount.note) nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, ...extra } : i));
       } else {
-        nextItems = [...nextItems, { id: newId(), name: product.name, done: mode === 'cart', productId: pid, ...extra }];
+        itemId = newId();
+        nextItems = [...nextItems, { id: itemId, name: product.name, done: mode === 'cart', productId: pid, ...extra }];
       }
-      results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list', conflict });
+      results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list', conflict, itemId });
     }
 
     setProducts(() => nextProducts);
@@ -429,7 +433,7 @@ export default function App() {
   useEffect(() => {
     if (!layout.gen?.enabled || !Object.keys(learned.apply).length) return;
     setLayouts((prev) => prev.map((x) => (x.id === layout.id && x.gen ? { ...x, gen: { ...x.gen, ...learned.apply } } : x)));
-    setNotice(`Map updated from your trips: ${describeArrangement(learned.apply, buildModel(products, layout.id))}. Changes are outlined.`);
+    setNotice(`Map updated from your trips: ${describeArrangement(learned.apply, buildModel(products, layout.id))}.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [learnedKey, layout.id]);
   /** How this store labels its shelves ("B12"), or back to aisle numbers. Earlier shelf answers are read again in the new style. */

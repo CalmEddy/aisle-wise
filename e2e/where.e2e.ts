@@ -120,23 +120,19 @@ test('the row shows where an answered item is', async ({ page }) => {
   await expect(row(page, 'Jam')).toContainText('7');
 });
 
-test('answers change the map straight away, outlined until the next trip', async ({ page }) => {
+test('answers change the map straight away, with no outlines', async ({ page }) => {
   await addItems(page, 'Apples, Cereal');
   await tick(page, 'Apples');
   await page.locator('.where-bar .btn.primary').click(); // Produce
-  // The store's first map: everything's new, so nothing is outlined.
   await expect(page.locator('.map-wrap svg.map .place')).not.toHaveCount(0);
-  await expect(page.locator('svg.map .change-frame')).toHaveCount(0);
-  const before = 0;
   await tick(page, 'Cereal');
   await page.locator('.where-bar').getByRole('button', { name: /Other|Aisle \/ department/ }).click();
   await page.getByLabel('Aisle number').fill('4');
   await page.getByRole('button', { name: /^Save · Aisle 4/ }).click();
-  // Aisle 4 and its shelves are new: more outlined.
-  await expect.poll(() => page.locator('svg.map .change-frame').count()).toBeGreaterThan(before);
-  await expect(page.locator('svg.map .aisle-label.changed')).not.toHaveCount(0);
-  await page.locator('.trip-done-card').getByRole('button', { name: 'Clear cart · start next trip' }).click();
+  // Aisle 4 is on the map straight away; nothing is outlined.
+  await expect(page.locator('svg.map .aisle-label', { hasText: /AISLE 4/i })).toHaveCount(1);
   await expect(page.locator('svg.map .change-frame')).toHaveCount(0);
+  await expect(page.locator('svg.map .changed')).toHaveCount(0);
 });
 
 test('quick bar: next aisles in one tap, number buttons, walls, fridge/freezer', async ({ page }) => {
@@ -292,6 +288,26 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   await page.locator('.items .row', { hasText: 'Cereal' }).getByRole('checkbox').uncheck({ force: true });
   await tick(page, 'Cereal');
   await expect(page.locator('.where-bar')).toContainText('Where was Cereal?');
+  ok();
+});
+
+test('put straight in the cart with no place here: "Where was it?" opens, with where the map has its kind', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await addItems(page, 'Cereal');
+  await tick(page, 'Cereal');
+  await page.locator('.where-bar').getByRole('button', { name: '# Aisle…' }).click();
+  await page.locator('.where-bar').getByRole('button', { name: '3', exact: true }).click();
+  await page.locator('.where-bar').getByRole('button', { name: 'Save' }).click();
+  // Oatmeal straight into the cart from the add window.
+  await page.getByRole('button', { name: 'Add items' }).first().click();
+  await page.getByLabel('Item to add').fill('Oatmeal');
+  await page.locator('.suggestions .suggestion', { hasText: 'Oatmeal' }).first().locator('.s-btn.cart').click();
+  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
+  const bar = page.locator('.where-bar');
+  await expect(bar).toContainText('Where was Oatmeal?');
+  // Cereal (the same kind) is in aisle 3: one tap.
+  await bar.getByRole('button', { name: '📍 Aisle 3' }).click();
+  await expect.poll(async () => (await clues(page)).Oatmeal).toEqual({ kind: 'aisle', aisle: '3' });
   ok();
 });
 

@@ -1,5 +1,5 @@
 import type { Clue, ListItem } from '../core/types';
-import { WhereBar } from './WhereBar';
+import { WhereBar, type MapSpot } from './WhereBar';
 import type { LabelStyle } from '../core/labels';
 
 /**
@@ -7,7 +7,7 @@ import type { LabelStyle } from '../core/labels';
  * with the quick bar's one-tap answers. Used at checkout (or whenever the
  * shopper reviews what they left for later).
  */
-export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, sections = [], onNeedLabels, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
+export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, sections = [], mapSpotsOf, onSavePlace, onNeedLabels, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
   items: ListItem[];
   categoryOf: (item: ListItem) => string | undefined;
   recentAisles: string[];
@@ -16,6 +16,9 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, la
   labels?: LabelStyle;
   shelfTrail: { section: string; shelf?: number }[];
   sections?: string[];
+  /** Where the map already has each item's kind of thing. */
+  mapSpotsOf?: (item: ListItem) => MapSpot[];
+  onSavePlace?: (item: ListItem, spotKey: string) => void;
   onNeedLabels: (item: ListItem, code: string) => void;
   /** This store asks at checkout instead of at each check-off. */
   askAtCheckout: boolean;
@@ -46,6 +49,8 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, la
             labels={labels}
             shelfTrail={shelfTrail}
             sections={sections}
+            mapSpots={mapSpotsOf?.(item)}
+            onSavePlace={(key) => onSavePlace?.(item, key)}
             onNeedLabels={(code) => onNeedLabels(item, code)}
             laterLabel="Skip"
             onSave={(clue) => onSave(item, clue)}

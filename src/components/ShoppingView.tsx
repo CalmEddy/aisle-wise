@@ -12,7 +12,7 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { Clue, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout } from '../core/types';
+import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout, Temp, Wall } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
@@ -25,7 +25,7 @@ import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
-import { WhereBar } from './WhereBar';
+import { WhereBar, type MapSpot } from './WhereBar';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
@@ -686,7 +686,25 @@ export function ShoppingView(props: Props) {
       return { snapshot: outcome.snapshot, added: [] };
     }
     const result = props.quickAdd(names, mode, hereKey);
-    if (mode === 'cart') setToast({ ...result, mode });
+    if (mode === 'cart') {
+      setToast({ ...result, mode });
+      // Put straight in the cart with no place here: "Where was it?" (the rest wait for later).
+      const unplaced = result.added.filter((a) => {
+        if (!a.itemId || a.savedAt || a.conflict) return false;
+        const p = catalog.productById.get(a.productId);
+        return !p?.locations?.[layout.id] && !p?.clues?.[layout.id];
+      });
+      if (props.where.ask && unplaced.length) {
+        const asItem = (a: QuickAddResult['added'][number]): ListItem => ({ id: a.itemId!, name: a.name, productId: a.productId, done: true });
+        const first = askAtCheckout ? undefined : unplaced[0];
+        const rest = askAtCheckout ? unplaced : unplaced.slice(1);
+        if (first) {
+          if (whereBarFor) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
+          setWhereBarFor(asItem(first));
+        }
+        if (rest.length) setLaterHere((ids) => [...ids.filter((id) => !rest.some((r) => r.itemId === id)), ...rest.map((r) => r.itemId!)]);
+      }
+    }
     return result;
   }
 
@@ -831,6 +849,54 @@ export function ShoppingView(props: Props) {
 
   const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);
 
+  /**
+   * Where the map already has an item's kind of thing (canned goods on 3L, vegetables in Produce): one-tap
+   * answers for "Where was it?". Both shelves of an aisle make one "Aisle 3"; tables and stands aren't offered
+   * (they hold a few things this week, not the kind).
+   */
+  function mapSpotsFor(item: ListItem): MapSpot[] {
+    const cat = productFor(item, catalog)?.categoryId;
+    if (!cat) return [];
+    const at = layout.places.filter((p) => p.categories.includes(cat) && !p.id.startsWith('g-open-'));
+    const out: MapSpot[] = [];
+    const add = (s: MapSpot) => { if (!out.some((o) => o.key === s.key)) out.push(s); };
+    for (const p of at) {
+      const shelf = /^g-shelf-(.+)-([LR])(?:~\d+)?$/.exec(p.id);
+      const sec = /^g-sec-(.+)-(\d+)(?:~\d+)?$/.exec(p.id);
+      const dept = /^g-dept-(\w+)$/.exec(p.id);
+      const wall = /^g-wall-(left|right|back)-(chilled|frozen|shelf)$/.exec(p.id);
+      const front = /^g-wall-front-(left|right)-/.exec(p.id);
+      if (shelf) {
+        const [, n, side] = shelf;
+        const both = at.some((o) => o.id.replace(/~\d+$/, '') === `g-shelf-${n}-${side === 'L' ? 'R' : 'L'}`);
+        if (both) add({ key: `a${n}`, label: `Aisle ${n}`, clue: { kind: 'aisle', aisle: n } });
+        else add({ key: `a${n}${side}`, label: `Aisle ${n}, ${side === 'L' ? 'left' : 'right'}`, clue: { kind: 'aisle', aisle: n, side: side as 'L' | 'R' } });
+      } else if (sec) {
+        add({ key: `s${p.label}`, label: p.label, clue: { kind: 'shelf', code: p.label, section: sec[1], shelf: Number(sec[2]) } });
+      } else if (dept) {
+        add({ key: `d${dept[1]}`, label: p.label, clue: { kind: 'dept', dept: dept[1] as Dept } });
+      } else if (wall) {
+        const temp = wall[2] === 'shelf' ? undefined : (wall[2] as Temp);
+        add({ key: `w${wall[1]}${wall[2]}`, label: `${p.label} (${wall[1]} wall)`, clue: { kind: 'wall', wall: wall[1] as Wall, ...(temp && { temp }) } });
+      } else if (front) {
+        add({ key: `f${front[1]}`, label: `${p.label} (front, ${front[1]} of the door)`, clue: { kind: 'wall', wall: 'front', part: front[1] as 'left' | 'right' } });
+      } else if (!p.id.startsWith('g-')) {
+        add({ key: `p${p.id}`, label: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'), spot: `${p.id}:${cat}` });
+      }
+    }
+    return out;
+  }
+  /** Saves a place drawn by hand as where an item is here. */
+  function savePlace(item: ListItem, spotKey: string) {
+    const product = productFor(item, catalog);
+    if (whereBarFor?.id === item.id) setWhereBarFor(null);
+    if (!product) return;
+    const snapshot = { items, products: catalog.products };
+    props.setProductLocation(product.id, spotKey);
+    setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${layout.places.find((p) => spotKey.startsWith(`${p.id}:`))?.label || 'saved'}` });
+    nextWhere(item);
+  }
+
   // ---- Clearing where things are (for testing the map; to be removed) ----
   /** Whether an item has a saved spot or an answer in this store. */
   /** Whether the list shows a place for it here: saved, answered, or placed by its kind. */
@@ -936,7 +1002,6 @@ export function ShoppingView(props: Props) {
             selectedId={editing?.id}
             selectedAisleId={editingAisle?.id}
             selectedAisleIds={chosenAisles}
-            changedIds={props.mapChanges}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
             onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
@@ -1244,7 +1309,6 @@ export function ShoppingView(props: Props) {
               selectedId={editing?.id}
               selectedAisleId={editingAisle?.id}
               selectedAisleIds={chosenAisles}
-              changedIds={props.mapChanges}
               onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
               ref={svgRef}
               onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
@@ -1451,6 +1515,8 @@ export function ShoppingView(props: Props) {
           labels={layout.labels}
           shelfTrail={shelfTrail}
           sections={storeSections}
+          mapSpots={mapSpotsFor(whereBarFor)}
+          onSavePlace={(key) => savePlace(whereBarFor, key)}
           onNeedLabels={(code) => setLabelSetup({ code, item: whereBarFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
@@ -1478,7 +1544,7 @@ export function ShoppingView(props: Props) {
             const locked = (props.build.store.gen?.locked ?? []).filter((id) => !/^g-(dept|wall)-/.test(id));
             const snapshot = props.build.store.setGen({ wallOrder, wallsOffered: true, locked });
             setWallsOpen(null);
-            const note = 'Departments set out along the walls. Changes are outlined.';
+            const note = 'Departments set out along the walls.';
             if (building) setNote({ kind: 'message', text: note, snapshot });
             else setToast({ snapshot, added: [], mode: 'list', note });
           }}
@@ -1540,6 +1606,8 @@ export function ShoppingView(props: Props) {
           labels={layout.labels}
           shelfTrail={shelfTrail}
           sections={storeSections}
+          mapSpotsOf={mapSpotsFor}
+          onSavePlace={(item, key) => { savePlace(item, key); setLaterHere((ids) => ids.filter((id) => id !== item.id)); }}
           onNeedLabels={(item, code) => setLabelSetup({ code, item })}
           askAtCheckout={askAtCheckout}
           onSave={(item, clue) => {

@@ -38,7 +38,17 @@ const WALLS: { wall: Wall; label: string }[] = [
  * buttons right here; "Other…" opens the full panel; ignoring it (checking
  * the next thing off) asks later.
  */
-export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onOther, onLater }: {
+/** A spot on the map that already stocks this kind of thing: one tap to say it was there. */
+export interface MapSpot {
+  key: string;
+  label: string;
+  /** Saved as an answer… */
+  clue?: Clue;
+  /** …or (a place drawn by hand) as the item's spot. */
+  spot?: string;
+}
+
+export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], mapSpots = [], onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onSavePlace, onOther, onLater }: {
   itemName: string;
   categoryId?: string;
   recentAisles: string[];
@@ -51,6 +61,10 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   shelfTrail?: { section: string; shelf?: number }[];
   /** Sections this store has (for one-tap section keys). */
   sections?: string[];
+  /** Where the map already has this kind of thing (first, one tap each). */
+  mapSpots?: MapSpot[];
+  /** Saves a map spot drawn by hand as the item's place. */
+  onSavePlace?: (spotKey: string) => void;
   /** A shelf label was typed but the store's style isn't set up: set it up from this example. */
   onNeedLabels?: (code: string) => void;
   /** The "not now" link's text. */
@@ -96,9 +110,13 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   const aisles = [...predicted, ...recentAisles.filter((a) => !predicted.includes(a)).slice(0, Math.max(0, 3 - predicted.length))];
   const aisleChips = aisles.map((a, i) => ({ key: `a-${a}`, label: `${cold}Aisle ${a}`, clue: aisleClue(a), primary: !d && i === 0 }));
   const wallChips = (d || temp) ? WALLS.map((w) => ({ key: `w-${w.wall}`, label: `${cold}${w.label}`, clue: { kind: 'wall', wall: w.wall, ...withTemp } as Clue })) : [];
-  if (d) quick.push({ key: `d-${d.id}`, label: `${d.icon} ${d.name}`, clue: { kind: 'dept', dept: d.id }, primary: true });
+  // Where the map already has its kind of thing: first, the first one the likeliest.
+  const spotChips = mapSpots.slice(0, 4);
+  const spotHasDept = !!d && spotChips.some((x) => x.clue?.kind === 'dept' && x.clue.dept === d.id);
+  if (d && !spotHasDept) quick.push({ key: `d-${d.id}`, label: `${d.icon} ${d.name}`, clue: { kind: 'dept', dept: d.id }, primary: !spotChips.length });
   if (d) quick.push(...wallChips, ...shelfChips, ...aisleChips.map((a) => ({ ...a, primary: false })));
   else quick.push(...shelfChips, ...aisleChips.map((a) => ({ ...a, primary: a.primary && !shelfChips.length })), ...wallChips);
+  if (spotChips.length) quick.forEach((q) => { q.primary = false; });
   const lastIsListed = lastClue && quick.some((q) => describeClue(q.clue) === describeClue(lastClue));
   if (lastClue && !lastIsListed) quick.push({ key: 'last', label: `Same as last: ${describeClue(lastClue)}`, clue: lastClue });
 
@@ -118,6 +136,10 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
       </div>
       {typing === undefined ? (
         <div className="where-bar-choices">
+          {spotChips.map((x, i) => (
+            <button key={`m-${x.key}`} className={`btn map-spot${i === 0 ? ' primary' : ''}`} title="Where the map has this kind of thing"
+              onClick={() => (x.clue ? onSave(x.clue) : x.spot && onSavePlace?.(x.spot))}>📍 {x.label}</button>
+          ))}
           {quick.map((q) => (
             <button key={q.key} className={`btn${q.primary ? ' primary' : ''}`} onClick={() => onSave(q.clue)}>{q.label}</button>
           ))}
