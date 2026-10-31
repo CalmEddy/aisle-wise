@@ -230,6 +230,33 @@ test('not asked because the map knows it? one tap says it was on a display; the 
   ok();
 });
 
+test('a second table said like the first: "Another one" keeps them apart', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await addItems(page, 'Grapes, Pineapple');
+  const onTable = async (name: string) => {
+    await tick(page, name);
+    await page.locator('.where-bar').getByRole('button', { name: /Other/ }).click();
+    await page.getByRole('tab', { name: 'Open' }).click();
+    const panel = page.locator('.where-panel');
+    await panel.getByRole('button', { name: 'Table', exact: true }).click();
+    await panel.getByRole('button', { name: 'Near the door', exact: true }).click();
+    await panel.getByRole('button', { name: /^Save · / }).click();
+    const card = page.locator('.placement-card');
+    if (await card.count()) await card.getByRole('button', { name: /Not sure/ }).click();
+  };
+  await onTable('Grapes');
+  await onTable('Pineapple');
+  const toast = page.locator('.toast', { hasText: 'same one as Grapes' });
+  await toast.getByRole('button', { name: 'Another one' }).click();
+  // The second table is new: where is it?
+  await page.getByRole('group', { name: 'Where’s Produce table 2?' }).getByRole('button', { name: /Not sure/ }).click();
+  expect((await clues(page)).Pineapple).toMatchObject({ kind: 'open', fixture: 'table', near: 'entrance', n: 2 });
+  expect((await clues(page)).Grapes).not.toHaveProperty('n');
+  const corner = (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  expect(corner.places.filter((p: any) => p.id.startsWith('g-open-'))).toHaveLength(2);
+  ok();
+});
+
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
   const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');

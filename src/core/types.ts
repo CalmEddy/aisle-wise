@@ -216,7 +216,8 @@ export type Clue =
   /** Along a wall, as you face into the store from the entrance. */
   | { kind: 'wall'; wall: Wall; part?: WallPart; temp?: Temp }
   /** Out in the open: a table, case or stand on the floor, not against a wall or in an aisle. */
-  | { kind: 'open'; near?: OpenNear; aisle?: string; fixture?: Fixture; temp?: Temp; across?: Across }
+  /** `n`: which one, when there's more than one like it ("another table near the door" is 2). */
+  | { kind: 'open'; near?: OpenNear; aisle?: string; fixture?: Fixture; temp?: Temp; across?: Across; n?: number }
   /** A labelled shelf in a store that labels shelves, not aisles ("B12": section B, shelf 12). */
   | { kind: 'shelf'; code: string; section: string; shelf?: number; temp?: Temp }
   /** Older answers: a freezer case in an aisle, or along a wall (no aisle). */

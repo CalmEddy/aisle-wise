@@ -69,6 +69,20 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
     return { kind: 'clue', clue, product };
   }
   const cat = product.categoryId;
+  // Something of the same kind was said to be somewhere here: this is most likely beside it.
+  // (Not a table or stand: those are displays of a few things, not where the kind lives.)
+  if (cat) {
+    for (const other of catalog.products) {
+      if (other.id === product.id || other.categoryId !== cat) continue;
+      const key = other.locations?.[layout.id] ?? (() => {
+        const c = other.clues?.[layout.id];
+        if (!c || (c.kind === 'open' && (c.across || c.fixture === 'stand' || c.fixture === 'table'))) return undefined;
+        return resolveClue(c, layout, other);
+      })();
+      const spot = key ? resolveSpot(key, layout, catalog) : undefined;
+      if (spot) return { kind: 'spot', spot, product, exact: false };
+    }
+  }
   const place = cat ? layout.places.find((p) => p.categories.includes(cat)) : undefined;
   const spot = place && resolveSpot(`${place.id}:${cat}`, layout, catalog);
   if (spot) return { kind: 'spot', spot, product, exact: false };

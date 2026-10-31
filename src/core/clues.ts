@@ -39,11 +39,14 @@ export const WALL_WORD: Record<Wall, string> = { left: 'Left', back: 'Back', rig
 export const NEAR_WORD: Record<OpenNear, string> = { entrance: 'near the door', middle: 'in the middle', far: 'on the far side', back: 'by the back wall' };
 
 /** Which table, case or stand an "out in the open" answer means (answers alike share one): its key on the map ("g-open-<key>"). */
+/** 2 → "2nd". */
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+
 export function islandKey(c: Extract<Clue, { kind: 'open' }>): string {
   const near = c.near ?? 'middle';
   const across = c.across && { from: c.across.from.trim().toUpperCase(), to: c.across.to.trim().toUpperCase(), part: c.across.part ?? 'middle' };
   const where = across ? `x${across.from}-${across.to}-${across.part}` : c.aisle ? `a${c.aisle.trim().toUpperCase()}` : near;
-  return `${where}-${c.fixture ?? 'any'}-${c.temp ?? 'room'}`;
+  return `${where}-${c.fixture ?? 'any'}-${c.temp ?? 'room'}${c.n && c.n > 1 ? `-${c.n}` : ''}`;
 }
 const FIXTURE_WORD = { table: 'Table', case: 'Case', stand: 'Stand' } as const;
 
@@ -66,7 +69,7 @@ export function describeClue(c: Clue): string {
     case 'open': {
       const what = c.fixture ? FIXTURE_WORD[c.fixture] : 'Out in the open';
       const where = c.across ? `across ${acrossWords(c.across)}` : c.aisle ? `by aisle ${c.aisle}` : c.near ? NEAR_WORD[c.near] : '';
-      const head = [what, where].filter(Boolean).join(' ');
+      const head = [what, where].filter(Boolean).join(' ') + (c.n && c.n > 1 ? ` (${ordinal(c.n)})` : '');
       return c.temp ? `${cold(c.temp)}${head[0].toLowerCase()}${head.slice(1)}` : head;
     }
     case 'dept': return deptOf(c.dept).name;
@@ -146,7 +149,7 @@ export function findAisle(l: StoreLayout, aisle: string): AisleLabel | undefined
  * The shelf on one side of an aisle and how far along it, as seen walking
  * in from the end of the aisle nearest the entrance.
  */
-function aisleSpot(l: StoreLayout, a: AisleLabel, side: AisleSide | undefined, along: number): string | undefined {
+function aisleSpot(l: StoreLayout, a: AisleLabel, side: AisleSide | undefined, along: number, categoryId?: string): string | undefined {
   const vertical = a.h >= a.w;
   // Which end is the front: the one nearer the entrance.
   const ends = vertical
@@ -159,6 +162,7 @@ function aisleSpot(l: StoreLayout, a: AisleLabel, side: AisleSide | undefined, a
   // Facing +y (down the map) left is +x; facing -y left is -x. Facing +x left is -y; facing -x left is +y.
   const leftIsLow = vertical ? forward < 0 : forward > 0;
   const sides: AisleSide[] = side ? [side] : ['L', 'R'];
+  const found: { key: string; shelf: Shelf }[] = [];
   for (const s of sides) {
     const low = (s === 'L') === leftIsLow;
     const across = vertical ? (low ? a.x - 1 : a.x + a.w) : (low ? a.y - 1 : a.y + a.h);
@@ -184,9 +188,13 @@ function aisleSpot(l: StoreLayout, a: AisleLabel, side: AisleSide | undefined, a
     if (!shelf) continue;
     const start = shelf.orientation === 'vertical' ? shelf.y : shelf.x;
     const u = ((shelf.orientation === 'vertical' ? at.y : at.x) - start + 0.5) / shelf.length;
-    return exactKey(shelf.id, { u, v: 0.5 });
+    found.push({ key: exactKey(shelf.id, { u, v: 0.5 }), shelf });
   }
-  return undefined;
+  // No side said: the side that stocks its kind of thing, else an aisle shelf rather than a wall (an outer
+  // aisle's far side), else the left.
+  const wallish = (sh: Shelf) => sh.back !== undefined;
+  const pick = found.find((f) => categoryId && f.shelf.categories.includes(categoryId)) ?? found.find((f) => !wallish(f.shelf)) ?? found[0];
+  return pick?.key;
 }
 
 const ALONG: Record<AislePos, number> = { front: 0.15, middle: 0.5, back: 0.85 };
@@ -208,13 +216,13 @@ function findDept(l: StoreLayout, dept: Dept, categoryId?: string): string | und
 export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'categoryId'>): string | undefined {
   const inAisle = (aisle: string, side: AisleSide | undefined, along: number) => {
     const a = findAisle(l, aisle);
-    return a ? aisleSpot(l, a, side, along) : undefined;
+    return a ? aisleSpot(l, a, side, along, product?.categoryId) : undefined;
   };
   switch (c.kind) {
     case 'aisle': return inAisle(c.aisle, c.side, ALONG[c.pos ?? 'middle']);
     case 'freezer': return c.aisle ? inAisle(c.aisle, c.side, ALONG[c.pos ?? 'middle']) : findDept(l, 'frozen', product?.categoryId);
     case 'endcap': return inAisle(c.aisle, undefined, c.end === 'front' ? 0.02 : 0.98);
-    case 'wall': return onWall(l, c.wall, c.part, c.temp);
+    case 'wall': return onWall(l, c.wall, c.part, c.temp, product?.categoryId);
     case 'shelf': return labelledShelf(l, c.code, c.section, c.shelf);
     case 'open': {
       // The map's own table, case or stand for this answer, wherever it was put.
@@ -288,10 +296,13 @@ function nearest(target: Point, places: Place[], t?: Temp): string | undefined {
 }
 
 /** The place along a wall nearest the part said (a matching fridge or freezer if there is one). */
-function onWall(l: StoreLayout, wall: Wall, part?: WallPart, t?: Temp): string | undefined {
+function onWall(l: StoreLayout, wall: Wall, part?: WallPart, t?: Temp, categoryId?: string): string | undefined {
   const frame = storeFrame(l);
   const tgt = wallTarget(wall, part);
-  const along = l.places.filter((p) => frame.fromWall(footprint(p), wall) <= WALL_REACH && !/checkout/i.test(p.label));
+  const all = l.places.filter((p) => frame.fromWall(footprint(p), wall) <= WALL_REACH && !/checkout/i.test(p.label));
+  // Along that wall, the part that stocks its kind of thing (Bakery for bread), if there is one.
+  const stocking = categoryId ? all.filter((p) => p.categories.includes(categoryId)) : [];
+  const along = stocking.length ? stocking : all;
   return nearest(frame.toMap(tgt.u, tgt.v), along, t);
 }
 

@@ -79,4 +79,11 @@ describe('learning the arrangement from trips', () => {
     expect(two.apply).toEqual({});
     expect(two.question?.setting).toBe('aisleOne');
   });
+
+  it('counts only places the shopper gave, not ones the map guessed from an item’s kind', () => {
+    // Oatmeal has no answer; the map guesses it's by the cereal (aisle 1). It isn't evidence.
+    const more = [...products, { id: 'oatmeal', name: 'oatmeal', categoryId: 'breakfast' }];
+    const l = learnArrangement(store, more, [trip(['apples', 'oatmeal', 'a6', 'oatmeal'])], new Catalog(more, []));
+    expect(l.picks).toBe(2);
+  });
 });

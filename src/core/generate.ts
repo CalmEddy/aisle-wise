@@ -43,6 +43,8 @@ interface AisleModel {
   chilled?: boolean;
   /** Categories on each side, with how far along (for ordering). */
   sides: { L: { categoryId: string; pos: AislePos }[]; R: { categoryId: string; pos: AislePos }[] };
+  /** Answered without a side: it could be either (both shelves show it; neither side is claimed). */
+  either: { categoryId: string; pos: AislePos }[];
 }
 
 /** A stretch of wall: a department, or fridges, freezers or shelves along it. */
@@ -68,6 +70,8 @@ export interface IslandModel {
   aisle?: string;
   /** In the middle of a block, across these aisles or sections: the shelves there make way. */
   across?: Across;
+  /** Which one, when there's more than one like it (2: "another table near the door"). */
+  n?: number;
   fixture?: Fixture;
   temp?: Temp;
   categories: string[];
@@ -116,7 +120,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
   const aisle = (label: string) => {
     const key = label.trim().toUpperCase();
     let a = aisles.get(key);
-    if (!a) aisles.set(key, (a = { label: key, seen: true, freezer: false, sides: { L: [], R: [] } }));
+    if (!a) aisles.set(key, (a = { label: key, seen: true, freezer: false, sides: { L: [], R: [] }, either: [] }));
     return a;
   };
   const section = (key: string, dept?: Dept) => {
@@ -141,7 +145,8 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
         const a = aisle(c.aisle);
         if (c.kind === 'freezer' || c.temp === 'frozen') a.freezer = true;
         else if (c.kind === 'aisle' && c.temp === 'chilled') a.chilled = true;
-        if (p.categoryId) a.sides[c.side ?? 'L'].push({ categoryId: p.categoryId, pos: c.pos ?? 'middle' });
+        // No side said: either side (not the left by default).
+        if (p.categoryId) (c.side ? a.sides[c.side] : a.either).push({ categoryId: p.categoryId, pos: c.pos ?? 'middle' });
         break;
       }
       case 'endcap': aisle(c.aisle); break;
@@ -177,7 +182,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
         const across = c.across && { from: c.across.from.trim().toUpperCase(), to: c.across.to.trim().toUpperCase(), ...(c.across.part && { part: c.across.part }) };
         const key = islandKey(c);
         let isl = islands.get(key);
-        if (!isl) islands.set(key, (isl = { key, near, ...(c.aisle && { aisle: c.aisle.trim().toUpperCase() }), ...(across && { across }), ...(c.fixture && { fixture: c.fixture }), ...(c.temp && { temp: c.temp }), categories: [] }));
+        if (!isl) islands.set(key, (isl = { key, near, ...(c.n && c.n > 1 && { n: c.n }), ...(c.aisle && { aisle: c.aisle.trim().toUpperCase() }), ...(across && { across }), ...(c.fixture && { fixture: c.fixture }), ...(c.temp && { temp: c.temp }), categories: [] }));
         addCat(isl.categories, p.categoryId);
         break;
       }
@@ -195,7 +200,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
   const all: AisleModel[] = [];
   for (let n = 1; n <= max; n++) {
     const these = seen.filter((a) => Math.floor(aisleNumber(a.label)) === n).sort((a, b) => aisleNumber(a.label) - aisleNumber(b.label));
-    all.push(...(these.length ? these : [{ label: String(n), seen: false, freezer: false, sides: { L: [], R: [] } }]));
+    all.push(...(these.length ? these : [{ label: String(n), seen: false, freezer: false, sides: { L: [], R: [] }, either: [] }]));
   }
   // Aisles with names that aren't numbers go after the numbered ones.
   all.push(...seen.filter((a) => Number.isNaN(aisleNumber(a.label))));
@@ -259,8 +264,14 @@ export function modelKey(model: StoreModel, settings: GenSettings): string {
 
 /** Categories on one side of an aisle, ordered top to bottom of the map (back of the store first). */
 function cats(a: AisleModel, side: 'L' | 'R'): string[] {
-  const sorted = [...a.sides[side]].sort((x, y) => POS_ORDER[y.pos] - POS_ORDER[x.pos]);
+  // Either-side answers go on both shelves, unless another answer put that kind of thing on a side.
+  const sided = new Set([...a.sides.L, ...a.sides.R].map((x) => x.categoryId));
+  const sorted = [...a.sides[side], ...a.either.filter((x) => !sided.has(x.categoryId))].sort((x, y) => POS_ORDER[y.pos] - POS_ORDER[x.pos]);
   return [...new Set(sorted.map((s) => s.categoryId))];
+}
+/** Categories said to be on this side of an aisle (not the either-side ones). */
+function sidedCats(a: AisleModel, side: 'L' | 'R'): Set<string> {
+  return new Set(a.sides[side].map((x) => x.categoryId));
 }
 
 const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
@@ -512,9 +523,14 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   }
   // What the end shelves stocked is on the wall now.
   for (const { wall, shelf } of gaveWay) {
+    // Only what was said to be on that side moves to the wall; either-side things are on the aisle's other shelf.
+    const m = /^g-shelf-(.+)-([LR])/.exec(shelf.id);
+    const am = m ? model.aisles.find((x) => x.label === m[1]) : undefined;
+    const said = am ? sidedCats(am, m![2] as 'L' | 'R') : undefined;
+    const moving = said ? shelf.categories.filter((c) => said.has(c)) : shelf.categories;
     for (const w of places) {
       if (w.kind !== 'shelf' || !/^g-(dept|wall)-/.test(w.id) || w.orientation !== 'vertical' || w.x !== (wall === 'left' ? xLeftWall : xRightWall)) continue;
-      if (w.y < shelf.y + shelf.length && shelf.y < w.y + w.length) w.categories = [...new Set([...w.categories, ...shelf.categories])];
+      if (w.y < shelf.y + shelf.length && shelf.y < w.y + w.length) w.categories = [...new Set([...w.categories, ...moving])];
     }
   }
   // The left wall moved in: everything shifts left to the edge of the store.
@@ -799,6 +815,6 @@ function islandLabel(isl: IslandModel): string {
   const depts = [...new Set(isl.categories.map(guessDept))];
   const dept = depts.length === 1 && depts[0] ? deptInfo(depts[0]).name : undefined;
   const cold = isl.temp === 'frozen' ? 'Freezer' : isl.temp === 'chilled' ? 'Fridge' : undefined;
-  const label = [cold ?? dept, what ?? (dept || cold ? undefined : 'Display')].filter(Boolean).join(' ') || 'Display';
+  const label = ([cold ?? dept, what ?? (dept || cold ? undefined : 'Display')].filter(Boolean).join(' ') || 'Display') + (isl.n ? ` ${isl.n}` : '');
   return label[0].toUpperCase() + label.slice(1);
 }

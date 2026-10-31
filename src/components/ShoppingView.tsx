@@ -26,7 +26,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { WhereBar } from './WhereBar';
-import { aislesUsed, describeClue } from '../core/clues';
+import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
@@ -721,8 +721,7 @@ export function ShoppingView(props: Props) {
   function knownByCategory(item: ListItem): string | undefined {
     const p = productFor(item, catalog);
     if (p?.locations?.[layout.id] || p?.clues?.[layout.id] || !p?.categoryId) return undefined;
-    const at = layout.places.filter((pl) => pl.categories.includes(p.categoryId!));
-    return at.length === 1 ? at[0].label || 'on the map' : undefined;
+    return homeOfKind(p.categoryId);
   }
 
   // ---- "Where was it?" ----
@@ -754,7 +753,19 @@ export function ShoppingView(props: Props) {
     const p = productFor(item, catalog);
     if (p?.locations?.[layout.id] || p?.clues?.[layout.id]) return false;
     const cat = p?.categoryId;
-    return !(cat && layout.places.filter((pl) => pl.categories.includes(cat)).length === 1);
+    return !(cat && homeOfKind(cat));
+  }
+  /**
+   * The one place the map stocks a kind of thing, if there's just one: a shelf or area, or both shelves of one
+   * aisle (said to be in that aisle, side not given), or the halves of a shelf split by a walkway.
+   */
+  function homeOfKind(cat: string): string | undefined {
+    const at = layout.places.filter((pl) => pl.categories.includes(cat));
+    const group = (id: string) => id.replace(/~\d+$/, '').replace(/^(g-shelf-.+)-[LR]$/, '$1');
+    const groups = [...new Set(at.map((pl) => group(pl.id)))];
+    if (groups.length !== 1 || !at.length) return undefined;
+    const aisle = /^g-shelf-(.+)$/.exec(groups[0])?.[1];
+    return aisle && at.length > 1 ? `Aisle ${aisle}` : at[0].label || 'on the map';
   }
   // At this store: ask in one list at checkout, not as you go.
   const askAtCheckout = !!props.display.askAtCheckout?.includes(layout.id);
@@ -788,8 +799,31 @@ export function ShoppingView(props: Props) {
     const snapshot = props.where.setClue(item, clue);
     setLastClue(clue);
     noteTrail(clue);
-    setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
+    // A table, case or stand said like one something else is on: the same one, unless the shopper says another.
+    const twin = clue.kind === 'open' && !clue.across ? sameKindOfOpen(item, clue) : undefined;
+    setToast({
+      snapshot, added: [], mode: 'list',
+      note: twin ? `${item.name}: ${describeClue(clue)} — same one as ${twin.name}` : `${item.name}: ${describeClue(clue)}`,
+      ...(twin && clue.kind === 'open' && { action: { label: 'Another one', run: () => {
+        const another: Clue = { ...clue, n: twin.top + 1 };
+        props.where.setClue(item, another);
+        setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(another)}` });
+      } } }),
+    });
     nextWhere(item);
+  }
+  /** Another item said to be on a table, case or stand described the same way (and how many such there are). */
+  function sameKindOfOpen(item: ListItem, clue: Extract<Clue, { kind: 'open' }>): { name: string; top: number } | undefined {
+    const mine = productFor(item, catalog)?.id;
+    const base = islandKey({ ...clue, n: undefined });
+    const alike = catalog.products.filter((p) => {
+      const c = p.clues?.[layout.id];
+      return p.id !== mine && c?.kind === 'open' && !c.across && islandKey({ ...c, n: undefined }) === base;
+    });
+    const nOf = (p: Product) => { const c = p.clues![layout.id]; return c.kind === 'open' ? c.n ?? 1 : 1; };
+    const same = alike.find((p) => nOf(p) === (clue.n ?? 1));
+    if (!same) return undefined;
+    return { name: same.name, top: Math.max(...alike.map(nOf)) };
   }
 
   const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);

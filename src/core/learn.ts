@@ -138,7 +138,9 @@ export function learnArrangement(layout: StoreLayout, products: Product[], trips
     const points = mine.map((t) => t.picks.map((p): Point | undefined => {
       const product = (p.productId && catalog.productById.get(p.productId)) || catalog.match(p.name);
       const at = product && locateProduct(product, l, catalog);
-      return at?.kind === 'spot' ? at.spot.point : undefined;
+      // Only where the shopper said (or saved) it is: a place the map guessed from its kind would be the map
+      // agreeing with itself, not evidence.
+      return at?.kind === 'spot' && at.exact ? at.spot.point : undefined;
     }));
     return { arr, l, floor: new Floor(l), points };
   });

@@ -283,3 +283,39 @@ describe('sample-store fixes', () => {
     expect(Math.abs(halves[1].y - halves[0].y)).toBeGreaterThan(halves[0].length); // a walkway between
   });
 });
+
+describe('what the answers do and don’t say', () => {
+  const blank4: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 15, y: 23 }, checkout: { x: 15, y: 23 },
+    gen: { enabled: true, entrance: 'left', locked: [] } };
+
+  it('"Aisle 3" with no side claims neither side, and doesn’t move onto a wall', () => {
+    const ps: Product[] = [
+      { id: 'a', name: 'Cereal', categoryId: 'breakfast', clues: { s: { kind: 'aisle', aisle: '1' } } },
+      { id: 'b', name: 'Chips', categoryId: 'snacks', clues: { s: { kind: 'aisle', aisle: '3' } } },
+      { id: 'c', name: 'Pasta', categoryId: 'pasta', clues: { s: { kind: 'aisle', aisle: '2', side: 'L' } } },
+      { id: 'f', name: 'Frozen pizza', categoryId: 'frozen', clues: { s: { kind: 'wall', wall: 'left' } } },
+    ];
+    const l = regenerate(blank4, buildModel(ps, 's'));
+    const has = (id: string, cat: string) => !!l.places.find((p) => p.id === id)?.categories.includes(cat);
+    expect([has('g-shelf-1-L', 'breakfast'), has('g-shelf-1-R', 'breakfast')]).toEqual([true, true]);
+    expect([has('g-shelf-2-L', 'pasta'), has('g-shelf-2-R', 'pasta')]).toEqual([true, false]); // a side was said
+    // Aisle 3 is the outer aisle: its left side is the freezer wall, which doesn't take the chips.
+    expect(l.places.some((p) => p.id === 'g-shelf-3-L')).toBe(false);
+    expect(has('g-dept-frozen', 'snacks')).toBe(false);
+    expect(resolveClue(ps[1].clues!.s, l, ps[1])).toMatch(/^g-shelf-3-R/);
+  });
+
+  it('two tables said alike stay two when the shopper says "another one"', () => {
+    const table = (n?: number) => ({ kind: 'open' as const, near: 'entrance' as const, fixture: 'table' as const, ...(n && { n }) });
+    const ps: Product[] = [
+      { id: 'g', name: 'Grapes', categoryId: 'fruit', clues: { s: table() } },
+      { id: 'p', name: 'Pineapple', categoryId: 'fruit', clues: { s: table(2) } },
+      { id: 'm', name: 'Mangoes', categoryId: 'fruit', clues: { s: table() } },
+    ];
+    const l = regenerate(blank4, buildModel(ps, 's'));
+    const at = (i: number) => resolveClue(ps[i].clues!.s, l, ps[i])!.split(/[:@]/)[0];
+    expect(at(0)).toBe(at(2));
+    expect(at(1)).not.toBe(at(0));
+    expect(l.places.filter((p) => p.id.startsWith('g-open-')).map((p) => p.label).sort()).toEqual(['Produce table', 'Produce table 2']);
+  });
+});
