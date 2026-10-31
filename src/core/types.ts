@@ -204,6 +204,8 @@ export interface Product {
    * but the item is treated as not placed (it's asked about again). A new answer takes over.
    */
   mapClues?: Record<string, Clue>;
+  /** (Testing aid; to be removed.) Stores where this item's place was cleared: not placed there, even by its kind, until answered again. */
+  clearedAt?: string[];
 }
 
 /** A side of an aisle, as you walk in from the front of the store. */

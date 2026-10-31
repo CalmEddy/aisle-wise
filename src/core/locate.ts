@@ -70,7 +70,7 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
   }
   const cat = product.categoryId;
   // (Testing aid) its place here was cleared: not placed until it's answered again.
-  if (product.mapClues?.[layout.id]) return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
+  if (product.clearedAt?.includes(layout.id) || product.mapClues?.[layout.id]) return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
   // Something of the same kind was said to be somewhere here: this is most likely beside it.
   // (Not a table or stand: those are displays of a few things, not where the kind lives.)
   if (cat) {

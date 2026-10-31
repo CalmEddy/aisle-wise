@@ -259,7 +259,7 @@ test('a second table said like the first: "Another one" keeps them apart', async
 
 test('(testing) clear where one item is, or every item on the list, with Undo', async ({ page }) => {
   const ok = noPageErrors(page);
-  await addItems(page, 'Cereal, Pasta, Chips');
+  await addItems(page, 'Cereal, Pasta, Chips, Oatmeal');
   for (const [name, n] of [['Cereal', '1'], ['Pasta', '2']] as const) {
     await tick(page, name);
     await page.locator('.where-bar').getByRole('button', { name: '# Aisle…' }).click();
@@ -274,6 +274,12 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   await expect.poll(answered).toEqual(['Pasta']);
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect.poll(answered).toEqual(['Cereal', 'Pasta']);
+  // Oatmeal has no answer, but it's placed by its kind (with the cereal): that clears too, and it's asked about.
+  await page.getByRole('button', { name: 'Clear where Oatmeal is' }).click();
+  await expect(page.getByRole('button', { name: 'Clear where Oatmeal is' })).toHaveCount(0);
+  await tick(page, 'Oatmeal');
+  await expect(page.locator('.where-bar')).toContainText('Where was Oatmeal?');
+  await page.locator('.where-bar').getByRole('button', { name: 'Later', exact: true }).click();
   // Everything on the list, from the button bar: the map stays as it is.
   const places = async () => JSON.stringify((await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places);
   const before = await places();

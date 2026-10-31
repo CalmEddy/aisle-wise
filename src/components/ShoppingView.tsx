@@ -722,7 +722,7 @@ export function ShoppingView(props: Props) {
   /** Where the map puts an item with no answer of its own, by its kind (the one place that stocks it); else undefined. */
   function knownByCategory(item: ListItem): string | undefined {
     const p = productFor(item, catalog);
-    if (p?.locations?.[layout.id] || p?.clues?.[layout.id] || p?.mapClues?.[layout.id] || !p?.categoryId) return undefined;
+    if (p?.locations?.[layout.id] || p?.clues?.[layout.id] || p?.mapClues?.[layout.id] || p?.clearedAt?.includes(layout.id) || !p?.categoryId) return undefined;
     return homeOfKind(p.categoryId);
   }
 
@@ -754,7 +754,7 @@ export function ShoppingView(props: Props) {
   function isUnknownHere(item: ListItem) {
     const p = productFor(item, catalog);
     if (p?.locations?.[layout.id] || p?.clues?.[layout.id]) return false;
-    if (p?.mapClues?.[layout.id]) return true; // (testing aid) its place was cleared: ask again
+    if (p?.mapClues?.[layout.id] || p?.clearedAt?.includes(layout.id)) return true; // (testing aid) its place was cleared: ask again
     const cat = p?.categoryId;
     return !(cat && homeOfKind(cat));
   }
@@ -833,7 +833,11 @@ export function ShoppingView(props: Props) {
 
   // ---- Clearing where things are (for testing the map; to be removed) ----
   /** Whether an item has a saved spot or an answer in this store. */
-  const hasWhereHere = (item: ListItem) => { const p = productFor(item, catalog); return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]); };
+  /** Whether the list shows a place for it here: saved, answered, or placed by its kind. */
+  const hasWhereHere = (item: ListItem) => {
+    const p = productFor(item, catalog);
+    return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]) || locate(item).kind === 'spot';
+  };
   function clearOneWhere(item: ListItem) {
     const snapshot = props.where.clearWhere([item]);
     setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });

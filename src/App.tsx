@@ -514,12 +514,17 @@ export default function App() {
     const snapshot: Snapshot = { items, products, layouts };
     const ids = new Set(list.map((i) => productFor(i, catalog)?.id).filter(Boolean));
     setProducts((prev) => prev.map((p) => {
-      if (!ids.has(p.id) || (!p.locations?.[layout.id] && !p.clues?.[layout.id])) return p;
+      if (!ids.has(p.id)) return p;
       const { [layout.id]: _l, ...locations } = p.locations ?? {};
       const { [layout.id]: answer, ...clues } = p.clues ?? {};
       void _l;
-      // The answer still shapes the map (so it doesn't rebuild); the item just isn't placed any more.
-      return { ...p, locations, clues, ...(answer && { mapClues: { ...p.mapClues, [layout.id]: answer } }) };
+      // The answer still shapes the map (so it doesn't rebuild); the item just isn't placed any more, not even
+      // by its kind, until it's answered again.
+      return {
+        ...p, locations, clues,
+        ...(answer && { mapClues: { ...p.mapClues, [layout.id]: answer } }),
+        clearedAt: [...new Set([...(p.clearedAt ?? []), layout.id])],
+      };
     }));
     return snapshot;
   }
