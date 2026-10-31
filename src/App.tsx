@@ -24,7 +24,7 @@ import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut
 import { parseLabel, type LabelStyle } from './core/labels';
 import { doorQuestion } from './core/door';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
-import { aisleNumber, DEPTS } from './core/clues';
+import { aisleNumber, DEPTS, resolveClue } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
 import {
@@ -445,16 +445,22 @@ export default function App() {
   /** Things bought before, for "Buy again" in the add window. */
   const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
-  // A shelf or area with no category takes the categories of what's saved on it (so the map knows what's there,
-  // and other things of that kind are placed by it). Not a hand edit: the map keeps updating as usual.
+  // A shelf or area with no category takes the categories of what's put on it, saved there or answered there
+  // ("Where was it?" → "Aisle 1" lands on a shelf), so the map knows what's there and other things of that kind
+  // are placed by it. Not a hand edit: the map keeps updating as usual.
   useEffect(() => {
     const stock = new Map<string, string[]>();
     for (const p of products) {
-      const key = p.locations?.[layout.id];
-      if (!key || !p.categoryId) continue;
+      if (!p.categoryId) continue;
+      const clue = p.clues?.[layout.id];
+      const key = p.locations?.[layout.id] ?? (clue ? resolveClue(clue, layout, p) : undefined);
+      if (!key) continue;
       const placeId = parseExactKey(key)?.placeId ?? key.split(':')[0];
       const place = layout.places.find((pl) => pl.id === placeId);
       if (!place || place.categories.length) continue;
+      // Not tables and stands (a display this week, not where the kind lives); and for answers, only places drawn
+      // by hand (the map builds its own shelves' stock from the answers).
+      if (placeId.startsWith('g-open-') || (!p.locations?.[layout.id] && placeId.startsWith('g-'))) continue;
       stock.set(placeId, [...new Set([...(stock.get(placeId) ?? []), p.categoryId])]);
     }
     if (!stock.size) return;

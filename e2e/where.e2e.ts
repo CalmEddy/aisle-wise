@@ -322,6 +322,27 @@ test('a shelf with no category takes the category of what’s saved on it', asyn
   await expect.poll(async () => (await saved<any[]>(page, 'layouts'))[0].places[0].categories).toEqual(['pasta_dry']);
 });
 
+test('answered "Aisle 1" in a store drawn by hand: the empty shelf there takes the item’s category', async ({ page }) => {
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Drawn', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
+      places: [
+        { kind: 'shelf', id: 'a', label: 'Shelf A', orientation: 'vertical', x: 5, y: 2, length: 8, categories: [] },
+        { kind: 'shelf', id: 'b', label: 'Shelf B', orientation: 'vertical', x: 8, y: 2, length: 8, categories: [] },
+      ],
+      aisles: [{ id: 'a1', label: 'Aisle 1', x: 6, y: 2, w: 2, h: 8 }] }],
+    activeLayout: 's1',
+  });
+  await addItems(page, 'Spaghetti');
+  await tick(page, 'Spaghetti');
+  const bar = page.locator('.where-bar');
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  await bar.getByRole('button', { name: '1', exact: true }).click();
+  await bar.getByRole('button', { name: 'Save' }).click();
+  const stocked = async () => (await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => p.categories);
+  // One of the aisle's two shelves (the answer gave no side) takes pasta; the other stays as it was.
+  await expect.poll(async () => (await stocked()).filter((c: string[]) => c.includes('pasta_dry')).length).toBe(1);
+});
+
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
   const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');
