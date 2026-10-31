@@ -198,6 +198,38 @@ test('no question when the map already knows the category; or all at checkout in
   await expect(list.getByRole('checkbox')).toBeChecked();
 });
 
+test('not asked because the map knows it? one tap says it was on a display; the front wall is an answer too', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await addItems(page, 'Bananas, Melon, Cards');
+  await tick(page, 'Bananas');
+  await page.locator('.where-bar .btn.primary').click(); // Produce
+  await tick(page, 'Melon');
+  await expect(page.locator('.where-bar')).toHaveCount(0); // fruit is in Produce: not asked…
+  const toast = page.locator('.toast', { hasText: 'Melon · Produce' });
+  await toast.getByRole('button', { name: 'Somewhere else?' }).click(); // …but it was on a stand by the door
+  await page.getByRole('tab', { name: 'Open' }).click();
+  await page.getByRole('button', { name: 'Stand / display' }).click();
+  await page.getByRole('button', { name: 'Near the door' }).click();
+  await page.getByRole('button', { name: /^Save · / }).click();
+  expect((await clues(page)).Melon).toMatchObject({ kind: 'open', fixture: 'stand', near: 'entrance' });
+  await page.getByRole('group', { name: 'Where’s Produce stand?' }).getByRole('button', { name: /Not sure/ }).click();
+  // Greeting cards on the front wall, left of the door.
+  await tick(page, 'Cards');
+  await page.locator('.where-bar').getByRole('button', { name: 'Other…' }).click();
+  await page.getByRole('tab', { name: 'Wall' }).click();
+  await page.getByRole('button', { name: '↓ Front' }).click();
+  await page.getByRole('button', { name: 'Left of the door' }).click();
+  await page.getByRole('button', { name: 'Save · Front wall · left of the door' }).click();
+  const corner = async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
+  await expect.poll(async () => (await corner()).places.some((p: any) => p.id === 'g-wall-front-left-shelf')).toBe(true);
+  const l = await corner();
+  const run = l.places.find((p: any) => p.id === 'g-wall-front-left-shelf');
+  expect(run.y).toBe(l.height - 1);
+  expect(run.x + run.length).toBeLessThan(l.entrance.x);
+  expect(l.places.some((p: any) => p.kind === 'area' && /stand/i.test(p.label))).toBe(true);
+  ok();
+});
+
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
   const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');

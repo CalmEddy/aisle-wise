@@ -694,6 +694,7 @@ export function ShoppingView(props: Props) {
       setNote(props.build.pickUpHere(item.name, item.id));
       return;
     }
+    const before = { items, products: catalog.products };
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
     props.where.notePick(item, !item.done);
     // Picking something up tells us where the shopper is standing.
@@ -706,7 +707,22 @@ export function ShoppingView(props: Props) {
       // Not answered the last one? It waits for later; this one takes the bar.
       if (whereBarFor && whereBarFor.id !== item.id) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
       setWhereBarFor(item);
+    } else if (!item.done && props.where.ask && knownByCategory(item)) {
+      // Not asked: the map already has its kind of thing in one place. It might have been on a display or
+      // table this time, though: one tap to say so.
+      const where = knownByCategory(item)!;
+      setToast({
+        snapshot: before, added: [], mode: 'list', note: `${item.name} · ${where}`,
+        action: { label: 'Somewhere else?', run: () => { setToast(null); setWhereFor(item); } },
+      });
     }
+  }
+  /** Where the map puts an item with no answer of its own, by its kind (the one place that stocks it); else undefined. */
+  function knownByCategory(item: ListItem): string | undefined {
+    const p = productFor(item, catalog);
+    if (p?.locations?.[layout.id] || p?.clues?.[layout.id] || !p?.categoryId) return undefined;
+    const at = layout.places.filter((pl) => pl.categories.includes(p.categoryId!));
+    return at.length === 1 ? at[0].label || 'on the map' : undefined;
   }
 
   // ---- "Where was it?" ----

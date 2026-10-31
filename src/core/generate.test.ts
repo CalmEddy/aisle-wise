@@ -3,14 +3,14 @@ import { Catalog } from './catalog';
 import { resolveClue } from './clues';
 import { Floor } from './floor';
 import { buildModel, generateParts, newlyEdited, regenerate } from './generate';
-import { parseExactKey } from './geometry';
+import { footprint, parseExactKey } from './geometry';
 import { locateProduct } from './locate';
 import type { Product, Shelf, StoreLayout } from './types';
 
 const products: Product[] = [
   { id: 'apples', name: 'Apples', categoryId: 'fruit', clues: { s: { kind: 'dept', dept: 'produce' } } },
-  { id: 'bread', name: 'Bread', categoryId: 'bakery', clues: { s: { kind: 'aisle', aisle: '3', side: 'L', pos: 'front' } } },
-  { id: 'cereal', name: 'Cheerios', categoryId: 'breakfast', clues: { s: { kind: 'aisle', aisle: '3', side: 'L', pos: 'back' } } },
+  { id: 'bread', name: 'Bread', categoryId: 'bakery', clues: { s: { kind: 'aisle', aisle: '3', side: 'R', pos: 'front' } } },
+  { id: 'cereal', name: 'Cheerios', categoryId: 'breakfast', clues: { s: { kind: 'aisle', aisle: '3', side: 'R', pos: 'back' } } },
   { id: 'milk', name: 'Milk', categoryId: 'dairy', clues: { s: { kind: 'dept', dept: 'dairy' } } },
   { id: 'peas', name: 'Peas', categoryId: 'icecream', clues: { s: { kind: 'freezer' } } },
   { id: 'gum', name: 'Gum', clues: { s: { kind: 'checkout' } } },
@@ -32,15 +32,18 @@ describe('map from aisle answers', () => {
   it('draws every store the same way: back at the top, entrance mid-front, aisle 1 on the right', () => {
     const l = regenerate(blank, buildModel(products, 's'));
     const labels = l.places.map((p) => p.label);
-    expect(labels).toEqual(expect.arrayContaining(['1L', '1R', '3L', '3R', 'Produce', 'Frozen', 'Dairy', 'Checkout']));
+    expect(labels).toEqual(expect.arrayContaining(['1L', '2R', '3R', 'Produce', 'Frozen', 'Dairy', 'Checkout']));
+    // The outer aisles' far sides are the walls: no end shelf with a walkway before the wall.
+    expect(labels).not.toContain('1R');
+    expect(labels).not.toContain('3L');
     expect(l.aisles!.map((a) => `${a.label}${a.guess ? '?' : ''}`)).toEqual(['Aisle 1?', 'Aisle 2?', 'Aisle 3']);
     const p = (id: string) => l.places.find((x) => x.id === id)!;
     // Aisle 1 on the right, numbers going up to the left.
-    expect(p('g-shelf-1-L').x).toBeGreaterThan(p('g-shelf-3-L').x);
+    expect(p('g-shelf-1-L').x).toBeGreaterThan(p('g-shelf-3-R').x);
     // Produce up the right wall, Frozen down the left, Dairy along the back (top): the outermost shelves.
     expect(p('g-dept-produce')).toMatchObject({ kind: 'shelf', orientation: 'vertical', back: 1 });
-    expect(p('g-dept-produce').x).toBeGreaterThan(p('g-shelf-1-R').x);
-    expect(p('g-dept-frozen').x).toBeLessThan(p('g-shelf-3-L').x);
+    expect(p('g-dept-produce').x).toBe(p('g-shelf-1-L').x + 3); // aisle 1's right side
+    expect(p('g-dept-frozen').x).toBe(p('g-shelf-3-R').x - 3); // aisle 3's left side
     expect(p('g-dept-dairy')).toMatchObject({ orientation: 'horizontal', y: 1, back: -1 });
     const xs = l.places.filter((x) => x.kind === 'shelf').map((x) => x.x);
     expect(p('g-dept-produce').x).toBe(Math.max(...xs));
@@ -49,7 +52,7 @@ describe('map from aisle answers', () => {
     expect(l.entrance).toEqual({ x: Math.floor(l.width / 2), y: l.height - 1 });
     expect(p('g-checkout').y).toBeGreaterThan(p('g-shelf-1-L').y + 14);
     // Categories on the shelf, back of the store (top) first.
-    expect((p('g-shelf-3-L') as Shelf).categories).toEqual(['breakfast', 'bakery']);
+    expect((p('g-shelf-3-R') as Shelf).categories).toEqual(['breakfast', 'bakery']);
     // Everything reachable.
     const floor = new Floor(l);
     for (const q of l.places) expect(floor.reachable(l.entrance, { x: q.x, y: q.y })).toBe(true);
@@ -58,9 +61,9 @@ describe('map from aisle answers', () => {
   it('can number the aisles from the left and swap Produce and Frozen', () => {
     const l = regenerate({ ...blank, gen: { ...blank.gen!, aisleOne: 'far', produce: 'far' } }, buildModel(products, 's'));
     const x = (id: string) => l.places.find((p) => p.id === id)!.x;
-    expect(x('g-shelf-1-L')).toBeLessThan(x('g-shelf-3-L'));
-    expect(x('g-dept-produce')).toBeLessThan(x('g-shelf-1-L'));
-    expect(x('g-dept-frozen')).toBeGreaterThan(x('g-shelf-3-R'));
+    expect(x('g-shelf-1-R')).toBeLessThan(x('g-shelf-3-L'));
+    expect(x('g-dept-produce')).toBeLessThan(x('g-shelf-1-R'));
+    expect(x('g-dept-frozen')).toBeGreaterThan(x('g-shelf-3-L'));
     expect(l.gen!.key).toContain('"a1":"far"');
     expect(regenerate(blank, buildModel(products, 's')).gen!.key).not.toContain('a1');
   });
@@ -69,36 +72,36 @@ describe('map from aisle answers', () => {
     const l = regenerate(blank, buildModel(products, 's'));
     const catalog = new Catalog(products, []);
     const bread = parseExactKey(resolveClue(products[1].clues!.s, l)!)!;
-    expect(bread.placeId).toBe('g-shelf-3-L');
+    expect(bread.placeId).toBe('g-shelf-3-R');
     expect(bread.spot.u).toBeGreaterThan(0.7); // front of the store = bottom of the shelf
     expect(resolveClue({ kind: 'checkout' }, l)).toBe('g-checkout');
     expect(resolveClue({ kind: 'freezer' }, l)).toMatch(/^g-dept-frozen/);
     // Granola has no answer, but Cheerios (same category) is on 3L.
     const g = locateProduct(products[6], l, catalog);
-    expect(g.kind === 'spot' && g.spot.placeId).toBe('g-shelf-3-L');
+    expect(g.kind === 'spot' && g.spot.placeId).toBe('g-shelf-3-R');
   });
 
   it('keeps the shopper’s edits and own places when regenerating', () => {
     let l = regenerate(blank, buildModel(products, 's'));
-    // The shopper renames 3L, deletes the Dairy area and adds their own shelf where aisle 4 would go.
+    // The shopper renames 2R, deletes the Dairy area and adds their own shelf where aisle 4's shelf will go.
     const edited: StoreLayout = {
       ...l,
       places: [
-        ...l.places.filter((p) => p.id !== 'g-dept-dairy').map((p) => (p.id === 'g-shelf-3-L' ? { ...p, label: 'Cereal' } : p)),
-        { kind: 'shelf', id: 'mine', label: 'Mine', orientation: 'vertical', x: 18, y: 6, length: 14, categories: [] },
+        ...l.places.filter((p) => p.id !== 'g-dept-dairy').map((p) => (p.id === 'g-shelf-2-R' ? { ...p, label: 'Cereal' } : p)),
+        { kind: 'shelf', id: 'mine', label: 'Mine', orientation: 'vertical', x: 4, y: 6, length: 14, categories: [] },
       ],
     };
     const locked = newlyEdited(l, edited);
-    expect(locked.sort()).toEqual(['g-dept-dairy', 'g-shelf-3-L']);
+    expect(locked.sort()).toEqual(['g-dept-dairy', 'g-shelf-2-R']);
     l = { ...edited, gen: { ...edited.gen!, locked } };
     // A new answer: aisle 4 exists.
     const more = [...products, { id: 'chips', name: 'Chips', categoryId: 'snacks', clues: { s: { kind: 'aisle' as const, aisle: '4', side: 'R' as const } } }];
     const r = regenerate(l, buildModel(more, 's'));
-    expect(r.places.find((p) => p.id === 'g-shelf-3-L')!.label).toBe('Cereal');
+    expect(r.places.find((p) => p.id === 'g-shelf-2-R')!.label).toBe('Cereal');
     expect(r.places.some((p) => p.id === 'g-dept-dairy')).toBe(false);
     expect(r.places.some((p) => p.id === 'mine')).toBe(true);
-    expect(r.places.some((p) => p.id === 'g-shelf-4-L')).toBe(false); // would overlap "Mine"
-    expect(r.places.some((p) => p.id === 'g-shelf-4-R')).toBe(true);
+    expect(r.places.some((p) => p.id === 'g-shelf-4-R')).toBe(false); // would overlap "Mine"
+    expect(r.places.some((p) => p.id === 'g-shelf-1-L')).toBe(true);
     // Moving the whole store isn't an edit.
     const moved = { ...r, places: r.places.map((p) => ({ ...p, x: p.x + 5 })) };
     expect(newlyEdited(r, moved)).toEqual([]);
@@ -106,8 +109,8 @@ describe('map from aisle answers', () => {
 
   it('sizes the store to fit', () => {
     const parts = generateParts(buildModel(products, 's'));
-    // Left wall, walkway, three aisles of 4, walkway, right wall, and a square of margin each side.
-    expect(parts.width).toBe(4 * 3 + 8);
+    // Three aisles of 4, the walls standing where the outer aisles' end shelves would be, and a square of margin each side.
+    expect(parts.width).toBe(4 * 3 + 2);
     expect(parts.places.every((p) => p.x >= 0 && p.x < parts.width)).toBe(true);
   });
 });
@@ -190,5 +193,43 @@ describe('what a rebuild changed', () => {
     // Aisle 2 is no longer a guess, and its right-hand shelf now stocks snacks.
     expect(changed).toEqual(expect.arrayContaining(['g-shelf-2-R', 'g-aisle-2']));
     expect(changed).not.toContain('g-dept-produce');
+  });
+});
+
+describe('the edges of the store', () => {
+  const aisleAt = (id: string, n: string): Product => ({ id, name: id, categoryId: 'snacks', clues: { s: { kind: 'aisle', aisle: n } } });
+  const blank2: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
+    gen: { enabled: true, entrance: 'left', locked: [] } };
+
+  it('keeps an outer aisle’s end shelf when nothing is on that wall', () => {
+    const l = regenerate(blank2, buildModel([aisleAt('a', '1'), aisleAt('b', '2')], 's'));
+    expect(l.places.map((p) => p.label)).toEqual(expect.arrayContaining(['1L', '1R', '2L', '2R']));
+  });
+
+  it('front wall shelving runs along the bottom row either side of the door; nothing below the door and checkouts', () => {
+    const ps: Product[] = [
+      aisleAt('a', '1'), aisleAt('b', '2'), aisleAt('c', '3'),
+      { id: 'gum', name: 'Gum', clues: { s: { kind: 'checkout' } } },
+      { id: 'cards', name: 'Cards', categoryId: 'cards', clues: { s: { kind: 'wall', wall: 'front', part: 'left' } } },
+      { id: 'water', name: 'Water', categoryId: 'water', clues: { s: { kind: 'wall', wall: 'front', part: 'right' } } },
+    ];
+    const l = regenerate(blank2, buildModel(ps, 's'));
+    const front = l.places.filter((p) => p.id.startsWith('g-wall-front'));
+    expect(front).toHaveLength(2);
+    const [left, right] = [...front].sort((a, b) => a.x - b.x);
+    expect([left.y, right.y]).toEqual([l.height - 1, l.height - 1]);
+    expect(left.kind === 'shelf' && left.x + left.length).toBeLessThan(l.entrance.x);
+    expect(right.x).toBeGreaterThan(l.entrance.x);
+    expect(left.categories).toEqual(['cards']);
+    expect(right.categories).toEqual(['water']);
+    // The door is on the bottom row, the checkouts just above it, nothing further down.
+    expect(l.entrance.y).toBe(l.height - 1);
+    const co = l.places.find((p) => p.id === 'g-checkout')!;
+    expect(co.kind === 'area' && co.y + co.h).toBe(l.height - 1);
+    expect(Math.max(...l.places.map((p) => footprint(p).y + footprint(p).h))).toBe(l.height);
+    // Answers land there.
+    expect(resolveClue({ kind: 'wall', wall: 'front', part: 'right' }, l)).toMatch(new RegExp(`^${right.id}`));
+    const floor = new Floor(l);
+    for (const q of l.places) expect(floor.reachable(l.entrance, { x: q.x, y: q.y })).toBe(true);
   });
 });

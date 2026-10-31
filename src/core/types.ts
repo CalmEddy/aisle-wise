@@ -115,7 +115,7 @@ export interface GeneratedMap extends Arrangement {
    * What the shopper put on each wall, in order (side walls front to back, the back wall left to
    * right), by section key ("produce", "left-chilled"). Departments not heard of yet can be here too.
    */
-  wallOrder?: Record<Wall, string[]>;
+  wallOrder?: Record<MainWall, string[]>;
   /** The shopper's been offered the departments screen and closed it: not offered again. */
   wallsOffered?: boolean;
   /** Where the door is along the front, 0 (left) to 1 (right); unset: the middle. */
@@ -226,7 +226,10 @@ export type Clue =
   | { kind: 'checkout' };
 
 /** The walls, as you face into the store from the entrance. */
-export type Wall = 'left' | 'back' | 'right';
+/** A wall of the store. The front wall runs along the bottom line, either side of the door. */
+export type Wall = 'left' | 'back' | 'right' | 'front';
+/** The walls departments line (the departments screen): not the front, which has the door and checkouts. */
+export type MainWall = Exclude<Wall, 'front'>;
 /** Where along a wall: front/middle/back for the side walls, left/middle/right for the back wall. */
 export type WallPart = 'front' | 'middle' | 'back' | 'left' | 'right';
 /** Where out in the open. */

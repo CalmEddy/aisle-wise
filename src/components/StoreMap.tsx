@@ -96,6 +96,8 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
       ref={ref}
       className={`map${focus ? ' zoomed' : ''}${onMapTap ? ' tappable' : ''}`}
       viewBox={viewBox}
+      // The whole store sits on the bottom edge: the front (door and checkouts) is always at the bottom.
+      preserveAspectRatio={focus ? undefined : 'xMidYMax meet'}
       role="img"
       aria-label={`${layout.name} map`}
       onClick={onMapTap ? (e) => {

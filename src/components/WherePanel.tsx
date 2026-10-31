@@ -193,10 +193,11 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
           )}
           {tab === 'wall' && (
             <>
-              {choice<Wall>('Wall', [['left', '← Left'], ['back', '↑ Back'], ['right', 'Right →']], wall, (w) => { setWall(w); setPart(undefined); })}
+              {choice<Wall>('Wall', [['left', '← Left'], ['back', '↑ Back'], ['right', 'Right →'], ['front', '↓ Front']], wall, (w) => { setWall(w); setPart(undefined); })}
               {wall && choice<WallPart>('Along', wall === 'back'
                 ? [['left', 'Left end'], ['middle', 'Middle'], ['right', 'Right end']]
-                : [['front', 'Front'], ['middle', 'Middle'], ['back', 'Back']], part, setPart)}
+                : wall === 'front' ? [['left', 'Left of the door'], ['right', 'Right of the door']]
+                  : [['front', 'Front'], ['middle', 'Middle'], ['back', 'Back']], part, setPart)}
               {tempRow}
               <p className="muted small where-note">Left and right as you face into the store from the entrance.</p>
               <button className="btn primary wide" disabled={!wallClue} onClick={() => wallClue && onSave(wallClue)}>

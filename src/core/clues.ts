@@ -35,7 +35,7 @@ export function aisleNumber(aisle: string): number {
 
 const POS_WORD: Record<AislePos, string> = { front: 'front', middle: 'middle', back: 'back' };
 const SIDE_WORD: Record<AisleSide, string> = { L: 'left', R: 'right' };
-export const WALL_WORD: Record<Wall, string> = { left: 'Left', back: 'Back', right: 'Right' };
+export const WALL_WORD: Record<Wall, string> = { left: 'Left', back: 'Back', right: 'Right', front: 'Front' };
 export const NEAR_WORD: Record<OpenNear, string> = { entrance: 'near the door', middle: 'in the middle', far: 'on the far side' };
 const FIXTURE_WORD = { table: 'Table', case: 'Case', stand: 'Stand' } as const;
 
@@ -51,7 +51,8 @@ export function describeClue(c: Clue): string {
     case 'aisle': return withDetail(c.temp ? `${cold(c.temp)}aisle ${c.aisle}` : `Aisle ${c.aisle}`, c.side, c.pos);
     case 'shelf': return c.temp ? `${cold(c.temp)}shelf ${c.code}` : `Shelf ${c.code}`;
     case 'wall': {
-      const head = `${WALL_WORD[c.wall]} wall${c.part && c.part !== 'middle' ? ` · ${c.part}` : c.part ? ' · middle' : ''}`;
+      const part = c.wall === 'front' && (c.part === 'left' || c.part === 'right') ? `${c.part} of the door` : c.part;
+      const head = `${WALL_WORD[c.wall]} wall${part ? ` · ${part}` : ''}`;
       return c.temp ? `${cold(c.temp)}${head.toLowerCase()}` : head;
     }
     case 'open': {
@@ -95,7 +96,7 @@ export function sectionNumber(section: string): number {
   if (/^\d+$/.test(first)) return Number(first);
   return [...first].reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 64), 0);
 }
-const WALL_ORDER: Record<Wall, number> = { left: 0, back: 1, right: 2 };
+const WALL_ORDER: Record<Wall, number> = { left: 0, back: 1, right: 2, front: 3 };
 /** Going round the walls: up the left wall (front first), along the back left to right, down the right wall. */
 const partRank = (w: Wall, p?: WallPart) => {
   const along = p === 'front' || p === 'left' ? 0 : p === 'back' || p === 'right' ? 2 : 1;
@@ -237,6 +238,7 @@ export function storeFrame(l: StoreLayout) {
   const fromWall = (r: Rect, wall: Wall) => {
     if (wall === 'left') return r.x - bx;
     if (wall === 'right') return bx + bw - (r.x + r.w);
+    if (wall === 'front') return l.height - (r.y + r.h);
     return r.y - by;
   };
   return { front: 'bottom' as const, toMap, toStore, fromWall };
@@ -247,6 +249,7 @@ function wallTarget(wall: Wall, part?: WallPart): { u: number; v: number } {
   const along = part === 'front' || part === 'left' ? 0.2 : part === 'back' || part === 'right' ? 0.8 : 0.5;
   if (wall === 'left') return { u: 0, v: along };
   if (wall === 'right') return { u: 1, v: along };
+  if (wall === 'front') return { u: along, v: 0 };
   return { u: along, v: 1 };
 }
 

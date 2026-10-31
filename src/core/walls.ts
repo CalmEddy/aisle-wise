@@ -1,5 +1,5 @@
 import { DEPTS } from './clues';
-import type { Dept, Shelf, StoreLayout, Wall } from './types';
+import type { Dept, MainWall as Wall, Shelf, StoreLayout } from './types';
 
 /**
  * The departments screen: what's on each outside wall, in order, as the
@@ -28,7 +28,8 @@ function keyOf(id: string): string | undefined {
 export function currentWalls(l: StoreLayout): WallOrder {
   const out: WallOrder = { left: [], back: [], right: [] };
   const shelves = l.places.filter((p): p is Shelf => p.kind === 'shelf' && !!keyOf(p.id));
-  const on = (s: Shelf): Wall => (s.orientation === 'horizontal' ? 'back' : (s.back ?? 0) < 0 ? 'left' : 'right');
+  // (A front wall run, along the bottom with its back to the outside, isn't on this screen.)
+  const on = (s: Shelf): Wall | undefined => (s.orientation === 'horizontal' ? ((s.back ?? -1) < 0 ? 'back' : undefined) : (s.back ?? 0) < 0 ? 'left' : 'right');
   for (const w of WALL_KEYS) {
     out[w] = shelves.filter((s) => on(s) === w)
       // Side walls from the front (the bottom of the map); the back wall from the left.

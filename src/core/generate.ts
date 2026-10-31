@@ -1,7 +1,7 @@
 import { acrossRect, aisleNumber, DEPTS, findAisle, guessDept, sectionNumber } from './clues';
 import { formatLabel, shelfOffsets, type LabelStyle } from './labels';
 import { footprint } from './geometry';
-import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, Place, Product, Rect, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, MainWall, Place, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -161,7 +161,9 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
       case 'wall': {
         // Fridges and freezers along a wall are one run whatever's in them; otherwise the item's department.
         const dept = c.temp ? undefined : guessDept(p.categoryId);
-        const sec = section(dept ?? `${c.wall}-${c.temp ?? 'shelf'}`, dept);
+        // The front wall is two runs, either side of the door.
+        const wallKey = c.wall === 'front' ? `front-${c.part === 'left' ? 'left' : 'right'}` : c.wall;
+        const sec = section(dept ?? `${wallKey}-${c.temp ?? 'shelf'}`, dept);
         if (dept) depts.add(dept);
         sec.walls.push(c.wall);
         if (c.part) sec.alongs.push(PART_ALONG[c.part]);
@@ -265,7 +267,7 @@ const deptInfo = (d: Dept) => DEPTS.find((x) => x.id === d)!;
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 /** The generated parts of a map for a model (ids "g-…"), and the store's size, entrance and checkout. */
-export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; door?: number; wallOrder?: Record<Wall, string[]> } = {}) {
+export function generateParts(model: StoreModel, arrangement: Arrangement & { placements?: Record<string, Placement>; labels?: LabelStyle; aisleGroups?: { from: string; to: string }[]; directions?: Record<string, Orientation>; door?: number; wallOrder?: Record<MainWall, string[]> } = {}) {
   const placements = arrangement.placements ?? {};
   const L = AISLE_LENGTH;
   // Blocks of shelving: the numbered aisles, runs of aisles the shopper made into their own block,
@@ -296,16 +298,17 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   const bw = arranged.length ? Math.max(...arranged.map((a) => a.rect.x + a.rect.w)) : 0;
   const bh = arranged.length ? Math.max(...arranged.map((a) => a.rect.y + a.rect.h)) : 0;
   // Across: left wall shelf (x 1), a 2-square walkway, the blocks, a walkway, the right wall shelf.
-  const xLeftWall = 1;
+  let xLeftWall = 1;
   const xBlocks = xLeftWall + 3;
-  const width = Math.max(xBlocks + bw + 4, 14);
-  const xRightWall = width - 2;
+  let width = Math.max(xBlocks + bw + 4, 14);
+  let xRightWall = width - 2;
   // Down: back wall shelf (y 1), a 3-square cross aisle, the aisles, the front cross aisle, things in the open, checkout.
   const yShelf = 5;
   const H = Math.max(bh, L); // how deep the aisles and sections run
   const band = model.islands.some((i) => !i.across) ? 4 : 0;
   const front = yShelf + H + 3 + band;
-  const height = front + 4;
+  // The bottom row is the front of the store: the door, and any front wall shelving either side of it.
+  const height = front + 3;
   const places: Place[] = [];
   const aisles: AisleLabel[] = [];
   const area = (d: Dept, r: Rect): Area => ({ kind: 'area', id: `g-dept-${d}`, label: deptInfo(d).name, ...r, categories: [...deptInfo(d).categories] });
@@ -399,13 +402,12 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
     }
     places.push({ kind: 'area', id: `g-open-${isl.key}`, label: islandLabel(isl), ...r, categories: [...isl.categories], ...(isl.temp && { temp: isl.temp }) });
   }
-  const backRun = { from: xLeftWall, len: xRightWall - xLeftWall + 1 };
   const produceFar = arrangement.produce === 'far';
   const back = BACK_WALL.filter((d) => model.depts.includes(d));
   if (arrangement.backWall === 'reversed') back.reverse();
   const right = RIGHT_WALL.filter((d) => model.depts.includes(d));
   const placed: { sec: SectionModel; wall: Wall; along: number }[] = [];
-  const onAWall = (key: string) => (['left', 'back', 'right'] as Wall[]).some((w) => arrangement.wallOrder?.[w]?.includes(key));
+  const onAWall = (key: string) => (['left', 'back', 'right'] as MainWall[]).some((w) => arrangement.wallOrder?.[w]?.includes(key));
   const corners: Dept[] = [];
   for (const sec of model.sections) {
     let wall = sec.wall;
@@ -422,7 +424,7 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
     placed.push({ sec, wall, along: along ?? 0.5 });
   }
   // The walls as the shopper arranged them (the departments screen): their order wins.
-  for (const wall of ['left', 'back', 'right'] as Wall[]) {
+  for (const wall of ['left', 'back', 'right'] as MainWall[]) {
     const keys = (arrangement.wallOrder?.[wall] ?? []).filter((k) => placed.some((p) => p.sec.key === k));
     keys.forEach((k, i) => {
       const p = placed.find((x) => x.sec.key === k)!;
@@ -447,6 +449,30 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
       p.along = target.along + (pl.side === 'before' ? -0.001 : 0.001);
     }
   }
+  // The outermost aisle's far side is the wall itself when that wall has shelving: the end shelf there
+  // gives way and the wall stands in its place (no walkway between an end shelf and the wall).
+  const gaveWay: { wall: Wall; shelf: Shelf }[] = [];
+  const blockShelf = (p: Place): p is Shelf => p.kind === 'shelf' && /^g-(shelf|sec)-/.test(p.id);
+  const wallEdge = (wall: 'left' | 'right'): number | undefined => {
+    if (!placed.some((p) => p.wall === wall)) return undefined;
+    const shelves = places.filter(blockShelf);
+    if (!shelves.length) return undefined;
+    const right = (sh: Shelf) => { const f = footprint(sh); return f.x + f.w - 1; };
+    const edge = wall === 'left' ? Math.min(...shelves.map((sh) => sh.x)) : Math.max(...shelves.map(right));
+    const atEdge = shelves.filter((sh) => (wall === 'left' ? sh.x === edge : right(sh) === edge));
+    // Only up-and-down shelves with a walkway (not a back-to-back partner) on their inner side.
+    const inner = wall === 'left' ? edge + 1 : edge - 1;
+    const single = (sh: Shelf) => sh.orientation === 'vertical'
+      && !shelves.some((o) => o !== sh && o.orientation === 'vertical' && o.x === inner && o.y < sh.y + sh.length && sh.y < o.y + o.length);
+    if (!atEdge.every(single)) return undefined;
+    for (const sh of atEdge) { places.splice(places.indexOf(sh), 1); gaveWay.push({ wall, shelf: sh }); }
+    return edge;
+  };
+  const leftMerge = wallEdge('left');
+  const rightMerge = wallEdge('right');
+  if (leftMerge !== undefined) xLeftWall = leftMerge;
+  if (rightMerge !== undefined) { xRightWall = rightMerge; width = rightMerge + 2; }
+  const backRun = { from: xLeftWall, len: xRightWall - xLeftWall + 1 };
   const weight = (sec: SectionModel) => 1 + 0.25 * Math.min(sec.count - 1, 8);
   for (const wall of ['left', 'back', 'right'] as Wall[]) {
     const here = placed.filter((p) => p.wall === wall).sort((a, b) => a.along - b.along || a.sec.key.localeCompare(b.sec.key));
@@ -460,6 +486,22 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
       const end = i === here.length - 1 ? run.len : Math.round((done / total) * run.len);
       places.push(wallSection(sec, wall, start, Math.max(1, end - start)));
     });
+  }
+  // What the end shelves stocked is on the wall now.
+  for (const { wall, shelf } of gaveWay) {
+    for (const w of places) {
+      if (w.kind !== 'shelf' || !/^g-(dept|wall)-/.test(w.id) || w.orientation !== 'vertical' || w.x !== (wall === 'left' ? xLeftWall : xRightWall)) continue;
+      if (w.y < shelf.y + shelf.length && shelf.y < w.y + w.length) w.categories = [...new Set([...w.categories, ...shelf.categories])];
+    }
+  }
+  // The left wall moved in: everything shifts left to the edge of the store.
+  if (xLeftWall > 1) {
+    const dx = xLeftWall - 1;
+    for (const p of places) p.x -= dx;
+    for (const a of aisles) a.x -= dx;
+    xRightWall -= dx;
+    width -= dx;
+    xLeftWall = 1;
   }
   /** One section of wall: `start` squares along it (side walls from the front, the back wall from the left). */
   function wallSection(sec: SectionModel, wall: Wall, start: number, len: number): Place {
@@ -509,12 +551,38 @@ export function generateParts(model: StoreModel, arrangement: Arrangement & { pl
   }
   // Front corners, and the checkouts beside the door (to its left if there's room, else its right).
   const doorX = Math.max(1, Math.min(width - 2, Math.round((arrangement.door ?? 0.5) * (width - 1))));
-  for (const d of FRONT_RIGHT) if (corners.includes(d)) places.push(area(d, { x: width - 6, y: front, w: 4, h: 3 }));
-  for (const d of FRONT_LEFT) if (corners.includes(d)) places.push(area(d, { x: 2, y: front, w: 4, h: 3 }));
+  for (const d of FRONT_RIGHT) if (corners.includes(d)) places.push(area(d, { x: width - 6, y: front, w: 4, h: 2 }));
+  for (const d of FRONT_LEFT) if (corners.includes(d)) places.push(area(d, { x: 2, y: front, w: 4, h: 2 }));
+  // The front wall: runs of shelving along the bottom row, left and right of the door (a gap of 3 for the door).
+  const frontRuns = { left: { from: 1, len: doorX - 2 }, right: { from: doorX + 2, len: width - 2 - (doorX + 2) + 1 } };
+  for (const side of ['left', 'right'] as const) {
+    const here = placed.filter((p) => p.wall === 'front' && (p.along < 0.5) === (side === 'left')).sort((a, b) => a.along - b.along || a.sec.key.localeCompare(b.sec.key));
+    const run = frontRuns[side];
+    if (!here.length || run.len < 1) continue;
+    const total = here.reduce((t, p) => t + weight(p.sec), 0);
+    let done = 0;
+    here.forEach(({ sec }, i) => {
+      const start = Math.round((done / total) * run.len);
+      done += weight(sec);
+      const end = i === here.length - 1 ? run.len : Math.round((done / total) * run.len);
+      const temp = sec.temp ?? (sec.dept === 'frozen' ? 'frozen' : sec.dept === 'dairy' ? 'chilled' : undefined);
+      const info = sec.dept && deptInfo(sec.dept);
+      places.push({
+        kind: 'shelf', id: info ? `g-dept-${sec.dept}` : `g-wall-${sec.key}`,
+        label: info ? info.name : temp === 'frozen' ? 'Freezer' : temp === 'chilled' ? 'Refrigerated' : 'Front shelves',
+        orientation: 'horizontal', x: run.from + start, y: height - 1, length: Math.max(1, end - start), back: 1,
+        categories: info ? [...info.categories] : [...sec.categories], ...(temp && { temp }),
+      });
+    });
+  }
   const leftEdge = corners.some((d) => FRONT_LEFT.includes(d)) ? 7 : 2;
   const rightEdge = width - (corners.some((d) => FRONT_RIGHT.includes(d)) ? 7 : 2);
-  const coW = 8;
-  const checkoutX = doorX - 2 - coW >= leftEdge ? doorX - 2 - coW : Math.min(rightEdge - coW, doorX + 3);
+  // Checkouts beside the door, never across it: up to 8 squares, on the left if they fit, else the roomier side.
+  const roomLeft = doorX - 2 - leftEdge;
+  const roomRight = rightEdge - (doorX + 3);
+  const onLeft = roomLeft >= 8 || roomLeft >= roomRight;
+  const coW = Math.max(3, Math.min(8, onLeft ? roomLeft : roomRight));
+  const checkoutX = onLeft ? doorX - 2 - coW : doorX + 3;
   if (model.checkout) {
     places.push({ kind: 'area', id: 'g-checkout', label: 'Checkout', x: checkoutX, y: front, w: coW, h: 2, categories: [] });
   }

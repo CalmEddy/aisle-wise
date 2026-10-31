@@ -4,7 +4,13 @@ import { resolveSpot } from '../core/locate';
 import type { StoreLayout } from '../core/types';
 import { whereText } from './whereText';
 
-export type Toast = QuickAddResult & { mode: 'list' | 'cart'; /** Plain message instead of an add summary. */ note?: string };
+export type Toast = QuickAddResult & {
+  mode: 'list' | 'cart';
+  /** Plain message instead of an add summary. */
+  note?: string;
+  /** One more thing to do with it ("Somewhere else?"). */
+  action?: { label: string; run: () => void };
+};
 
 
 export function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere, onClose }: {
@@ -21,6 +27,7 @@ export function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere,
     return (
       <div className="toast" role="status">
         <span className="toast-text">{toast.note}</span>
+        {toast.action && <button className="toast-btn" onClick={toast.action.run}>{toast.action.label}</button>}
         <button className="toast-btn" onClick={onUndo}>Undo</button>
         <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
       </div>

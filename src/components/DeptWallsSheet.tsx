@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { StoreLayout, Wall } from '../core/types';
+import type { MainWall as Wall, StoreLayout } from '../core/types';
 import { currentWalls, moveSection, sectionTitle, trayFor, WALL_KEYS, type WallOrder } from '../core/walls';
 
 /** Each wall's sections as shown: the back wall left to right; side walls with the back at the top. */

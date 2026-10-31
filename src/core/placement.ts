@@ -112,7 +112,7 @@ function wallOf(l: StoreLayout, id: string): Wall | undefined {
   return p.x <= Math.min(...xs) ? 'left' : 'right';
 }
 
-const WALL_NAME: Record<Wall, string> = { left: 'Left wall', back: 'Back wall', right: 'Right wall' };
+const WALL_NAME: Record<Wall, string> = { left: 'Left wall', back: 'Back wall', right: 'Right wall', front: 'Front wall' };
 /** "behind" / "in front of" on the side walls; "left of" / "right of" along the back. */
 const sideWord = (wall: Wall, side: 'before' | 'after') =>
   wall === 'back' ? (side === 'before' ? 'left of' : 'right of') : side === 'before' ? 'in front of' : 'behind';

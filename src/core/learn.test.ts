@@ -42,8 +42,10 @@ describe('learning the arrangement from trips', () => {
   it('learns the back wall runs the other way', () => {
     // Usually Dairy is at the left end of the back wall and Meat at the right, next to the bakery;
     // these shoppers come from the bakery (right wall) to the milk first, then the steak, then the far aisles.
+    // (Aisle 1 settled already: ending at aisle 1 by a checkout on the left could also say "aisle 1 on the left".)
     const walk = ['apples', 'bread', 'milk', 'steak', 'a6', 'a5', 'a1'];
-    const l = learnArrangement(store, products, [trip(walk), trip(walk, 1e9)], catalog);
+    const settled = { ...store, gen: { ...store.gen!, sure: ['aisleOne' as const] } };
+    const l = learnArrangement(settled, products, [trip(walk), trip(walk, 1e9)], catalog);
     expect(l.apply.backWall).toBe('reversed');
   });
 

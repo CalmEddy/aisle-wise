@@ -39,17 +39,18 @@ export function useMapZoom(svgRef: RefObject<SVGSVGElement>, width: number, heig
     if (!box || !box.width || !box.height) return 0;
     return Math.max(width / scale / box.width, height / scale / box.height);
   };
+  // The map is drawn centred across and resting on the bottom edge of its box (the front of the store at the bottom).
   /** The grid point under a screen point, in the current view. */
   const gridAt = (sx: number, sy: number, v: View) => {
     const box = svgRef.current!.getBoundingClientRect();
     const k = perPx(v.scale);
-    return { x: v.cx + (sx - (box.left + box.width / 2)) * k, y: v.cy + (sy - (box.top + box.height / 2)) * k };
+    return { x: v.cx + (sx - (box.left + box.width / 2)) * k, y: v.cy + height / v.scale / 2 + (sy - box.bottom) * k };
   };
   /** The view at `scale` that keeps grid point `anchor` under screen point (sx, sy). */
   const anchored = (anchor: { x: number; y: number }, sx: number, sy: number, scale: number): View => {
     const box = svgRef.current!.getBoundingClientRect();
     const k = perPx(scale);
-    return clampView({ scale, cx: anchor.x - (sx - (box.left + box.width / 2)) * k, cy: anchor.y - (sy - (box.top + box.height / 2)) * k });
+    return clampView({ scale, cx: anchor.x - (sx - (box.left + box.width / 2)) * k, cy: anchor.y - height / scale / 2 - (sy - box.bottom) * k });
   };
   const two = () => {
     const [a, b] = [...pointers.current.values()];
