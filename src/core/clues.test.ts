@@ -113,6 +113,11 @@ describe('walls and open floor', () => {
     expect(at({ kind: 'open', near: 'middle', temp: 'frozen' })).toBe('case');
   });
 
+  it('a stand drawn by hand at the edge of the store still takes "a stand near the door"', () => {
+    const edge: StoreLayout = { ...store, places: [...store.places, { kind: 'area', id: 'stand', label: 'Chip stand', x: 0, y: 16, w: 2, h: 2, categories: [] }] };
+    expect(resolveClue({ kind: 'open', fixture: 'stand', near: 'entrance' }, edge)?.split('@')[0]).toBe('stand');
+  });
+
   it('describes and sorts them', () => {
     expect(describeClue({ kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' })).toBe('Freezer, left wall · front');
     expect(describeClue({ kind: 'wall', wall: 'back' })).toBe('Back wall');

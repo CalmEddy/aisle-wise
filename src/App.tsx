@@ -11,6 +11,7 @@ import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
 import { hasOldCategories, migrateCategories } from './core/recategorize';
 import { guessCategory } from './core/guess';
+import { withHoldings } from './core/holdings';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
@@ -24,7 +25,7 @@ import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut
 import { parseLabel, type LabelStyle } from './core/labels';
 import { doorQuestion } from './core/door';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
-import { aisleNumber, DEPTS, resolveClue } from './core/clues';
+import { aisleNumber, DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
 import {
@@ -33,7 +34,7 @@ import {
 import type { Clue, GeoPoint, Rect, SectionShape } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
-import { clampPlace, parseExactKey } from './core/geometry';
+import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
@@ -445,29 +446,8 @@ export default function App() {
   /** Things bought before, for "Buy again" in the add window. */
   const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
-  // A shelf or area with no category takes the categories of what's put on it, saved there or answered there
-  // ("Where was it?" → "Aisle 1" lands on a shelf), so the map knows what's there and other things of that kind
-  // are placed by it. Not a hand edit: the map keeps updating as usual.
-  useEffect(() => {
-    const stock = new Map<string, string[]>();
-    for (const p of products) {
-      if (!p.categoryId) continue;
-      const clue = p.clues?.[layout.id];
-      const key = p.locations?.[layout.id] ?? (clue ? resolveClue(clue, layout, p) : undefined);
-      if (!key) continue;
-      const placeId = parseExactKey(key)?.placeId ?? key.split(':')[0];
-      const place = layout.places.find((pl) => pl.id === placeId);
-      if (!place || place.categories.length) continue;
-      // Not tables and stands (a display this week, not where the kind lives); and for answers, only places drawn
-      // by hand (the map builds its own shelves' stock from the answers).
-      if (placeId.startsWith('g-open-') || (!p.locations?.[layout.id] && placeId.startsWith('g-'))) continue;
-      stock.set(placeId, [...new Set([...(stock.get(placeId) ?? []), p.categoryId])]);
-    }
-    if (!stock.size) return;
-    setLayouts((prev) => prev.map((l) => (l.id !== layout.id ? l : {
-      ...l, places: l.places.map((pl) => (stock.has(pl.id) && !pl.categories.length ? { ...pl, categories: stock.get(pl.id)! } : pl)),
-    })));
-  }, [products, layout, setLayouts]);
+  // The store as the app reads it: each place's categories include what's put there (see holdings.ts).
+  const shownLayout = useMemo(() => withHoldings(layout, products, new Map(categories.map((c) => [c.id, c.name]))), [layout, products, categories]);
 
   const learned = useMemo(() => learnArrangement(layout, products, trips, catalog), [layout, products, trips, catalog]);
   // What the trips clearly show goes on the map straight away (mid-trip too); the changes are outlined.
@@ -1044,7 +1024,7 @@ export default function App() {
             create: createList, rename: renameList, remove: deleteList, combine: combineInto,
             preview: (sources) => combineLists(allItems, listId, sources, catalog),
           }}
-          layout={layout}
+          layout={shownLayout}
           floor={floor}
           catalog={catalog}
           items={items}

@@ -27,6 +27,17 @@ interface PlaceBase {
   guess?: boolean;
   /** A freezer or a fridge (cold case), not room-temperature shelving. */
   temp?: Temp;
+  /** Categories taken off by hand: not counted even if items of them are put here. */
+  hides?: string[];
+  // Worked out as the app reads the store (see holdings.ts), never saved:
+  /** Category → weight here (set by hand, built from answers, or how many items of it are here). */
+  holds?: Record<string, number>;
+  /** A table, stand or display: holds a few things this week, not where their kind lives. */
+  display?: boolean;
+  /** The categories set on it (without those it holds), for the editor. */
+  own?: string[];
+  /** Its name before the main category was added ("Shelf 3" of "Shelf 3 - International"). */
+  baseLabel?: string;
 }
 
 /** Freezer or fridge. */

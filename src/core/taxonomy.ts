@@ -35,16 +35,31 @@ export function stocks(stocked: readonly string[], kind: string): boolean {
   return stocked.includes(kind) || (PARENT.has(kind) && stocked.includes(PARENT.get(kind)!));
 }
 
+/** Where a kind of thing lives: places stocking it, not tables or stands (those are only offered, never assumed). */
+export function homesOf<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(places: readonly T[], kind: string): T[] {
+  return stocking(places, kind).filter((p) => !p.display);
+}
+
 /**
- * The places that stock a kind of thing: those naming it exactly (Fish & Seafood) first; only if none do, those
- * stocking its category (Meat & Seafood).
+ * The places where a kind of thing lives, likeliest first. Places naming it (Fish & Seafood) count fully, places
+ * stocking only its category (Meat & Seafood) half. A main home (set by hand, built from answers, or holding two
+ * or more of it) beats one odd item put somewhere and beats tables and stands, which hold this week's display;
+ * those count only when there's nowhere better.
  */
-export function stocking<T extends { categories: readonly string[] }>(places: readonly T[], kind: string): T[] {
-  const exact = places.filter((p) => p.categories.includes(kind));
-  if (exact.length) return exact;
+export function stocking<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(places: readonly T[], kind: string): T[] {
   const parent = PARENT.get(kind);
-  if (!parent) return [];
-  return places.filter((p) => p.categories.includes(parent));
+  const weight = (p: T, k: string) => p.holds?.[k] ?? (p.categories.includes(k) ? 1 : 0);
+  // Its own kind counts fully; a place stocking only its category, half.
+  let found = places.map((p) => ({ p, w: weight(p, kind) || (parent ? weight(p, parent) / 2 : 0) })).filter((c) => c.w > 0);
+  if (!found.length) return [];
+  // Where the kind lives: a main home (set by hand, built from answers, or two or more of it there) wins over one
+  // odd item and over tables and stands; failing that, anywhere but a table or stand; failing that, a table or stand.
+  // A home: set there by hand (the kind or its category), or more than one item of it put there.
+  const setHere = (p: T) => !!p.own?.some((c) => (c === kind || c === parent) && p.categories.includes(c));
+  const homes = found.filter((c) => !c.p.display && (c.w >= 2 || setHere(c.p)));
+  const shelves = found.filter((c) => !c.p.display);
+  found = homes.length ? homes : shelves.length ? shelves : found;
+  return found.sort((a, b) => b.w - a.w).map((c) => c.p);
 }
 
 /**

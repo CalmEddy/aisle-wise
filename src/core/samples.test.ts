@@ -3,6 +3,7 @@ import { Catalog } from './catalog';
 import { defaultCategories } from './categories';
 import { Floor } from './floor';
 import { buildModel, regenerate } from './generate';
+import { withHoldings } from './holdings';
 import { locateProduct } from './locate';
 import { pendingPlacements } from './placement';
 import { planGroupedRoute } from './route';
@@ -212,8 +213,9 @@ export interface Score {
 export function scoreSample(s: Sample): Score {
   const firstProducts = s.items.map((it) => product(it, it.first));
   const trueProducts = s.items.map((it) => product(it, it.truth));
-  const first = regenerate(blank(s), buildModel(firstProducts, 's'));
-  const truth = regenerate(blank(s), buildModel(trueProducts, 's'));
+  // As the app reads them: with what each place holds.
+  const first = withHoldings(regenerate(blank(s), buildModel(firstProducts, 's')), firstProducts);
+  const truth = withHoldings(regenerate(blank(s), buildModel(trueProducts, 's')), trueProducts);
   const firstCat = new Catalog(firstProducts, defaultCategories);
   const trueCat = new Catalog(trueProducts, defaultCategories);
   const at = (p: Product, l: StoreLayout, c: Catalog) => { const loc = locateProduct(p, l, c); return loc.kind === 'spot' ? loc.spot : undefined; };

@@ -26,7 +26,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { WhereBar, type MapSpot } from './WhereBar';
-import { nearbyKinds, stocking, topOf } from '../core/taxonomy';
+import { homesOf, nearbyKinds, stocking, topOf } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
@@ -796,7 +796,7 @@ export function ShoppingView(props: Props) {
    * aisle (said to be in that aisle, side not given), or the halves of a shelf split by a walkway.
    */
   function homeOfKind(cat: string): string | undefined {
-    const at = stocking(layout.places, cat);
+    const at = homesOf(layout.places, cat);
     const group = (id: string) => id.replace(/~\d+$/, '').replace(/^(g-shelf-.+)-[LR]$/, '$1');
     const groups = [...new Set(at.map((pl) => group(pl.id)))];
     if (groups.length !== 1 || !at.length) return undefined;
@@ -872,10 +872,12 @@ export function ShoppingView(props: Props) {
   function mapSpotsFor(item: ListItem): MapSpot[] {
     const cat = productFor(item, catalog)?.categoryId;
     if (!cat) return [];
-    const shelves = layout.places.filter((p) => !p.id.startsWith('g-open-'));
-    // Its kind; else (offered, not assumed) other kinds from its category: oatmeal → the cereal aisle.
+    const shelves = layout.places.filter((p) => !p.id.startsWith('g-open-') && !p.display);
+    // Its kind; else (offered, not assumed) other kinds from its category: oatmeal → the cereal aisle;
+    // else a table or stand drawn by hand that has its kind this week.
     const own = stocking(shelves, cat);
-    const at = own.length ? own : nearbyKinds(shelves, cat);
+    const near = own.length ? own : nearbyKinds(shelves, cat);
+    const at = near.length ? near : stocking(layout.places, cat).filter((p) => !p.id.startsWith('g-'));
     const out: MapSpot[] = [];
     const add = (s: MapSpot) => { if (!out.some((o) => o.key === s.key)) out.push(s); };
     for (const p of at) {

@@ -234,7 +234,7 @@ export function resolveClue(c: Clue, l: StoreLayout, product?: Pick<Product, 'ca
       // The map's own table, case or stand for this answer, wherever it was put.
       const own = l.places.find((p) => p.id === `g-open-${islandKey(c)}`);
       if (own) { const f = footprint(own); return nearest({ x: f.x + f.w / 2, y: f.y + f.h / 2 }, [own]); }
-      return c.across ? inAcross(l, c.across, c.temp) : c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp);
+      return c.across ? inAcross(l, c.across, c.temp) : c.aisle ? inAisle(c.aisle, undefined, 0.02) : inOpen(l, c.near, c.temp, c.fixture);
     }
     case 'display': return c.aisle ? inAisle(c.aisle, undefined, 0.5) : c.dept ? findDept(l, c.dept, product?.categoryId) : undefined;
     case 'dept': return findDept(l, c.dept, product?.categoryId);
@@ -313,7 +313,12 @@ function onWall(l: StoreLayout, wall: Wall, part?: WallPart, t?: Temp, categoryI
 }
 
 /** A table, case or stand out on the floor (not along a wall) nearest the spot said. */
-function inOpen(l: StoreLayout, near?: OpenNear, t?: Temp): string | undefined {
+/** A table, stand, display or bin: holds a few things this week, not where their kind lives. */
+export function isDisplay(p: Pick<Place, 'id' | 'label'>): boolean {
+  return p.id.startsWith('g-open-') || /\b(table|stand|display|end ?cap|bin)s?\b/i.test(p.label);
+}
+
+function inOpen(l: StoreLayout, near?: OpenNear, t?: Temp, fixture?: string): string | undefined {
   const frame = storeFrame(l);
   const door = frame.toStore(l.entrance);
   const target = near === 'entrance' ? frame.toMap(door.u, 0.15)
@@ -324,9 +329,13 @@ function inOpen(l: StoreLayout, near?: OpenNear, t?: Temp): string | undefined {
   const open = l.places.filter((p) => {
     const f = footprint(p);
     const short = p.kind === 'area' || p.length <= 8;
-    return short && walls.every((w) => frame.fromWall(f, w) > 3) && !/checkout/i.test(p.label);
+    if (/checkout/i.test(p.label)) return false;
+    // A table or stand drawn by hand counts wherever it is (it may be what sets the store's edge).
+    return (short && walls.every((w) => frame.fromWall(f, w) > 3)) || (!p.id.startsWith('g-') && isDisplay(p));
   });
-  return nearest(target, open, t);
+  // Said to be a table or stand: one drawn by hand first.
+  const displays = fixture ? open.filter((p) => !p.id.startsWith('g-') && isDisplay(p)) : [];
+  return (displays.length ? nearest(target, displays, t) : undefined) ?? nearest(target, open, t);
 }
 
 /**

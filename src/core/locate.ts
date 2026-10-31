@@ -1,5 +1,5 @@
 import type { Catalog } from './catalog';
-import { stocking, topOf } from './taxonomy';
+import { homesOf, topOf } from './taxonomy';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
 import { clueRank, resolveClue, typicalRank } from './clues';
@@ -74,6 +74,8 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
   if (product.clearedAt?.includes(layout.id) || product.mapClues?.[layout.id]) return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
   // Something of the same kind was said to be somewhere here: this is most likely beside it.
   // (Not a table or stand: those are displays of a few things, not where the kind lives.)
+  // (Only beside one in a place where the kind lives: not a melon on this week's table, or one odd item.)
+  const homes = cat ? new Set(homesOf(layout.places, cat).map((p) => p.id)) : new Set<string>();
   if (cat) {
     for (const other of catalog.products) {
       if (other.id === product.id || other.categoryId !== cat) continue;
@@ -83,10 +85,12 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
         return resolveClue(c, layout, other);
       })();
       const spot = key ? resolveSpot(key, layout, catalog) : undefined;
-      if (spot) return { kind: 'spot', spot, product, exact: false };
+      const onDisplay = !!layout.places.find((pl) => pl.id === spot?.placeId)?.display;
+      if (spot && !onDisplay && (!homes.size || homes.has(spot.placeId))) return { kind: 'spot', spot, product, exact: false };
     }
   }
-  const place = cat ? stocking(layout.places, cat)[0] : undefined;
+  // Not a table or stand: those are offered (📍), never assumed.
+  const place = cat ? homesOf(layout.places, cat)[0] : undefined;
   const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat!) ? cat : topOf(cat!)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
   if (spot) return { kind: 'spot', spot, product, exact: false };
   return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };

@@ -11,6 +11,16 @@ export function PlacePanel({ place, onChange, usedElsewhere, categories, looks }
   looks: Map<string, { color: string; icon: string }>;
 }) {
   const isShelf = place.kind === 'shelf';
+  // What was set by hand (the store as saved), and what it holds from items put here (worked out, not saved).
+  const own = place.own ?? place.categories;
+  const hides = place.hides ?? [];
+  const learned = Object.entries(place.holds ?? {}).filter(([id]) => !own.includes(id));
+  const nameOf = (id: string) => categories.find((c) => c.id === id)?.name ?? 'Deleted category';
+  /** Sets what's here by hand; one taken off stays off (even if items of it are put here), one added comes back. */
+  const setOwn = (ids: string[]) => {
+    const gone = own.filter((c) => !ids.includes(c));
+    onChange({ categories: ids, hides: [...hides.filter((h) => !ids.includes(h) && !gone.includes(h)), ...gone] });
+  };
   const order = isShelf
     ? (place.orientation === 'vertical' ? 'top to bottom' : 'left to right')
     : (place.w >= place.h ? 'left to right' : 'top to bottom');
@@ -19,19 +29,33 @@ export function PlacePanel({ place, onChange, usedElsewhere, categories, looks }
     <section className="card panel">
       <label className="field">
         <span>{isShelf ? 'Shelf label (shown on the shelf)' : 'Area label'}</span>
-        <input value={place.label} onChange={(e) => onChange({ label: e.target.value })} placeholder={isShelf ? 'e.g. Pasta or 5A' : 'e.g. Bakery'} />
+        <input value={place.baseLabel ?? place.label} onChange={(e) => onChange({ label: e.target.value })} placeholder={isShelf ? 'e.g. Pasta or 5A' : 'e.g. Bakery'} />
       </label>
 
       <div className="field">
         <span>What’s {isShelf ? 'on this shelf' : 'in this area'} <span className="muted">({order} on the map)</span></span>
         <CategoryList
-          ids={place.categories}
-          onChange={(ids) => onChange({ categories: ids })}
+          ids={own}
+          onChange={setOwn}
           categories={categories}
           looks={looks}
           usedElsewhere={usedElsewhere}
           addLabel={isShelf ? '+ Add to this shelf…' : '+ Add to this area…'}
         />
+        {learned.length > 0 && (
+          <div className="holds">
+            <span className="muted small">Holds, from items put here:</span>
+            <ul className="holds-list">
+              {learned.map(([id, n]) => (
+                <li key={id}>
+                  <span>{looks.get(id)?.icon} {nameOf(id)} <span className="muted small">({n} item{n === 1 ? '' : 's'})</span></span>
+                  <button className="btn small" onClick={() => setOwn([...own, id])} aria-label={`Keep ${nameOf(id)}`}>Keep</button>
+                  <button className="icon" onClick={() => onChange({ hides: [...hides.filter((h) => h !== id), id] })} aria-label={`Not here: ${nameOf(id)}`}>×</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {place.kind === 'shelf' && (

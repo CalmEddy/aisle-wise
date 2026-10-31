@@ -30,7 +30,7 @@ describe('the grocery taxonomy', () => {
     expect(stocks(['canned_beans'], 'canned_soup_broth')).toBe(false);
     const meat = { id: 'meat', categories: ['meat_seafood'] };
     const fish = { id: 'fish', categories: ['meat_fish_seafood'] };
-    expect(stocking([meat, fish], 'meat_fish_seafood').map((p) => p.id)).toEqual(['fish']);
+    expect(stocking([meat, fish], 'meat_fish_seafood').map((p) => p.id)).toEqual(['fish', 'meat']); // exact first
     expect(stocking([meat, fish], 'meat_beef').map((p) => p.id)).toEqual(['meat']);
   });
 

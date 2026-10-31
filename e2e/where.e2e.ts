@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addItems, fresh, newStore, noPageErrors, row, saved, tick } from './helpers';
+import { addItems, fresh, newStore, noPageErrors, row, saved, tapMap, tick } from './helpers';
 
 const clues = async (page: import('@playwright/test').Page) => {
   const products = await saved<{ name: string; clues?: Record<string, unknown> }[]>(page, 'products');
@@ -312,17 +312,35 @@ test('put straight in the cart with no place here: "Where was it?" opens, with w
   ok();
 });
 
-test('a shelf with no category takes the category of what’s saved on it', async ({ page }) => {
+test('a shelf holds the category of what’s saved on it: named for it, and more of that kind go there', async ({ page }) => {
   await fresh(page, {
     layouts: [{ id: 's1', name: 'Mine', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
       places: [{ kind: 'shelf', id: 'sh1', label: 'Shelf 1', orientation: 'vertical', x: 5, y: 2, length: 8, categories: [] }] }],
     activeLayout: 's1',
     products: [{ id: 'pasta', name: 'Pasta', categoryId: 'pasta_dry', locations: { s1: 'sh1@0.5,0.5' } }],
   });
+  // Worked out from what's there, not saved: the shelf keeps what was set on it by hand.
+  await addItems(page, 'Penne pasta');
+  await expect(row(page, 'Penne pasta')).toContainText('Shelf 1');
+  await expect(page.locator('svg text', { hasText: 'Shelf 1 - Pasta, Rice & Grains' }).first()).toBeAttached();
+  expect((await saved<any[]>(page, 'layouts'))[0].places[0].categories).toEqual([]);
+  // The shelf editor shows what it holds: keep it (set by hand from now on) or take it off.
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await tapMap(page, 5, 5);
+  await page.getByRole('button', { name: 'Bigger' }).click();
+  const panel = page.locator('.build-sheet-body');
+  await expect(panel.getByLabel(/Shelf label/)).toHaveValue('Shelf 1');
+  await expect(panel.locator('.holds')).toContainText('Pasta');
+  await panel.getByRole('button', { name: /^Keep Pasta/ }).click();
   await expect.poll(async () => (await saved<any[]>(page, 'layouts'))[0].places[0].categories).toEqual(['pasta_dry']);
+  await expect(panel.locator('.holds')).toHaveCount(0);
+  // Taken off by hand: stays off, though pasta is saved there.
+  await panel.getByRole('button', { name: /^Remove Pasta/ }).click();
+  await expect.poll(async () => (await saved<any[]>(page, 'layouts'))[0].places[0]).toMatchObject({ categories: [], hides: ['pasta_dry'] });
+  await expect(panel.locator('.holds')).toHaveCount(0);
 });
 
-test('answered "Aisle 1" in a store drawn by hand: the empty shelf there takes the item’s category', async ({ page }) => {
+test('answered "Aisle 1" in a store drawn by hand: the shelf there holds the item’s kind, and more of it go there', async ({ page }) => {
   await fresh(page, {
     layouts: [{ id: 's1', name: 'Drawn', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
       places: [
@@ -338,9 +356,10 @@ test('answered "Aisle 1" in a store drawn by hand: the empty shelf there takes t
   await bar.getByRole('button', { name: '# Aisle…' }).click();
   await bar.getByRole('button', { name: '1', exact: true }).click();
   await bar.getByRole('button', { name: 'Save' }).click();
-  const stocked = async () => (await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => p.categories);
-  // One of the aisle's two shelves (the answer gave no side) takes pasta; the other stays as it was.
-  await expect.poll(async () => (await stocked()).filter((c: string[]) => c.includes('pasta_dry')).length).toBe(1);
+  // The shelf it landed on (the answer gave no side) holds pasta now: more pasta goes there. Nothing saved on the shelves.
+  await addItems(page, 'Penne pasta');
+  await expect(row(page, 'Penne pasta')).toContainText(/Shelf [AB]/);
+  expect((await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => p.categories)).toEqual([[], []]);
 });
 
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {

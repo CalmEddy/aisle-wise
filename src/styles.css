@@ -964,3 +964,9 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .items li.sub-head { list-style: none; padding: 8px 4px 2px; font-weight: 600; letter-spacing: 0.02em; }
 .items li.list-cat-head { list-style: none; padding: 10px 4px 2px; font-weight: 700; font-size: 0.9rem; }
 .items li.list-sub-head { list-style: none; padding: 2px 4px 2px 12px; font-weight: 600; }
+/* A shelf's "Holds" (worked out from items put there): keep one, or take it off. */
+.holds { margin-top: 8px; display: grid; gap: 4px; }
+.holds-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.holds-list li { display: flex; align-items: center; gap: 8px; }
+.holds-list li > span:first-child { flex: 1; min-width: 0; }
+.btn.small { padding: 4px 10px; font-size: 0.85rem; }
