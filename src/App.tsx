@@ -516,9 +516,10 @@ export default function App() {
     setProducts((prev) => prev.map((p) => {
       if (!ids.has(p.id) || (!p.locations?.[layout.id] && !p.clues?.[layout.id])) return p;
       const { [layout.id]: _l, ...locations } = p.locations ?? {};
-      const { [layout.id]: _c, ...clues } = p.clues ?? {};
-      void _l; void _c;
-      return { ...p, locations, clues };
+      const { [layout.id]: answer, ...clues } = p.clues ?? {};
+      void _l;
+      // The answer still shapes the map (so it doesn't rebuild); the item just isn't placed any more.
+      return { ...p, locations, clues, ...(answer && { mapClues: { ...p.mapClues, [layout.id]: answer } }) };
     }));
     return snapshot;
   }

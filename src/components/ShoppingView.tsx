@@ -722,7 +722,7 @@ export function ShoppingView(props: Props) {
   /** Where the map puts an item with no answer of its own, by its kind (the one place that stocks it); else undefined. */
   function knownByCategory(item: ListItem): string | undefined {
     const p = productFor(item, catalog);
-    if (p?.locations?.[layout.id] || p?.clues?.[layout.id] || !p?.categoryId) return undefined;
+    if (p?.locations?.[layout.id] || p?.clues?.[layout.id] || p?.mapClues?.[layout.id] || !p?.categoryId) return undefined;
     return homeOfKind(p.categoryId);
   }
 
@@ -754,6 +754,7 @@ export function ShoppingView(props: Props) {
   function isUnknownHere(item: ListItem) {
     const p = productFor(item, catalog);
     if (p?.locations?.[layout.id] || p?.clues?.[layout.id]) return false;
+    if (p?.mapClues?.[layout.id]) return true; // (testing aid) its place was cleared: ask again
     const cat = p?.categoryId;
     return !(cat && homeOfKind(cat));
   }

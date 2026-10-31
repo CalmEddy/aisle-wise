@@ -241,10 +241,10 @@ test('a second table said like the first: "Another one" keeps them apart', async
     await panel.getByRole('button', { name: 'Table', exact: true }).click();
     await panel.getByRole('button', { name: 'Near the door', exact: true }).click();
     await panel.getByRole('button', { name: /^Save · / }).click();
-    const card = page.locator('.placement-card');
-    if (await card.count()) await card.getByRole('button', { name: /Not sure/ }).click();
   };
   await onTable('Grapes');
+  // The first table is new: where is it? (Wait for the card: it covers the confirmation.)
+  await page.getByRole('group', { name: 'Where’s Produce table?' }).getByRole('button', { name: /Not sure/ }).click();
   await onTable('Pineapple');
   const toast = page.locator('.toast', { hasText: 'same one as Grapes' });
   await toast.getByRole('button', { name: 'Another one' }).click();
@@ -274,10 +274,18 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   await expect.poll(answered).toEqual(['Pasta']);
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect.poll(answered).toEqual(['Cereal', 'Pasta']);
-  // Everything on the list, from the button bar.
+  // Everything on the list, from the button bar: the map stays as it is.
+  const places = async () => JSON.stringify((await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places);
+  const before = await places();
   await page.getByRole('button', { name: 'Clear all locations (testing)' }).click();
   await expect(page.locator('.toast')).toContainText('Cleared where 2 items are');
   await expect.poll(answered).toEqual([]);
+  await page.waitForTimeout(300);
+  expect(await places()).toBe(before);
+  // Cleared items are asked about again.
+  await page.locator('.items .row', { hasText: 'Cereal' }).getByRole('checkbox').uncheck({ force: true });
+  await tick(page, 'Cereal');
+  await expect(page.locator('.where-bar')).toContainText('Where was Cereal?');
   ok();
 });
 

@@ -199,6 +199,11 @@ export interface Product {
    * regenerated without losing it.
    */
   clues?: Record<string, Clue>;
+  /**
+   * (Testing aid; to be removed.) Answers whose item place was cleared: the map keeps being built from them,
+   * but the item is treated as not placed (it's asked about again). A new answer takes over.
+   */
+  mapClues?: Record<string, Clue>;
 }
 
 /** A side of an aisle, as you walk in from the front of the store. */

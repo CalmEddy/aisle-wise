@@ -131,7 +131,8 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
   };
   const addCat = (list: string[], c?: string) => { if (c && !list.includes(c)) list.push(c); };
   for (const p of products) {
-    const c: Clue | undefined = p.clues?.[layoutId];
+    // (A cleared answer still shapes the map: see mapClues.)
+    const c: Clue | undefined = p.clues?.[layoutId] ?? p.mapClues?.[layoutId];
     if (!c) continue;
     switch (c.kind) {
       case 'aisle':
