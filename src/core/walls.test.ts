@@ -5,10 +5,10 @@ import { currentWalls, moveSection, offerWalls, trayFor } from './walls';
 
 const p = (id: string, categoryId: string, clue: object): Product => ({ id, name: id, categoryId, clues: { s: clue as never } });
 const products: Product[] = [
-  p('apples', 'fruit', { kind: 'dept', dept: 'produce' }),
+  p('apples', 'produce_fruits', { kind: 'dept', dept: 'produce' }),
   p('bread', 'bakery', { kind: 'dept', dept: 'bakery' }),
   p('steak', 'meat', { kind: 'dept', dept: 'meat' }),
-  p('cereal', 'breakfast', { kind: 'aisle', aisle: '3' }),
+  p('cereal', 'breakfast_cereal', { kind: 'aisle', aisle: '3' }),
 ];
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 15, y: 23 }, checkout: { x: 15, y: 23 },
   gen: { enabled: true, entrance: 'left', locked: [] } };

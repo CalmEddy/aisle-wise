@@ -182,13 +182,24 @@ export interface Category {
   color?: string;
   /** An emoji. */
   icon?: string;
+  /** A subcategory's category ("produce_fruits" → "produce"). */
+  parent?: string;
+  /** A category's place in the walking order (1 = Produce). */
+  order?: number;
 }
 
 /** An item in the master grocery list. */
 export interface Product {
   id: string;
   name: string;
+  /** Its subcategory when known ("produce_fruits"), else a category ("produce"). */
   categoryId?: string;
+  /** Other names it goes by ("Scallions" for Green onions). */
+  aliases?: string[];
+  /** How common (1 = most): orders suggestions. */
+  rank?: number;
+  /** Usual unit ("bunch", "lb"). */
+  unit?: string;
   /** Layout id → spot key, where the user said this item is in that store. */
   locations?: Record<string, string>;
   /** Layout ids of stores that don't sell this item. */

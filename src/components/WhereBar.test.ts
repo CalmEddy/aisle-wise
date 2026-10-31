@@ -11,8 +11,8 @@ describe('quick bar guesses', () => {
     expect(nextAisles(['12B'])).toEqual(['12', '13', '14', '11']);
   });
   it('guesses fridge or freezer from the category', () => {
-    expect(guessTemp('icecream')).toBe('frozen');
-    expect(guessTemp('dairy')).toBe('chilled');
-    expect(guessTemp('pasta')).toBeUndefined();
+    expect(guessTemp('frozen_desserts_ice')).toBe('frozen');
+    expect(guessTemp('dairy_eggs')).toBe('chilled');
+    expect(guessTemp('pasta_dry')).toBeUndefined();
   });
 });

@@ -1,4 +1,5 @@
 import type { Catalog } from './catalog';
+import { stocking, topOf } from './taxonomy';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
 import { clueRank, resolveClue, typicalRank } from './clues';
@@ -85,8 +86,8 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
       if (spot) return { kind: 'spot', spot, product, exact: false };
     }
   }
-  const place = cat ? layout.places.find((p) => p.categories.includes(cat)) : undefined;
-  const spot = place && resolveSpot(`${place.id}:${cat}`, layout, catalog);
+  const place = cat ? stocking(layout.places, cat)[0] : undefined;
+  const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat!) ? cat : topOf(cat!)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
   if (spot) return { kind: 'spot', spot, product, exact: false };
   return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
 }

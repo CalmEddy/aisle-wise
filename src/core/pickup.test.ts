@@ -40,9 +40,9 @@ describe('build mode pick-ups land where they were picked up', () => {
   it('creates a shelf for a brand-new item, keeping its own name', () => {
     const o = pick('Garlic Olives', { x: 10, y: 12 });
     expect(o).toMatchObject({ kind: 'built', action: 'create', itemName: 'Garlic Olives' });
-    // Got its own master-list entry (not "Olives" or "Garlic"), with the closest match's category.
+    // Got its own master-list entry (not "Olives" or "Garlic"), with the likeliest category (olives, by what it ends with).
     const p = s.products.find((x) => x.name === 'Garlic Olives')!;
-    expect(p.categoryId).toBe('veg');
+    expect(p.categoryId).toBe('canned_pickles_olives');
     expect(s.products.find((x) => x.name === 'Olives')!.locations).toBeUndefined();
     allWhereTheyShouldBe();
   });

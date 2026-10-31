@@ -3,7 +3,7 @@ import { Catalog } from './catalog';
 import { combineLists, itemsOn, listOf, removeList, updateList } from './lists';
 import type { ListItem } from './types';
 
-const catalog = new Catalog([{ id: 'milk', name: 'Milk' }, { id: 'eggs', name: 'Eggs' }], []);
+const catalog = new Catalog([{ id: 'milk', name: 'Milk' }, { id: 'dairy_eggs_sub', name: 'Eggs' }], []);
 const items: ListItem[] = [
   { id: '1', name: 'Milk', done: false, productId: 'milk' },
   { id: '2', name: 'Eggs', done: false, listId: 'staples' },

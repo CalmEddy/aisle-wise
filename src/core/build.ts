@@ -1,4 +1,5 @@
 import type { Catalog } from './catalog';
+import { guessCategory } from './guess';
 import { contains, exactKey, exactSpotAt, footprint, parseExactKey } from './geometry';
 import { resolveSpot } from './locate';
 import { matchNeighbour, shelfLike } from './rows';
@@ -573,9 +574,9 @@ export function pickUp(
   const listItem = itemId ? items.find((i) => i.id === itemId) : undefined;
   let product = (listItem?.productId && catalog.productById.get(listItem.productId)) || catalog.exact(listItem?.name ?? name);
   if (!product) {
-    // New to the master list: keep the name as typed, borrow a similar item's category.
-    const similar = catalog.match(listItem?.name ?? name);
-    product = { id: `p-${newId()}`, name: capitalize((listItem?.name ?? name).trim()), ...(similar?.categoryId && { categoryId: similar.categoryId }) };
+    // New to the master list: keep the name as typed, with its likeliest category.
+    const guess = guessCategory(listItem?.name ?? name, catalog);
+    product = { id: `p-${newId()}`, name: capitalize((listItem?.name ?? name).trim()), ...(guess && { categoryId: guess.categoryId }) };
     products = [...products, product];
   }
   const pid = product.id;

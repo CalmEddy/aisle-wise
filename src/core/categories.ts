@@ -1,63 +1,46 @@
+import { parentOf, SEED_CATEGORIES, SEED_ITEMS } from './taxonomy';
 import type { Category, Product } from './types';
 
 
-const groups: [id: string, name: string, items: string][] = [
-  ['fruit', 'Fruit', 'Apples, Bananas, Oranges, Lemons, Limes, Grapes, Strawberries, Blueberries, Raspberries, Melon, Watermelon, Pears, Peaches, Plums, Mangoes, Pineapple, Avocados, Kiwi, Cherries'],
-  ['veg', 'Vegetables', 'Lettuce, Spinach, Kale, Carrots, Celery, Onions, Garlic, Potatoes, Sweet potatoes, Tomatoes, Cucumbers, Bell peppers, Broccoli, Cauliflower, Zucchini, Mushrooms, Corn, Cilantro, Parsley, Basil, Ginger, Salad mix, Green beans'],
-  ['bakery', 'Bakery', 'Bread, Bagels, Baguette, Croissants, Muffins, Dinner rolls, Hamburger buns, Tortillas, Cake, Donuts, Pita'],
-  ['deli', 'Deli & Cheese', 'Ham, Sliced turkey, Salami, Cheese, Cheddar, Mozzarella, Parmesan, Brie, Hummus, Rotisserie chicken, Olives'],
-  ['dairy', 'Dairy', 'Milk, Almond milk, Oat milk, Yogurt, Heavy cream, Sour cream, Cream cheese, Cottage cheese, Half and half, Coffee creamer'],
-  ['eggs', 'Eggs & Butter', 'Eggs, Butter, Margarine'],
-  ['meat', 'Meat', 'Chicken, Chicken breasts, Ground beef, Steak, Pork chops, Bacon, Sausage, Lamb, Hot dogs, Ground turkey'],
-  ['seafood', 'Seafood', 'Fish, Salmon, Tuna steak, Shrimp, Cod, Tilapia, Crab, Scallops'],
-  ['floral', 'Floral & Cards', 'Flowers, Greeting card, Balloons'],
-  ['pharmacy', 'Pharmacy', 'Prescription, Vitamins, Allergy medicine, Ibuprofen, Tylenol, Cold medicine'],
-  ['breakfast', 'Cereal & Breakfast', 'Cereal, Oatmeal, Granola, Pancake mix, Maple syrup, Pop-Tarts'],
-  ['coffee', 'Coffee & Tea', 'Coffee, Tea, K-Cups, Hot chocolate'],
-  ['pasta', 'Pasta & Rice', 'Pasta, Spaghetti, Penne, Macaroni, Rice, Quinoa, Noodles, Couscous, Ramen'],
-  ['canned', 'Canned Goods & Soup', 'Soup, Broth, Chicken stock, Beans, Black beans, Chickpeas, Tuna, Canned tomatoes, Tomato sauce, Pasta sauce'],
-  ['baking', 'Baking & Spices', 'Flour, Sugar, Brown sugar, Baking soda, Baking powder, Yeast, Vanilla, Chocolate chips, Salt, Cinnamon, Cumin, Paprika, Oregano, Black pepper'],
-  ['condiments', 'Oils & Condiments', 'Olive oil, Vegetable oil, Vinegar, Ketchup, Mustard, Mayonnaise, Soy sauce, Hot sauce, Salad dressing, Peanut butter, Jelly, Jam, Honey'],
-  ['snacks', 'Snacks & Chips', 'Chips, Tortilla chips, Pretzels, Popcorn, Nuts, Almonds, Peanuts, Trail mix, Salsa, Granola bars'],
-  ['cookies', 'Cookies & Crackers', 'Cookies, Crackers, Oreos, Graham crackers'],
-  ['soda', 'Soda & Sports Drinks', 'Soda, Coke, Pepsi, Sprite, Gatorade, Energy drinks, Sparkling water, Seltzer'],
-  ['water', 'Water & Juice', 'Water, Juice, Orange juice, Apple juice, Lemonade'],
-  ['paper', 'Paper & Cleaning', 'Paper towels, Toilet paper, Tissues, Napkins, Aluminum foil, Plastic wrap, Trash bags, Zip bags, Dish soap, Sponges, All-purpose cleaner, Bleach'],
-  ['laundry', 'Laundry & Pets', 'Laundry detergent, Dryer sheets, Fabric softener, Dog food, Cat food, Cat litter'],
-  ['health', 'Health & Beauty', 'Shampoo, Conditioner, Hand soap, Body wash, Toothpaste, Toothbrush, Floss, Deodorant, Razors, Lotion, Sunscreen'],
-  ['baby', 'Baby', 'Diapers, Baby wipes, Baby food, Formula'],
-  ['frozen', 'Frozen Meals & Pizza', 'Frozen pizza, Frozen meals, Frozen burritos, Frozen waffles, Fish sticks'],
-  ['icecream', 'Ice Cream & Frozen Veg', 'Ice cream, Frozen vegetables, Frozen fruit, Frozen peas, Popsicles, Ice'],
-];
-
-/** Default colour and icon for each starter category. */
+/** Colour and icon for each category (subcategories share their category's). */
 const looks: Record<string, [color: string, icon: string]> = {
-  fruit: ['#e4572e', '🍎'],
-  veg: ['#3fa34d', '🥦'],
-  bakery: ['#c8963e', '🍞'],
-  deli: ['#e8b931', '🧀'],
-  dairy: ['#4f9fd8', '🥛'],
-  eggs: ['#f2d06b', '🥚'],
-  meat: ['#c0392b', '🥩'],
-  seafood: ['#1f7a8c', '🐟'],
-  floral: ['#e07aa8', '💐'],
-  pharmacy: ['#8e7cc3', '💊'],
-  breakfast: ['#e9a03b', '🥣'],
-  coffee: ['#7b4b2a', '☕'],
-  pasta: ['#f0b429', '🍝'],
-  canned: ['#d2691e', '🥫'],
-  baking: ['#b08968', '🧂'],
-  condiments: ['#9aa63a', '🫒'],
+  produce: ['#3fa34d', '🥬'],
+  bakery_bread: ['#c8963e', '🍞'],
+  deli: ['#e8b931', '🥪'],
+  meat_seafood: ['#c0392b', '🥩'],
+  dairy_eggs: ['#4f9fd8', '🥛'],
+  cheese: ['#f2d06b', '🧀'],
+  breakfast_cereal: ['#e9a03b', '🥣'],
+  pasta_rice_grains: ['#f0b429', '🍝'],
+  canned_jarred: ['#d2691e', '🥫'],
+  condiments_sauces: ['#9aa63a', '🫒'],
+  spices_seasonings: ['#b5651d', '🧂'],
+  baking: ['#b08968', '🧁'],
+  international: ['#e76f51', '🌮'],
   snacks: ['#ff8c42', '🥨'],
-  cookies: ['#a0522d', '🍪'],
-  soda: ['#e63946', '🥤'],
-  water: ['#48cae4', '🧃'],
-  paper: ['#90a4ae', '🧻'],
-  laundry: ['#5c7cfa', '🧺'],
-  health: ['#2ec4b6', '🧴'],
+  beverages: ['#48cae4', '🥤'],
+  beer_wine: ['#8e3b46', '🍷'],
+  frozen: ['#4361ee', '🧊'],
+  household_cleaning: ['#5c7cfa', '🧽'],
+  paper_goods: ['#90a4ae', '🧻'],
+  personal_care: ['#2ec4b6', '🧴'],
   baby: ['#ffafcc', '🍼'],
-  frozen: ['#4361ee', '🍕'],
-  icecream: ['#a2d2ff', '🍦'],
+  pet: ['#a0522d', '🐾'],
+};
+
+/** Subcategories with an icon of their own (the rest use their category's); colours are the category's. */
+const SUB_ICONS: Record<string, string> = {
+  produce_fruits: '🍎', produce_vegetables: '🥦', produce_salad_greens: '🥬', produce_fresh_herbs: '🌿', produce_potatoes_onions: '🥔',
+  bakery_bagels_muffins: '🥯', bakery_desserts: '🍰', bakery_tortillas_wraps: '🫓',
+  meat_beef: '🥩', meat_poultry: '🍗', meat_pork: '🥓', meat_bacon_sausage: '🌭', meat_fish_seafood: '🐟', meat_plant_based: '🌱',
+  dairy_milk: '🥛', dairy_plant_milk: '🥛', dairy_eggs_sub: '🥚', dairy_butter: '🧈', dairy_yogurt: '🥄',
+  breakfast_spreads: '🍯', breakfast_pancakes_syrup: '🥞', pasta_sauce: '🍅', grains_rice: '🍚',
+  canned_soup_broth: '🍲', canned_beans: '🫘', canned_pickles_olives: '🥒', condiments_oils_vinegars: '🫒',
+  snacks_chips: '🍟', snacks_cookies: '🍪', snacks_candy_gum: '🍬', snacks_nuts_dried_fruit: '🥜', snacks_popcorn_pretzels: '🥨',
+  beverages_water: '💧', beverages_soda: '🥤', beverages_juice: '🧃', beverages_coffee: '☕', beverages_tea: '🍵', beverages_sports_energy: '⚡',
+  alcohol_beer: '🍺', alcohol_wine: '🍷', frozen_pizza_appetizers: '🍕', frozen_desserts_ice: '🍦', frozen_vegetables: '🥦', frozen_fruit: '🍓',
+  household_laundry: '🧺', household_trash_storage: '🗑️', household_home_essentials: '🔋', paper_toilet_tissue: '🧻',
+  personal_oral_care: '🪥', personal_health: '💊', personal_shaving: '🪒', baby_diapers_wipes: '🧷', baby_feeding: '🍼', pet_dog: '🐶', pet_cat: '🐱',
 };
 
 /** Colours for new categories, in order. */
@@ -74,11 +57,15 @@ export const ICON_CHOICES = [
   '🍜', '🌶️', '🧻', '🧺', '🧽', '🧴', '🪥', '💊', '🍼', '🐶', '🐱', '💐', '🎁', '🕯️', '🔋', '🛒',
 ];
 
-export const defaultCategories: Category[] = groups.map(([id, name]) => ({ id, name, color: looks[id][0], icon: looks[id][1] }));
+/** The categories (in walking order), each followed by its subcategories. */
+export const defaultCategories: Category[] = SEED_CATEGORIES.flatMap((c) => [
+  { id: c.id, name: c.name, color: looks[c.id][0], icon: looks[c.id][1], order: c.order },
+  ...c.subs.map(([id, name]) => ({ id, name, parent: c.id, ...(SUB_ICONS[id] && { icon: SUB_ICONS[id] }) })),
+]);
 
 /** A category's colour and icon, falling back to sensible defaults. */
 export function categoryLook(cat: Category | undefined, index = 0): { color: string; icon: string } {
-  const d = cat ? looks[cat.id] : undefined;
+  const d = cat ? looks[cat.id] ?? looks[cat.parent ?? parentOf(cat.id) ?? ''] : undefined;
   return {
     color: cat?.color || d?.[0] || PALETTE[Math.abs(index) % PALETTE.length],
     icon: cat?.icon || d?.[1] || '🛒',
@@ -87,10 +74,7 @@ export function categoryLook(cat: Category | undefined, index = 0): { color: str
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-/** The starter master list of grocery items. */
-export const defaultProducts: Product[] = groups.flatMap(([categoryId, , items]) =>
-  items.split(',').map((raw) => {
-    const name = raw.trim();
-    return { id: `p-${slug(name)}`, name, categoryId };
-  }),
-);
+/** The starter master list: the most common grocery-list items, with their subcategory, aliases and unit. */
+export const defaultProducts: Product[] = SEED_ITEMS.map(([name, rank, sub, aliases, unit]) => ({
+  id: `p-${slug(name)}`, name, categoryId: sub, rank, ...(aliases.length && { aliases }), unit,
+}));

@@ -1,4 +1,5 @@
 import { Catalog, normalize } from './catalog';
+import { newCategoryId, OLD_NAMES, OLD_TO_NEW, seedItemNamed } from './recategorize';
 import { aislesToShelves } from './migrate';
 import type { Category, ListItem, Product, StoreLayout, Clue } from './types';
 
@@ -126,6 +127,9 @@ function categoryFor(name: string | undefined, id: string | undefined, cats: Cat
   if (!name) return undefined;
   const byName = cats.find((c) => c.name.trim().toLowerCase() === name.trim().toLowerCase());
   if (byName) return byName.id;
+  // Shared from a phone still on the first categories ("Dairy"): the one it became here.
+  const old = OLD_NAMES[name.trim().toLowerCase()] ?? (id && OLD_TO_NEW[id] ? id : undefined);
+  if (old && cats.some((c) => c.id === newCategoryId(old))) return newCategoryId(old);
   const created: Category = { id: id ?? `c-${newId()}`, name, ...(look?.color && { color: look.color }), ...(look?.icon && { icon: look.icon }) };
   cats.push(created);
   return created.id;
@@ -136,7 +140,8 @@ function productForShared(item: SharedItem, products: Product[], cats: Category[
   const key = normalize(item.name);
   const existing = products.find((p) => normalize(p.name) === key);
   if (existing) return existing;
-  const created: Product = { id: `p-${newId()}`, name: item.name, categoryId: categoryFor(item.category, undefined, cats) };
+  // A starter item here has its own category (finer than what the sender's phone may have said).
+  const created: Product = { id: `p-${newId()}`, name: item.name, categoryId: seedItemNamed(item.name)?.categoryId ?? categoryFor(item.category, undefined, cats) };
   products.push(created);
   return created;
 }

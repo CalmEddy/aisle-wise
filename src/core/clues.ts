@@ -1,4 +1,5 @@
 import { exactKey, exactSpotAt, footprint } from './geometry';
+import { orderOf, parentOf, stocking, stocks, topOf } from './taxonomy';
 import type { Across, AisleLabel, AislePos, AisleSide, Clue, Dept, OpenNear, Place, Point, Product, Rect, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
@@ -9,21 +10,26 @@ import type { Across, AisleLabel, AislePos, AisleSide, Clue, Dept, OpenNear, Pla
  */
 
 export const DEPTS: { id: Dept; name: string; icon: string; categories: string[] }[] = [
-  { id: 'produce', name: 'Produce', icon: '🥬', categories: ['fruit', 'veg'] },
-  { id: 'floral', name: 'Floral', icon: '💐', categories: ['floral'] },
-  { id: 'bakery', name: 'Bakery', icon: '🍞', categories: ['bakery'] },
-  { id: 'deli', name: 'Deli', icon: '🧀', categories: ['deli'] },
-  { id: 'meat', name: 'Meat', icon: '🥩', categories: ['meat'] },
-  { id: 'seafood', name: 'Seafood', icon: '🐟', categories: ['seafood'] },
-  { id: 'dairy', name: 'Dairy', icon: '🥛', categories: ['dairy', 'eggs'] },
-  { id: 'frozen', name: 'Frozen', icon: '🧊', categories: ['frozen', 'icecream'] },
-  { id: 'pharmacy', name: 'Pharmacy', icon: '💊', categories: ['pharmacy'] },
+  // Categories and subcategories of the taxonomy (a department stocks all of a category's subcategories).
+  { id: 'produce', name: 'Produce', icon: '🥬', categories: ['produce'] },
+  // A place in the store (flowers, cards), not a category of its own: those are Household → Home Essentials.
+  { id: 'floral', name: 'Floral', icon: '💐', categories: [] },
+  { id: 'bakery', name: 'Bakery', icon: '🍞', categories: ['bakery_bread'] },
+  { id: 'deli', name: 'Deli', icon: '🥪', categories: ['deli'] },
+  { id: 'meat', name: 'Meat', icon: '🥩', categories: ['meat_seafood'] },
+  { id: 'seafood', name: 'Seafood', icon: '🐟', categories: ['meat_fish_seafood'] },
+  { id: 'dairy', name: 'Dairy', icon: '🥛', categories: ['dairy_eggs', 'cheese'] },
+  { id: 'frozen', name: 'Frozen', icon: '🧊', categories: ['frozen'] },
+  { id: 'pharmacy', name: 'Pharmacy', icon: '💊', categories: ['personal_health'] },
 ];
 const deptOf = (id: Dept) => DEPTS.find((d) => d.id === id)!;
 
 /** The department an item's category usually belongs to (e.g. Fruit → Produce). */
 export function guessDept(categoryId?: string): Dept | undefined {
-  return categoryId ? DEPTS.find((d) => d.categories.includes(categoryId))?.id : undefined;
+  if (!categoryId) return undefined;
+  // Its own subcategory first (Fish & Seafood → Seafood), then its category (Meat & Seafood → Meat).
+  const parent = parentOf(categoryId);
+  return (DEPTS.find((d) => d.categories.includes(categoryId)) ?? (parent ? DEPTS.find((d) => d.categories.includes(parent)) : undefined))?.id;
 }
 
 /** "12" → 12, "12B" → 12.2, "" → NaN. */
@@ -193,7 +199,7 @@ function aisleSpot(l: StoreLayout, a: AisleLabel, side: AisleSide | undefined, a
   // No side said: the side that stocks its kind of thing, else an aisle shelf rather than a wall (an outer
   // aisle's far side), else the left.
   const wallish = (sh: Shelf) => sh.back !== undefined;
-  const pick = found.find((f) => categoryId && f.shelf.categories.includes(categoryId)) ?? found.find((f) => !wallish(f.shelf)) ?? found[0];
+  const pick = found.find((f) => categoryId && stocks(f.shelf.categories, categoryId)) ?? found.find((f) => !wallish(f.shelf)) ?? found[0];
   return pick?.key;
 }
 
@@ -204,10 +210,10 @@ function findDept(l: StoreLayout, dept: Dept, categoryId?: string): string | und
   const d = deptOf(dept);
   const named = l.places.find((p) => p.label.toLowerCase().includes(d.name.toLowerCase()));
   if (named) return named.id;
-  const cats = categoryId && d.categories.includes(categoryId) ? [categoryId, ...d.categories] : d.categories;
+  const cats = categoryId && guessDept(categoryId) === dept ? [categoryId, ...d.categories] : d.categories;
   for (const c of cats) {
-    const p = l.places.find((pl) => pl.categories.includes(c));
-    if (p) return `${p.id}:${c}`;
+    const p = stocking(l.places, c)[0];
+    if (p) return `${p.id}:${p.categories.includes(c) ? c : topOf(c)}`;
   }
   return undefined;
 }
@@ -301,8 +307,8 @@ function onWall(l: StoreLayout, wall: Wall, part?: WallPart, t?: Temp, categoryI
   const tgt = wallTarget(wall, part);
   const all = l.places.filter((p) => frame.fromWall(footprint(p), wall) <= WALL_REACH && !/checkout/i.test(p.label));
   // Along that wall, the part that stocks its kind of thing (Bakery for bread), if there is one.
-  const stocking = categoryId ? all.filter((p) => p.categories.includes(categoryId)) : [];
-  const along = stocking.length ? stocking : all;
+  const there = categoryId ? stocking(all, categoryId) : [];
+  const along = there.length ? there : all;
   return nearest(frame.toMap(tgt.u, tgt.v), along, t);
 }
 
@@ -394,7 +400,6 @@ export function aislesUsed(products: Product[], layoutId: string): string[] {
 // Typical store order (no answers yet)
 
 /** Centre-store categories in the order a typical supermarket's aisles run. */
-const CENTRE_ORDER = ['breakfast', 'coffee', 'baking', 'pasta', 'canned', 'condiments', 'snacks', 'cookies', 'soda', 'water', 'paper', 'laundry', 'health', 'baby'];
 
 /**
  * Where a category usually is in a walk round a store, on the same scale as
@@ -405,6 +410,6 @@ const CENTRE_ORDER = ['breakfast', 'coffee', 'baking', 'pasta', 'canned', 'condi
 export function typicalRank(categoryId: string): number {
   const dept = guessDept(categoryId);
   if (dept) return deptRank(dept);
-  const i = CENTRE_ORDER.indexOf(categoryId);
-  return 5000 + (i < 0 ? CENTRE_ORDER.length : i);
+  // Centre-store aisles in the taxonomy's walking order (Breakfast … Pet Supplies); others after them.
+  return 5000 + Math.min(orderOf(categoryId) / 10, 300);
 }

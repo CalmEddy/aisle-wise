@@ -81,20 +81,26 @@ describe('locating items', () => {
   });
 
   it('matches typed names to the master list', () => {
-    expect(catalog.match('almond milk')?.categoryId).toBe('dairy');
-    expect(catalog.match('almonds')?.categoryId).toBe('snacks');
+    expect(catalog.match('almond milk')?.categoryId).toBe('dairy_plant_milk');
+    expect(catalog.match('almonds')?.categoryId).toBe('snacks_nuts_dried_fruit');
     expect(catalog.match('organic whole milk')?.name).toBe('Milk');
     expect(catalog.match('flux capacitor')).toBeUndefined();
   });
 
   it('suggests items as you type, best match first', () => {
-    expect(catalog.suggest('ban').map((p) => p.name)).toEqual(['Bananas']);
-    expect(catalog.suggest('milk').map((p) => p.name)).toEqual(['Milk', 'Oat milk', 'Almond milk']);
+    expect(catalog.suggest('ban')[0].name).toBe('Bananas');
+    const milk = catalog.suggest('milk').map((p) => p.name);
+    expect(milk[0]).toBe('Milk');
+    expect(milk).toEqual(expect.arrayContaining(['Oat milk', 'Almond milk']));
+    // Equally good matches: the more common first (almond milk is bought more than oat milk).
+    expect(milk.indexOf('Almond milk')).toBeLessThan(milk.indexOf('Oat milk'));
+    // Other names count too: "scallions" finds Green onions.
+    expect(catalog.suggest('scallion')[0].name).toBe('Green onions');
     expect(catalog.suggest('straw')[0].name).toBe('Strawberries');
   });
 
   it('finds the place that stocks the category', () => {
-    expect(spotOf(locateItem(item('pasta'), demoLayout, catalog))?.label).toBe('Pasta & Rice');
+    expect(spotOf(locateItem(item('pasta_dry'), demoLayout, catalog))?.label).toBe('Pasta & Rice');
     expect(spotOf(locateItem(item('ice cream'), demoLayout, catalog))?.placeId).toBe('icecream1');
     expect(spotOf(locateItem(item('bread'), demoLayout, catalog))?.label).toBe('Bakery');
   });
@@ -111,7 +117,7 @@ describe('locating items', () => {
   });
 
   it('knows when a store doesn’t sell an item', () => {
-    const c = new Catalog([{ id: 'k', name: 'Kombucha', categoryId: 'soda', notAt: ['demo'] }], defaultCategories);
+    const c = new Catalog([{ id: 'k', name: 'Kombucha', categoryId: 'beverages_soda', notAt: ['demo'] }], defaultCategories);
     expect(locateItem(item('kombucha'), demoLayout, c).kind).toBe('not-sold');
     expect(locateItem(item('kombucha'), { ...demoLayout, id: 'other' }, c).kind).toBe('spot');
   });
@@ -130,7 +136,7 @@ describe('planRoute', () => {
   });
 
   it('re-plans from wherever the shopper is', () => {
-    const { stops } = groupIntoStops([item('apples'), item('steak'), item('pasta'), item('milk')], locate);
+    const { stops } = groupIntoStops([item('apples'), item('steak'), item('pasta_dry'), item('milk')], locate);
     expect(plan(demoLayout.entrance, stops)[0].placeId).toBe('produce');
     const atMeat = stops.find((st) => st.placeId === 'meat')!.point;
     expect(plan(atMeat, stops)[0].placeId).toBe('meat');
@@ -160,7 +166,7 @@ describe('planRoute', () => {
   });
 
   it('is never longer than walking the list in order', () => {
-    const names = ['soda', 'bread', 'steak', 'cereal', 'shampoo', 'eggs', 'ice cream', 'apples', 'rice', 'diapers'];
+    const names = ['beverages_soda', 'bread', 'steak', 'cereal', 'shampoo', 'dairy_eggs_sub', 'ice cream', 'apples', 'rice', 'diapers'];
     const { stops } = groupIntoStops(names.map(item), locate);
     const planned = plan(demoLayout.entrance, stops);
     expect(routeLength(demoLayout.entrance, planned, demoLayout.checkout, floor.distance))
@@ -184,14 +190,14 @@ describe('planGroupedRoute', () => {
     id: 'g', name: 'G', width: 20, height: 20, entrance: { x: 11, y: 19 }, checkout: { x: 0, y: 0 },
     places: [
       { kind: 'shelf', id: 'shelf', label: 'Shelf 1', x: 10, y: 5, orientation: 'vertical', length: 10, categories: [] },
-      { kind: 'area', id: 'fruit', label: 'Fruit', x: 12, y: 9, w: 3, h: 3, categories: [] },
+      { kind: 'area', id: 'produce_fruits', label: 'Fruit', x: 12, y: 9, w: 3, h: 3, categories: [] },
     ],
   };
   const floor = new Floor(layout);
   const stop = (id: string, placeId: string, x: number, y: number) => ({ id, placeId, point: { x, y } });
   const stops = [
     stop('olives', 'shelf', 10, 14), stop('pickles', 'shelf', 10, 5),
-    stop('kiwi', 'fruit', 13, 10), stop('bananas', 'fruit', 12, 9), stop('berries', 'fruit', 14, 11),
+    stop('kiwi', 'produce_fruits', 13, 10), stop('bananas', 'produce_fruits', 12, 9), stop('berries', 'produce_fruits', 14, 11),
   ];
   const along = (s: { point: { x: number; y: number } }) => s.point.y * 1000 + s.point.x;
 

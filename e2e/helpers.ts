@@ -86,16 +86,16 @@ export function noPageErrors(page: Page) {
 export function cornerStore() {
   const c = (name: string, categoryId: string | undefined, clue: object) => ({ id: name, name, ...(categoryId && { categoryId }), clues: { s1: clue } });
   const products = [
-    c('Apples', 'fruit', { kind: 'wall', wall: 'right', part: 'front' }),
-    c('Bread', 'bakery', { kind: 'wall', wall: 'right', part: 'back' }),
-    c('Steak', 'meat', { kind: 'wall', wall: 'back', part: 'left' }),
-    c('Juice', 'water', { kind: 'wall', wall: 'back', part: 'right', temp: 'chilled' }),
+    c('Apples', 'produce_fruits', { kind: 'wall', wall: 'right', part: 'front' }),
+    c('Bread', 'bakery_bread', { kind: 'wall', wall: 'right', part: 'back' }),
+    c('Steak', 'meat_seafood', { kind: 'wall', wall: 'back', part: 'left' }),
+    c('Juice', 'beverages_juice', { kind: 'wall', wall: 'back', part: 'right', temp: 'chilled' }),
     c('Hummus', undefined, { kind: 'wall', wall: 'left', part: 'back', temp: 'chilled' }),
-    c('Pizza', 'frozen', { kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' }),
-    c('Melon', 'fruit', { kind: 'open', near: 'entrance', fixture: 'table' }),
-    c('Ice cream', 'icecream', { kind: 'open', near: 'middle', fixture: 'case', temp: 'frozen' }),
-    c('Cereal', 'breakfast', { kind: 'aisle', aisle: '5' }),
-    c('Pasta', 'pasta', { kind: 'aisle', aisle: '3', side: 'R' }),
+    c('Pizza', 'frozen_pizza_appetizers', { kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' }),
+    c('Melon', 'produce_fruits', { kind: 'open', near: 'entrance', fixture: 'table' }),
+    c('Ice cream', 'frozen_desserts_ice', { kind: 'open', near: 'middle', fixture: 'case', temp: 'frozen' }),
+    c('Cereal', 'breakfast_cereal_sub', { kind: 'aisle', aisle: '5' }),
+    c('Pasta', 'pasta_dry', { kind: 'aisle', aisle: '3', side: 'R' }),
   ];
   return {
     products,

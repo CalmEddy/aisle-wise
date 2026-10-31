@@ -33,7 +33,7 @@ test('aisle brush: paints both sides with categories and an aisle label, and bac
   await up.click(); await up.click(); await up.click();
   let l = await layout(page, 'New store');
   expect(l.places.length).toBeGreaterThanOrEqual(2);
-  expect(l.places.some((p: any) => p.categories.includes('breakfast'))).toBe(true);
+  expect(l.places.some((p: any) => p.categories.includes('breakfast_cereal'))).toBe(true);
   await expect(page.locator('.aisle-label text')).toHaveText(['Aisle 1']);
   const before = l.places.map((p: any) => p.length).join();
   await page.getByRole('button', { name: '↶ Back up' }).click();
@@ -71,8 +71,8 @@ test('selecting an aisle selects its shelves; it moves as one, and turns when th
     layouts: [{
       id: 's1', name: 'Lone', width: 30, height: 30, entrance: { x: 1, y: 29 }, checkout: { x: 15, y: 29 },
       places: [
-        { kind: 'shelf', id: 'L', label: 'Cereal', orientation: 'vertical', x: 12, y: 8, length: 10, categories: ['breakfast'] },
-        { kind: 'shelf', id: 'R', label: 'Pasta', orientation: 'vertical', x: 15, y: 8, length: 10, categories: ['pasta'] },
+        { kind: 'shelf', id: 'L', label: 'Cereal', orientation: 'vertical', x: 12, y: 8, length: 10, categories: ['breakfast_cereal_sub'] },
+        { kind: 'shelf', id: 'R', label: 'Pasta', orientation: 'vertical', x: 15, y: 8, length: 10, categories: ['pasta_dry'] },
         { kind: 'shelf', id: 'X', label: 'Next', orientation: 'vertical', x: 22, y: 8, length: 10, categories: [] },
       ],
       aisles: [{ id: 'a', label: 'Aisle 1', x: 13, y: 8, w: 2, h: 10 }],

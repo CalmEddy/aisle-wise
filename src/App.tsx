@@ -9,6 +9,8 @@ import { StoreSheet } from './components/StoreSheet';
 import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
+import { hasOldCategories, migrateCategories } from './core/recategorize';
+import { guessCategory } from './core/guess';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
@@ -114,6 +116,15 @@ export default function App() {
     setProducts(() => r.products);
   }, [layouts, products, setLayouts, setProducts]);
 
+  // Saved (or synced from a phone that hasn't updated) with the first 26 categories: move to the grocery taxonomy.
+  useEffect(() => {
+    if (!hasOldCategories(categories)) return;
+    const r = migrateCategories({ products, categories, layouts });
+    setProducts(() => r.products);
+    setCategories(() => r.categories);
+    setLayouts(() => r.layouts);
+  }, [categories, products, layouts, setProducts, setCategories, setLayouts]);
+
   // Live sharing with a household (Supabase). Off unless configured and joined.
   const syncData = useMemo(() => ({ items: allItems, lists, products, categories, layouts }), [allItems, lists, products, categories, layouts]);
   const household = useHousehold(syncData, (d) => {
@@ -170,6 +181,11 @@ export default function App() {
   const layout = layouts.find((l) => l.id === activeId) ?? layouts[0] ?? demoLayout;
   const floor = useMemo(() => new Floor(layout), [layout]);
   const catalog = useMemo(() => new Catalog(products, categories), [products, categories]);
+  /** A new master-list item for something typed, with its likeliest category ("Cheerios" → Cereal). */
+  const newProduct = (name: string, within: Catalog = catalog): Product => {
+    const guess = guessCategory(name, within);
+    return { id: `p-${newId()}`, name: capitalize(name.trim()), ...(guess && { categoryId: guess.categoryId }) };
+  };
   // Each category's colour and icon, and how the map should show them.
   const looks = useMemo(() => new Map(categories.map((c, i) => [c.id, categoryLook(c, i)])), [categories]);
   const mapLook: SectionLook = useMemo(() => ({
@@ -192,7 +208,7 @@ export default function App() {
         : p)));
       return;
     }
-    const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), locations: { [layout.id]: spotKey } };
+    const created: Product = { ...newProduct(item.name), locations: { [layout.id]: spotKey } };
     setProducts((prev) => [...prev, created]);
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
   }
@@ -218,7 +234,7 @@ export default function App() {
       let conflict: QuickAddResult['added'][number]['conflict'];
 
       if (!product) {
-        product = { id: `p-${newId()}`, name: capitalize(name), ...(hereKey && { locations: { [layout.id]: hereKey } }) };
+        product = { ...newProduct(name, new Catalog(nextProducts, categories)), ...(hereKey && { locations: { [layout.id]: hereKey } }) };
         nextProducts = [...nextProducts, product];
         saved = hereKey;
       } else if (mode === 'cart' && hereKey) {
@@ -252,7 +268,9 @@ export default function App() {
         if (amount.qty || amount.note) nextItems = nextItems.map((i) => (i.id === waiting.id ? { ...i, ...extra } : i));
       } else {
         itemId = newId();
-        nextItems = [...nextItems, { id: itemId, name: product.name, done: mode === 'cart', productId: pid, ...extra }];
+        // Found by another name it goes by ("Jam" for Jelly): the list shows what was typed.
+        const shown = normalize(name) === normalize(product.name) ? product.name : capitalize(name.trim());
+        nextItems = [...nextItems, { id: itemId, name: shown, done: mode === 'cart', productId: pid, ...extra }];
       }
       results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list', conflict, itemId });
     }
@@ -521,7 +539,7 @@ export default function App() {
       setProducts((prev) => prev.map((p) => (p.id === product.id ? apply(p) : p)));
       if (item.productId !== product.id) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: product.id } : i)));
     } else {
-      const created = apply({ id: `p-${newId()}`, name: capitalize(item.name.trim()) });
+      const created = apply(newProduct(item.name));
       setProducts((prev) => [...prev, created]);
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
     }
@@ -864,7 +882,7 @@ export default function App() {
         return { ...p, notAt: available ? notAt : [...notAt, layout.id] };
       }));
     } else if (!available) {
-      const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), notAt: [layout.id] };
+      const created: Product = { ...newProduct(item.name), notAt: [layout.id] };
       setProducts((prev) => [...prev, created]);
       setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
     }

@@ -7,7 +7,7 @@ import type { Place, Shelf, StoreLayout } from './types';
 const cat = (id: string) => defaultCategories.find((c) => c.id === id)!;
 const store = (places: Place[] = []): StoreLayout => ({ ...blankStore('Test'), id: 't', width: 20, height: 20, places });
 const shelf = (over: Partial<Shelf> = {}): Shelf => ({
-  kind: 'shelf', id: 's1', label: 'Pasta & Rice', x: 5, y: 5, orientation: 'vertical', length: 4, categories: ['pasta'], ...over,
+  kind: 'shelf', id: 's1', label: 'Pasta & Rice', x: 5, y: 5, orientation: 'vertical', length: 4, categories: ['pasta_dry'], ...over,
 });
 /** The square an item saved by a plan sits on. */
 const where = (l: StoreLayout, key?: string) => {
@@ -17,11 +17,11 @@ const where = (l: StoreLayout, key?: string) => {
 
 describe('build mode', () => {
   it('creates a 3-square shelf centred on you, numbered and stocked with the item’s category', () => {
-    const plan = planBuild(store(), { x: 10, y: 10 }, cat('pasta'));
+    const plan = planBuild(store(), { x: 10, y: 10 }, cat('pasta_dry'));
     expect(plan.action).toBe('create');
     const s = plan.layout.places[0] as Shelf;
     expect(footprint(s)).toEqual({ x: 10, y: 9, w: 1, h: 3 });
-    expect(s).toMatchObject({ label: 'Shelf 1', categories: ['pasta'], orientation: 'vertical' });
+    expect(s).toMatchObject({ label: 'Shelf 1', categories: ['pasta_dry'], orientation: 'vertical' });
     expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
   });
 
@@ -42,12 +42,12 @@ describe('build mode', () => {
 
   it('uses the shelf you’re on or right beside, and adds the category at your end', () => {
     const l = store([shelf()]);
-    const beside = planBuild(l, { x: 6, y: 8 }, cat('canned'));
+    const beside = planBuild(l, { x: 6, y: 8 }, cat('canned_soup_broth'));
     expect(beside.action).toBe('onShelf');
-    expect(beside.layout.places[0].categories).toEqual(['pasta', 'canned']);
+    expect(beside.layout.places[0].categories).toEqual(['pasta_dry', 'canned_soup_broth']);
     expect(where(beside.layout, beside.spotKey)).toEqual({ x: 5, y: 8 });
     // Already there: nothing new added.
-    expect(planBuild(l, { x: 4, y: 5 }, cat('pasta')).layout.places[0].categories).toEqual(['pasta']);
+    expect(planBuild(l, { x: 4, y: 5 }, cat('pasta_dry')).layout.places[0].categories).toEqual(['pasta_dry']);
     // Two squares away is not "beside".
     expect(planBuild(l, { x: 7, y: 6 }).action).toBe('create');
   });
@@ -55,16 +55,16 @@ describe('build mode', () => {
   it('extends a shelf from up to 3 squares past either end, keeping items where they were', () => {
     const l = store([shelf()]); // y 5..8
     const savedAt = 's1@0.875,0.5'; // the bottom square (y=8)
-    const below = planBuild(l, { x: 5, y: 11 }, cat('canned'));
+    const below = planBuild(l, { x: 5, y: 11 }, cat('canned_soup_broth'));
     expect(below.action).toBe('extend');
     expect(footprint(below.layout.places[0])).toEqual({ x: 5, y: 5, w: 1, h: 7 });
-    expect(below.layout.places[0].categories).toEqual(['pasta', 'canned']);
+    expect(below.layout.places[0].categories).toEqual(['pasta_dry', 'canned_soup_broth']);
     expect(where(below.layout, below.spotKey)).toEqual({ x: 5, y: 11 });
     expect(where(below.layout, below.rekey!(savedAt))).toEqual({ x: 5, y: 8 });
 
-    const above = planBuild(l, { x: 6, y: 3 }, cat('baking')); // one square to the side still lines up
+    const above = planBuild(l, { x: 6, y: 3 }, cat('baking_flour_sugar')); // one square to the side still lines up
     expect(footprint(above.layout.places[0])).toEqual({ x: 5, y: 3, w: 1, h: 6 });
-    expect(above.layout.places[0].categories).toEqual(['baking', 'pasta']);
+    expect(above.layout.places[0].categories).toEqual(['baking_flour_sugar', 'pasta_dry']);
     expect(where(above.layout, above.rekey!(savedAt))).toEqual({ x: 5, y: 8 });
 
     expect(planBuild(l, { x: 5, y: 12 }).action).toBe('create'); // 4 past the end: too far
@@ -84,10 +84,10 @@ describe('build mode', () => {
   });
 
   it('saves the spot inside an open area', () => {
-    const area: Place = { kind: 'area', id: 'a', label: 'Produce', x: 0, y: 0, w: 4, h: 4, categories: ['veg'] };
-    const plan = planBuild(store([area]), { x: 3, y: 0 }, cat('fruit'));
+    const area: Place = { kind: 'area', id: 'a', label: 'Produce', x: 0, y: 0, w: 4, h: 4, categories: ['produce_vegetables'] };
+    const plan = planBuild(store([area]), { x: 3, y: 0 }, cat('produce_fruits'));
     expect(plan.action).toBe('inArea');
-    expect(plan.layout.places[0].categories).toEqual(['veg', 'fruit']);
+    expect(plan.layout.places[0].categories).toEqual(['produce_vegetables', 'produce_fruits']);
     expect(where(plan.layout, plan.spotKey)).toEqual({ x: 3, y: 0 });
   });
 
@@ -122,9 +122,9 @@ describe('build mode', () => {
   });
 
   it('in Area mode, makes a 3×3 area centred on you, numbered', () => {
-    const plan = planBuild(store(), { x: 10, y: 10 }, cat('fruit'), 'vertical', 'area');
+    const plan = planBuild(store(), { x: 10, y: 10 }, cat('produce_fruits'), 'vertical', 'area');
     expect(plan.action).toBe('createArea');
-    expect(plan.layout.places[0]).toMatchObject({ kind: 'area', label: 'Area 1', x: 9, y: 9, w: 3, h: 3, categories: ['fruit'] });
+    expect(plan.layout.places[0]).toMatchObject({ kind: 'area', label: 'Area 1', x: 9, y: 9, w: 3, h: 3, categories: ['produce_fruits'] });
     expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
     expect(planBuild(store(), { x: 1, y: 1 }, undefined, 'vertical', 'area').layout.places[0]).toMatchObject({ label: 'Area 1' });
   });
@@ -142,12 +142,12 @@ describe('build mode', () => {
   });
 
   it('stretches an area to include you from up to 3 squares away, keeping items in place', () => {
-    const area: Place = { kind: 'area', id: 'a', label: 'Produce', x: 5, y: 5, w: 3, h: 3, categories: ['veg'] };
+    const area: Place = { kind: 'area', id: 'a', label: 'Produce', x: 5, y: 5, w: 3, h: 3, categories: ['produce_vegetables'] };
     const l = store([area]);
-    const plan = planBuild(l, { x: 10, y: 6 }, cat('fruit'), 'vertical', 'area');
+    const plan = planBuild(l, { x: 10, y: 6 }, cat('produce_fruits'), 'vertical', 'area');
     expect(plan.action).toBe('extendArea');
     expect(footprint(plan.layout.places[0])).toEqual({ x: 5, y: 5, w: 6, h: 3 });
-    expect(plan.layout.places[0].categories).toEqual(['veg', 'fruit']);
+    expect(plan.layout.places[0].categories).toEqual(['produce_vegetables', 'produce_fruits']);
     expect(where(plan.layout, plan.rekey!('a@0.5,0.5'))).toEqual({ x: 6, y: 6 });
     expect(planBuild(l, { x: 11, y: 6 }, undefined, 'vertical', 'area').action).toBe('createArea'); // 4 away
     // Inside or beside a shelf still wins over area building.
@@ -156,9 +156,9 @@ describe('build mode', () => {
 
   it('numbers new shelves and areas with the next free number', () => {
     const l = store([shelf({ label: 'Shelf 1' }), shelf({ id: 's3', x: 1, label: 'Shelf 3' }), shelf({ id: 'p', x: 3, label: 'Pasta' })]);
-    expect((planBuild(l, { x: 15, y: 15 }, cat('pasta')).layout.places[3] as Shelf).label).toBe('Shelf 2');
+    expect((planBuild(l, { x: 15, y: 15 }, cat('pasta_dry')).layout.places[3] as Shelf).label).toBe('Shelf 2');
     const withArea = store([{ kind: 'area', id: 'a', label: 'Area 1', x: 0, y: 15, w: 2, h: 2, categories: [] }]);
-    expect(planBuild(withArea, { x: 15, y: 5 }, cat('fruit'), 'vertical', 'area').layout.places[1].label).toBe('Area 2');
+    expect(planBuild(withArea, { x: 15, y: 5 }, cat('produce_fruits'), 'vertical', 'area').layout.places[1].label).toBe('Area 2');
     expect(areaHere(withArea, { x: 10, y: 5 })!.area.label).toBe('Area 2');
   });
 
@@ -182,10 +182,10 @@ describe('build mode', () => {
 
   it('extends the chosen shelf all the way to you, keeping its items in place', () => {
     const l = store([shelf({ id: 'above', label: 'Shelf 1', x: 10, y: 0, length: 3 })]);
-    const plan = planChoice(l, { x: 11, y: 10 }, cat('canned'), { extend: 'above' });
+    const plan = planChoice(l, { x: 11, y: 10 }, cat('canned_soup_broth'), { extend: 'above' });
     expect(plan.action).toBe('extend');
     expect(footprint(plan.layout.places[0])).toEqual({ x: 10, y: 0, w: 1, h: 11 });
-    expect(plan.layout.places[0].categories).toEqual(['pasta', 'canned']);
+    expect(plan.layout.places[0].categories).toEqual(['pasta_dry', 'canned_soup_broth']);
     expect(where(plan.layout, plan.spotKey)).toEqual({ x: 10, y: 10 });
     expect(where(plan.layout, plan.rekey!('above@0.5,0.5'))).toEqual({ x: 10, y: 1 });
     // Or a new shelf / area instead.

@@ -9,7 +9,7 @@ const v = (id: string, x: number): Shelf => ({ kind: 'shelf', id, label: id, x, 
 // Entrance at the bottom: the front of each aisle is its bottom end (y 13).
 const store: StoreLayout = {
   id: 's', name: 'S', width: 20, height: 20, entrance: { x: 1, y: 19 }, checkout: { x: 10, y: 19 },
-  places: [v('a', 3), v('b', 6), { kind: 'area', id: 'prod', label: 'Produce', x: 12, y: 2, w: 4, h: 4, categories: ['fruit'] }],
+  places: [v('a', 3), v('b', 6), { kind: 'area', id: 'prod', label: 'Produce', x: 12, y: 2, w: 4, h: 4, categories: ['produce_fruits'] }],
   aisles: [{ id: 'x', label: 'Aisle 7', x: 4, y: 4, w: 2, h: 10 }],
 };
 
@@ -25,9 +25,9 @@ describe('plain-language locations', () => {
       'Produce', 'Aisle 3', 'End of aisle 12 (front)', 'Aisle 12 · front', 'Aisle 12 · back', 'Aisle 12B', 'Dairy', 'Checkout',
     ]);
     expect(aisleNumber('12B')).toBeCloseTo(12.2);
-    expect(guessDept('fruit')).toBe('produce');
-    expect(guessDept('eggs')).toBe('dairy');
-    expect(guessDept('pasta')).toBeUndefined();
+    expect(guessDept('produce_fruits')).toBe('produce');
+    expect(guessDept('dairy_eggs_sub')).toBe('dairy');
+    expect(guessDept('pasta_dry')).toBeUndefined();
   });
 
   it('lands on the map where there is an aisle label: left/right as you walk in from the front', () => {
@@ -64,12 +64,12 @@ describe('plain-language locations', () => {
   it('a store it knows nothing about still gets a sensible order from categories', () => {
     const blank: StoreLayout = { id: 'new', name: 'New', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 } };
     const list: Product[] = [
-      { id: '1', name: 'Ice cream', categoryId: 'icecream' }, { id: '2', name: 'Milk', categoryId: 'dairy' },
-      { id: '3', name: 'Pasta', categoryId: 'pasta' }, { id: '4', name: 'Apples', categoryId: 'fruit' },
-      { id: '5', name: 'Cereal', categoryId: 'breakfast' }, { id: '6', name: 'Bread', categoryId: 'bakery' },
-      { id: '7', name: 'Chicken', categoryId: 'meat' }, { id: '8', name: 'Mystery' },
+      { id: '1', name: 'Ice cream', categoryId: 'frozen_desserts_ice' }, { id: '2', name: 'Milk', categoryId: 'dairy_eggs' },
+      { id: '3', name: 'Pasta', categoryId: 'pasta_dry' }, { id: '4', name: 'Apples', categoryId: 'produce_fruits' },
+      { id: '5', name: 'Cereal', categoryId: 'breakfast_cereal' }, { id: '6', name: 'Bread', categoryId: 'bakery_bread' },
+      { id: '7', name: 'Chicken', categoryId: 'meat_seafood' }, { id: '8', name: 'Mystery' },
       // An answer beats the guess: aisle 2 comes before the centre-store guesses.
-      { id: '9', name: 'Soup', categoryId: 'canned', clues: { new: { kind: 'aisle', aisle: '2' } } },
+      { id: '9', name: 'Soup', categoryId: 'canned_soup_broth', clues: { new: { kind: 'aisle', aisle: '2' } } },
     ];
     const catalog = new Catalog(list, []);
     const items = list.map((p) => ({ id: p.id, name: p.name, done: false, productId: p.id }));
@@ -84,15 +84,15 @@ describe('walls and open floor', () => {
   const l: StoreLayout = {
     id: 'w', name: 'W', width: 40, height: 30, entrance: { x: 37, y: 29 }, checkout: { x: 20, y: 29 },
     places: [
-      { kind: 'area', id: 'bread', label: 'Bread', x: 35, y: 3, w: 4, h: 8, categories: ['bakery'] },
-      { kind: 'area', id: 'produce', label: 'Produce', x: 35, y: 12, w: 4, h: 12, categories: ['fruit'] },
+      { kind: 'area', id: 'bread', label: 'Bread', x: 35, y: 3, w: 4, h: 8, categories: ['bakery_bread'] },
+      { kind: 'area', id: 'produce', label: 'Produce', x: 35, y: 12, w: 4, h: 12, categories: ['produce_fruits'] },
       { kind: 'shelf', id: 'fridge', label: 'Refrigerated', orientation: 'horizontal', x: 10, y: 0, length: 25, back: -1, categories: [], temp: 'chilled' },
-      { kind: 'shelf', id: 'meat', label: 'Meat', orientation: 'horizontal', x: 1, y: 0, length: 8, back: -1, categories: ['meat'] },
+      { kind: 'shelf', id: 'meat', label: 'Meat', orientation: 'horizontal', x: 1, y: 0, length: 8, back: -1, categories: ['meat_seafood'] },
       { kind: 'shelf', id: 'lfridge', label: 'Fridge', orientation: 'vertical', x: 0, y: 3, length: 12, back: -1, categories: [], temp: 'chilled' },
       { kind: 'shelf', id: 'lfreezer', label: 'Freezer', orientation: 'vertical', x: 0, y: 17, length: 8, back: -1, categories: [], temp: 'frozen' },
       { kind: 'shelf', id: 'a1', label: '1', orientation: 'vertical', x: 10, y: 4, length: 12, categories: [] },
       { kind: 'area', id: 'case', label: 'Freezer case', x: 9, y: 19, w: 2, h: 4, categories: [], temp: 'frozen' },
-      { kind: 'area', id: 'table', label: 'Produce table', x: 28, y: 19, w: 3, h: 2, categories: ['fruit'] },
+      { kind: 'area', id: 'table', label: 'Produce table', x: 28, y: 19, w: 3, h: 2, categories: ['produce_fruits'] },
     ],
   };
   const at = (c: Clue) => resolveClue(c, l)?.split('@')[0];

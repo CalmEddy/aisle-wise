@@ -5,13 +5,13 @@ import { describeArrangement, learnArrangement } from './learn';
 import type { Trip } from './trips';
 import type { Product, StoreLayout } from './types';
 
-const aisle = (id: string, n: string, categoryId = 'snacks'): Product => ({ id, name: id, categoryId, clues: { s: { kind: 'aisle', aisle: n, pos: 'middle' } } });
+const aisle = (id: string, n: string, categoryId = 'snacks_chips'): Product => ({ id, name: id, categoryId, clues: { s: { kind: 'aisle', aisle: n, pos: 'middle' } } });
 const products: Product[] = [
-  { id: 'apples', name: 'apples', categoryId: 'fruit', clues: { s: { kind: 'dept', dept: 'produce' } } },
-  aisle('a1', '1', 'breakfast'), aisle('a2', '2', 'coffee'), aisle('a3', '3', 'baking'), aisle('a4', '4', 'pasta'), aisle('a5', '5', 'canned'), aisle('a6', '6', 'condiments'),
-  { id: 'milk', name: 'milk', categoryId: 'dairy', clues: { s: { kind: 'dept', dept: 'dairy' } } },
-  { id: 'bread', name: 'bread', categoryId: 'bakery', clues: { s: { kind: 'dept', dept: 'bakery' } } },
-  { id: 'steak', name: 'steak', categoryId: 'meat', clues: { s: { kind: 'dept', dept: 'meat' } } },
+  { id: 'apples', name: 'apples', categoryId: 'produce_fruits', clues: { s: { kind: 'dept', dept: 'produce' } } },
+  aisle('a1', '1', 'breakfast_cereal'), aisle('a2', '2', 'beverages_coffee'), aisle('a3', '3', 'baking_flour_sugar'), aisle('a4', '4', 'pasta_dry'), aisle('a5', '5', 'canned_soup_broth'), aisle('a6', '6', 'condiments_table'),
+  { id: 'milk', name: 'milk', categoryId: 'dairy_eggs', clues: { s: { kind: 'dept', dept: 'dairy' } } },
+  { id: 'bread', name: 'bread', categoryId: 'bakery_bread', clues: { s: { kind: 'dept', dept: 'bakery' } } },
+  { id: 'steak', name: 'steak', categoryId: 'meat_seafood', clues: { s: { kind: 'dept', dept: 'meat' } } },
 ];
 const catalog = new Catalog(products, []);
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
@@ -82,7 +82,7 @@ describe('learning the arrangement from trips', () => {
 
   it('counts only places the shopper gave, not ones the map guessed from an item’s kind', () => {
     // Oatmeal has no answer; the map guesses it's by the cereal (aisle 1). It isn't evidence.
-    const more = [...products, { id: 'oatmeal', name: 'oatmeal', categoryId: 'breakfast' }];
+    const more = [...products, { id: 'oatmeal', name: 'oatmeal', categoryId: 'breakfast_cereal' }];
     const l = learnArrangement(store, more, [trip(['apples', 'oatmeal', 'a6', 'oatmeal'])], new Catalog(more, []));
     expect(l.picks).toBe(2);
   });

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { inWalkingOrder, orderOf, topOf } from '../core/taxonomy';
 import type { Snapshot } from '../App';
 import { itemMatches, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
@@ -98,16 +99,19 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
     return c;
   }, [catalog, layout, onList]);
 
+  /** An item's category group (the category its subcategory is in), or '' for none. */
+  const groupOf = (p: Product) => (p.categoryId && catalog.categoryById.has(p.categoryId) ? topOf(p.categoryId) : '');
   const groups = useMemo(() => {
     const shown = (searching ? catalog.suggest(q, 500) : catalog.products)
       .filter((p) => itemMatches(p, filter, layout, catalog, onList));
-    const sorted = [...shown].sort((a, b) => a.name.localeCompare(b.name));
+    // Within a category: by subcategory (walking order), then name.
+    const sorted = [...shown].sort((a, b) => orderOf(a.categoryId ?? '') - orderOf(b.categoryId ?? '') || a.name.localeCompare(b.name));
     const byCat = new Map<string, Product[]>();
     for (const p of sorted) {
-      const key = p.categoryId && catalog.categoryById.has(p.categoryId) ? p.categoryId : '';
+      const key = groupOf(p);
       byCat.set(key, [...(byCat.get(key) ?? []), p]);
     }
-    return [...byName(catalog.categories).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
+    return [...inWalkingOrder(catalog.categories.filter((c) => !c.parent)).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
       .map((c) => ({ ...c, products: byCat.get(c.id) ?? [] }))
       .filter((g) => g.products.length);
   }, [catalog, q, searching, filter, layout, onList]);
@@ -199,7 +203,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
   function openItem(p: Product, viaRecent = recent.includes(p.id)) {
     const key = viaRecent ? `recent-${p.id}` : p.id;
     if (!viaRecent) {
-      const g = p.categoryId && catalog.categoryById.has(p.categoryId) ? p.categoryId : '';
+      const g = groupOf(p);
       setOpenGroups((prev) => new Set(prev).add(g));
     }
     setOpenKey(key);
@@ -374,7 +378,21 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
                 </button>
               )}
             </h3>
-            {open && <ul className="items">{g.products.map((p) => row(p))}</ul>}
+            {open && (
+              <ul className="items">
+                {g.products.map((p, i) => {
+                  // A subheading where the subcategory changes.
+                  const sub = p.categoryId && p.categoryId !== g.id ? catalog.categoryById.get(p.categoryId) : undefined;
+                  const prevSub = i > 0 ? g.products[i - 1].categoryId : undefined;
+                  return (
+                    <Fragment key={p.id}>
+                      {sub && sub.id !== prevSub && <li className="sub-head muted small" aria-hidden="true">{sub.name}</li>}
+                      {row(p)}
+                    </Fragment>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         );
       })}

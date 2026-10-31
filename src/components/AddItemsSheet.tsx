@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
+import { inWalkingOrder, topOf } from '../core/taxonomy';
+import { guessCategory } from '../core/guess';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
-import { byName } from './CategoryPicker';
 import { amountText, parseAmount, withAmount } from '../core/items';
 import type { Product } from '../core/types';
 
@@ -37,13 +38,15 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   const query = amount.name;
   const suggestions = useMemo(() => catalog.suggest(query, 12), [catalog, query]);
   const isNew = query.length > 0 && !catalog.exact(query);
-  const guess = isNew ? catalog.match(query)?.categoryId : undefined;
+  const guess = isNew ? guessCategory(query, catalog)?.categoryId : undefined;
+  // Browsing: the categories (not subcategories) that have items, in walking order; the most common items first.
   const categories = useMemo(
-    () => byName(catalog.categories).filter((c) => catalog.products.some((p) => p.categoryId === c.id)),
+    () => inWalkingOrder(catalog.categories.filter((c) => !c.parent && catalog.products.some((p) => p.categoryId && topOf(p.categoryId) === c.id))),
     [catalog],
   );
   const browsing = browse !== undefined
-    ? [...catalog.products].filter((p) => (p.categoryId ?? '') === browse).sort((a, b) => a.name.localeCompare(b.name))
+    ? [...catalog.products].filter((p) => p.categoryId && topOf(p.categoryId) === browse)
+      .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999) || a.name.localeCompare(b.name))
     : [];
 
   function add(names: string[], mode: 'list' | 'cart') {

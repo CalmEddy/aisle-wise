@@ -25,20 +25,20 @@ describe('share links', () => {
 
 describe('sharing a list', () => {
   it('adds new items, skips ones already on the list, and learns unknown items', () => {
-    const sender = new Catalog([...defaultProducts, { id: 'k', name: 'Kombucha', categoryId: 'soda' }], defaultCategories);
+    const sender = new Catalog([...defaultProducts, { id: 'k', name: 'Kombucha', categoryId: 'beverages_soda' }], defaultCategories);
     const share = buildListShare([
       { id: '1', name: 'milk', done: false },
       { id: '2', name: 'Kombucha', done: false, productId: 'k' },
       { id: '3', name: 'bread', done: true },
     ], sender);
-    expect(share.items).toEqual([{ name: 'Milk', category: 'Dairy' }, { name: 'Kombucha', category: 'Soda & Sports Drinks' }]);
+    expect(share.items).toEqual([{ name: 'Milk', category: 'Milk' }, { name: 'Kombucha', category: 'Soda' }]);
 
     const mine = { ...fresh(), items: [{ id: 'x', name: 'Milk', done: false }] };
     const result = applyListShare(share, mine);
     expect(result.added).toBe(1);
     expect(result.skipped).toBe(1);
     const kombucha = result.products.find((p) => p.name === 'Kombucha')!;
-    expect(kombucha.categoryId).toBe('soda');
+    expect(kombucha.categoryId).toBe('beverages_tea'); // a starter item here: its own category, not the sender's
     expect(result.items[result.items.length - 1]).toMatchObject({ name: 'Kombucha', productId: kombucha.id });
   });
 });
@@ -50,8 +50,8 @@ describe('sharing a store', () => {
 
   it('only sends item info for that store', () => {
     expect(share.items).toEqual([
-      { name: 'Milk', category: 'Dairy', at: 'a3' },
-      { name: 'Pretzels', category: 'Snacks & Chips', notAvailable: true },
+      { name: 'Milk', category: 'Milk', at: 'a3' },
+      { name: 'Pretzels', category: 'Popcorn, Pretzels & Jerky', notAvailable: true },
     ]);
   });
 
@@ -66,7 +66,7 @@ describe('sharing a store', () => {
   it('carries "aisle 7, left" answers with the store', () => {
     const withClue = defaultProducts.map((p) => (p.name === 'Bread' ? { ...p, clues: { demo: { kind: 'aisle' as const, aisle: '7', side: 'L' as const } } } : p));
     const s2 = buildStoreShare(demoLayout, new Catalog(withClue, defaultCategories));
-    expect(s2.items).toContainEqual({ name: 'Bread', category: 'Bakery', clue: { kind: 'aisle', aisle: '7', side: 'L' } });
+    expect(s2.items).toContainEqual({ name: 'Bread', category: 'Sandwich Bread', clue: { kind: 'aisle', aisle: '7', side: 'L' } });
     const result = applyStoreShare(s2, fresh());
     expect(result.products.find((p) => p.name === 'Bread')!.clues?.[result.layoutId]).toEqual({ kind: 'aisle', aisle: '7', side: 'L' });
   });
@@ -78,7 +78,7 @@ describe('sharing a store', () => {
     renamed.layout.places[0] = { ...renamed.layout.places[0], categories: ['their-intl'] };
     const result = applyStoreShare(renamed, fresh());
     const added = result.layouts.find((l) => l.id === result.layoutId)!;
-    expect(added.places.find((p) => p.id === 'dairy')!.categories).toEqual(['dairy', 'eggs']);
+    expect(added.places.find((p) => p.id === 'dairy')!.categories).toEqual(['dairy_eggs', 'cheese']);
     const intl = result.categories.find((c) => c.name === 'International')!;
     expect(added.places[0].categories).toEqual([intl.id]);
   });

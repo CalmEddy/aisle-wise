@@ -78,10 +78,10 @@ describe('aisle brush', () => {
   it('paints a side with a category as you go, in walking order', () => {
     let l = store();
     let p = { x: 5, y: 16 };
-    const steps: [string | undefined, number][] = [['cereal', 2], ['pasta', 1], [undefined, 1]];
+    const steps: [string | undefined, number][] = [['cereal', 2], ['pasta_dry', 1], [undefined, 1]];
     for (const [cat, n] of steps) {
       for (let i = 0; i < n; i++) {
-        const r = paintStep(l, p, 'up', { ...aisle, leftCategory: cat, rightCategory: 'snacks' });
+        const r = paintStep(l, p, 'up', { ...aisle, leftCategory: cat, rightCategory: 'snacks_chips' });
         l = r.layout;
         p = r.position;
       }
@@ -89,8 +89,8 @@ describe('aisle brush', () => {
     const left = (l.places as Shelf[]).find((s) => s.x === 4)!;
     const right = (l.places as Shelf[]).find((s) => s.x === 7)!;
     // Walking up, later steps are higher up the map (the start of a vertical shelf).
-    expect(left.categories).toEqual(['pasta', 'cereal']);
-    expect(right.categories).toEqual(['snacks']);
+    expect(left.categories).toEqual(['pasta_dry', 'cereal']);
+    expect(right.categories).toEqual(['snacks_chips']);
     expect(left.length).toBe(16);
   });
 

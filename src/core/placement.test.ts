@@ -5,10 +5,10 @@ import type { Product, StoreLayout } from './types';
 
 const p = (id: string, categoryId: string | undefined, clue: object): Product => ({ id, name: id, ...(categoryId && { categoryId }), clues: { s: clue as never } });
 const products: Product[] = [
-  p('apples', 'fruit', { kind: 'wall', wall: 'right', part: 'front' }),
+  p('apples', 'produce_fruits', { kind: 'wall', wall: 'right', part: 'front' }),
   p('bread', 'bakery', { kind: 'dept', dept: 'bakery' }), // a department, but where?
-  p('cereal', 'breakfast', { kind: 'aisle', aisle: '3' }),
-  p('melon', 'fruit', { kind: 'open', fixture: 'table' }), // out in the open, but where?
+  p('cereal', 'breakfast_cereal', { kind: 'aisle', aisle: '3' }),
+  p('melon', 'produce_fruits', { kind: 'open', fixture: 'table' }), // out in the open, but where?
 ];
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
   gen: { enabled: true, entrance: 'left', locked: [] } };

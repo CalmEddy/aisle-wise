@@ -1,12 +1,15 @@
 import { useState } from 'react';
+import { topOf } from '../core/taxonomy';
 import { aisleNumber, DEPTS, describeClue, guessDept } from '../core/clues';
 import type { Clue, Temp, Wall } from '../core/types';
 import { formatLabel, looksLikeShelfCode, nextShelves, parseLabel, type LabelStyle } from '../core/labels';
 
 /** Cold or not, as a first guess from the category. */
 export function guessTemp(categoryId?: string): Temp | undefined {
-  if (categoryId === 'frozen' || categoryId === 'icecream') return 'frozen';
-  if (categoryId === 'dairy' || categoryId === 'eggs') return 'chilled';
+  if (!categoryId) return undefined;
+  const top = topOf(categoryId);
+  if (top === 'frozen') return 'frozen';
+  if (top === 'dairy_eggs' || top === 'cheese') return 'chilled';
   return undefined;
 }
 

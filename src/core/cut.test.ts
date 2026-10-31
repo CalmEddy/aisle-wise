@@ -12,7 +12,7 @@ import type { Product, Shelf, StoreLayout } from './types';
 const shelf = (id: string, x: number, categories: string[] = []): Shelf => ({ kind: 'shelf', id, label: id, orientation: 'vertical', x, y: 2, length: 20, categories });
 const store: StoreLayout = {
   id: 's', name: 'S', width: 20, height: 26, entrance: { x: 1, y: 25 }, checkout: { x: 10, y: 25 },
-  places: [shelf('s1', 2, ['breakfast', 'coffee']), shelf('s2', 5, ['pasta', 'canned']), shelf('s3', 8), shelf('s4', 11)],
+  places: [shelf('s1', 2, ['breakfast_cereal', 'beverages_coffee']), shelf('s2', 5, ['pasta_dry', 'canned_soup_broth']), shelf('s3', 8), shelf('s4', 11)],
   aisles: [
     { id: 'a1', label: 'Aisle 1', x: 3, y: 2, w: 2, h: 20 },
     { id: 'a2', label: 'Aisle 2', x: 6, y: 2, w: 2, h: 20 },
@@ -32,20 +32,20 @@ describe('cutting aisles with a cross aisle', () => {
 
   it('splits each shelf in two; the back half keeps its id, categories and spots follow their half', () => {
     const milk: Product = { id: 'p', name: 'P', locations: { s: 's1@0.9,0.5' } };
-    const coffee: Product = { id: 'c', name: 'C', locations: { s: 's1:coffee' } };
+    const coffee: Product = { id: 'c', name: 'C', locations: { s: 's1:beverages_coffee' } };
     const r = cutAisles(store, [milk, coffee], box, 'same');
     expect(r.cut).toBe(4);
     const pieces = r.layout.places.filter((p) => p.x === 2) as Shelf[];
     expect(pieces).toHaveLength(2);
     const back = pieces.find((p) => p.id === 's1')!;
     const front = pieces.find((p) => p.id !== 's1')!;
-    expect(back).toMatchObject({ y: 2, length: 10, categories: ['breakfast'] });
-    expect(front).toMatchObject({ y: 14, length: 8, categories: ['coffee'], label: 's1' });
+    expect(back).toMatchObject({ y: 2, length: 10, categories: ['breakfast_cereal'] });
+    expect(front).toMatchObject({ y: 14, length: 8, categories: ['beverages_coffee'], label: 's1' });
     // Spots: 0.9 along the old shelf (y 20) is now near the end of the front half.
     const k = parseExactKey(r.products[0].locations!.s)!;
     expect(k.placeId).toBe(front.id);
     expect(k.spot.u).toBeCloseTo(0.75, 2);
-    expect(r.products[1].locations!.s).toBe(`${front.id}:coffee`);
+    expect(r.products[1].locations!.s).toBe(`${front.id}:beverages_coffee`);
     // Same numbers: the aisle labels are untouched, and you can now walk across.
     expect(r.layout.aisles).toEqual(store.aisles);
     const floor = new Floor(r.layout);
@@ -83,7 +83,7 @@ describe('cutting aisles with a cross aisle', () => {
   });
 
   it('on a generated map, the cut is kept and new-numbered aisles aren’t generated twice', () => {
-    const products: Product[] = [1, 2, 3].map((n) => ({ id: `p${n}`, name: `P${n}`, categoryId: 'snacks', clues: { s: { kind: 'aisle' as const, aisle: String(n) } } }));
+    const products: Product[] = [1, 2, 3].map((n) => ({ id: `p${n}`, name: `P${n}`, categoryId: 'snacks_chips', clues: { s: { kind: 'aisle' as const, aisle: String(n) } } }));
     const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 }, gen: { enabled: true, entrance: 'left', locked: [] } };
     const g = regenerate(blank, buildModel(products, 's'));
     const r = cutAisles(g, products, { x: 0, y: 12, w: g.width, h: 2 }, 'new');
@@ -91,7 +91,7 @@ describe('cutting aisles with a cross aisle', () => {
     const locked = g.places.filter((p) => p.id.startsWith('g-shelf')).map((p) => p.id).concat(g.aisles!.map((a) => a.id));
     const cut = { ...r.layout, gen: { ...g.gen!, locked } };
     // A new answer for aisle 5 (the front half of aisle 2).
-    const more = [...products, { id: 'p5', name: 'P5', categoryId: 'pasta', clues: { s: { kind: 'aisle' as const, aisle: '5' } } }];
+    const more = [...products, { id: 'p5', name: 'P5', categoryId: 'pasta_dry', clues: { s: { kind: 'aisle' as const, aisle: '5' } } }];
     const again = regenerate(cut, buildModel(more, 's'));
     expect(again.aisles!.filter((a) => a.label === 'Aisle 5')).toHaveLength(1);
     expect(again.places.some((p) => p.id === 'g-shelf-5-L')).toBe(false);

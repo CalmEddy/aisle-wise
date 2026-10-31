@@ -9,6 +9,7 @@ const LABELS: Record<Switch, string> = {
   mapColors: 'Colors on map',
   mapIcons: 'Icons on map',
   groupList: 'Group by section',
+  listCategories: 'Categories in list',
   listColors: 'Colors in list',
   listIcons: 'Icons in list',
   buildMode: 'Build mode',
@@ -22,6 +23,7 @@ const LABELS: Record<Switch, string> = {
 const SHORT: Record<Switch, string> = {
   buildMode: '🛠 Edit map',
   groupList: '☰',
+  listCategories: '🏷',
   mapColors: '🎨',
   mapIcons: '🍎',
   listColors: '🎨',

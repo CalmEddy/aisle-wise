@@ -49,7 +49,7 @@ describe('a store built from shelf labels', () => {
     const p = parseLabel(b12, code)!;
     return { id, name: id, categoryId, clues: { s: { kind: 'shelf', code, section: p.section, shelf: p.shelf } } };
   };
-  const products = [shelf('cereal', 'A2', 'breakfast'), shelf('pasta', 'A4', 'pasta'), shelf('chips', 'C3', 'snacks')];
+  const products = [shelf('cereal', 'A2', 'breakfast_cereal'), shelf('pasta_dry', 'A4', 'pasta_dry'), shelf('chips', 'C3', 'snacks_chips')];
   const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
     gen: { enabled: true, entrance: 'left', locked: [] }, labels: b12 };
 

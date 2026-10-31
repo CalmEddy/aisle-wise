@@ -1,4 +1,5 @@
 import { useId, useMemo, useRef, useState } from 'react';
+import { inWalkingOrder, parentOf } from '../core/taxonomy';
 import type { Category } from '../core/types';
 
 /** Categories sorted A–Z by name. */
@@ -7,8 +8,9 @@ export function byName<T extends { name: string }>(list: readonly T[]): T[] {
 }
 
 /**
- * Type to search, tap to choose. Shows categories A–Z; typing narrows the list,
- * and Enter picks the first match.
+ * Type to search, tap to choose. Shows the categories in walking order, each
+ * with its subcategories under it (either can be chosen); typing narrows the
+ * list (subcategories show their category), and Enter picks the first match.
  */
 export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick, autoFocus }: {
   /** Chosen category id; undefined for none. */
@@ -34,15 +36,22 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
   const [open, setOpen] = useState(false);
   const current = categories.find((c) => c.id === value);
 
+  const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const parentOfCat = (c: Category) => c.parent ?? parentOf(c.id);
   const options = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const sorted = byName(categories);
-    if (!q) return sorted;
-    // Names starting with the text come first, then names containing it.
+    const sorted = inWalkingOrder(categories);
+    if (!q) {
+      // Each category, then its subcategories.
+      const tops = sorted.filter((c) => !parentOfCat(c) || !byId.has(parentOfCat(c)!));
+      return tops.flatMap((t) => [t, ...sorted.filter((c) => parentOfCat(c) === t.id)]);
+    }
+    // Names starting with the text come first, then names containing it (or whose category's name does).
+    const hay = (c: Category) => `${c.name} ${byId.get(parentOfCat(c) ?? '')?.name ?? ''}`.toLowerCase();
     const starts = sorted.filter((c) => c.name.toLowerCase().startsWith(q));
-    const contains = sorted.filter((c) => !starts.includes(c) && c.name.toLowerCase().includes(q));
+    const contains = sorted.filter((c) => !starts.includes(c) && hay(c).includes(q));
     return [...starts, ...contains];
-  }, [categories, query]);
+  }, [categories, query, byId]);
   const showNone = !!noneLabel && !query.trim();
 
   function choose(id: string | undefined) {
@@ -52,7 +61,8 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
     inputRef.current?.blur();
   }
 
-  const shown = current && !open && !clearOnPick ? `${iconOf?.(current.id) ?? ''} ${current.name}`.trim() : query;
+  const currentParent = current && byId.get(parentOfCat(current) ?? '');
+  const shown = current && !open && !clearOnPick ? `${iconOf?.(current.id) ?? ''} ${current.name}${currentParent ? ` · ${currentParent.name}` : ''}`.trim() : query;
 
   return (
     <div className={`cat-picker${open ? ' open' : ''}`}>
@@ -92,11 +102,15 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
           )}
           {options.map((c) => {
             const extra = note?.(c.id);
+            const parent = parentOfCat(c) && byId.get(parentOfCat(c)!);
+            const searching = !!query.trim();
             return (
-              <li key={c.id} role="option" aria-selected={c.id === value} className={c.id === value ? 'active' : ''}
+              <li key={c.id} role="option" aria-selected={c.id === value}
+                className={[c.id === value && 'active', parent ? 'cat-sub' : 'cat-top'].filter(Boolean).join(' ')}
                 onPointerDown={(e) => e.preventDefault()} onClick={() => choose(c.id)}>
-                {iconOf && <span aria-hidden="true" className="cat-option-icon">{iconOf(c.id)}</span>}
+                {iconOf && !parent && <span aria-hidden="true" className="cat-option-icon">{iconOf(c.id)}</span>}
                 {c.name}
+                {parent && searching && <span className="muted small"> · {parent.name}</span>}
                 {extra && <span className="muted small"> ({extra})</span>}
               </li>
             );

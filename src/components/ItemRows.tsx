@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { ListItem, Stop } from '../core/types';
 import { SwipeRow } from './SwipeRow';
 import { capitalize } from './whereText';
@@ -92,7 +93,7 @@ export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionNam
 
 export type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -120,13 +121,23 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   /** (For testing the map) clears where this item is in this store; shown when it has a place here. */
   onClearWhere?: (i: ListItem) => void;
   clearable?: (i: ListItem) => boolean;
+  /** Headings over the rows: a category, and a subcategory under it (shown where they change). */
+  headingOf?: (i: ListItem) => { top?: string; sub?: string };
 }) {
   const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
     <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
   );
   return (
     <ul className={big ? 'items big' : 'items'}>
-      {items.map((item) => (
+      {items.map((item, index) => {
+        const h = headingOf?.(item);
+        const prev = index > 0 ? headingOf?.(items[index - 1]) : undefined;
+        const showTop = h?.top && h.top !== prev?.top;
+        const showSub = h?.sub && (showTop || h.sub !== prev?.sub);
+        return (
+        <Fragment key={item.id}>
+        {showTop && <li className="list-cat-head" aria-hidden="true">{h!.top}</li>}
+        {showSub && <li className="list-sub-head muted small" aria-hidden="true">{h!.sub}</li>}
         <li
           key={item.id}
           className={['row', item.done && 'checked', dragging === item.id && 'dragging', tintOf?.(item) && 'tinted',
@@ -195,7 +206,9 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
           </span>
           </>)}
         </li>
-      ))}
+        </Fragment>
+        );
+      })}
     </ul>
   );
 }

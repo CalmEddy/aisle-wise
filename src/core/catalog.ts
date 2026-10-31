@@ -25,6 +25,8 @@ export class Catalog {
   readonly productById: Map<string, Product>;
   readonly categoryById: Map<string, Category>;
   private byName: Map<string, Product>;
+  /** Names exactly as written (lowercased): "peppers" is Bell peppers, "pepper" Black pepper. */
+  private bySpelling: Map<string, Product>;
   /** Normalized names, longest first, for "organic whole milk" → Milk. */
   private longestFirst: { key: string; product: Product }[];
 
@@ -32,9 +34,23 @@ export class Catalog {
     this.productById = new Map(products.map((p) => [p.id, p]));
     this.categoryById = new Map(categories.map((c) => [c.id, c]));
     this.byName = new Map();
+    this.bySpelling = new Map();
+    for (const p of products) {
+      for (const n of [p.name, ...(p.aliases ?? [])]) {
+        const k = n.trim().toLowerCase();
+        if (k && !this.bySpelling.has(k)) this.bySpelling.set(k, p);
+      }
+    }
+    // Names first (yours win over aliases), then aliases ("Scallions" → Green onions).
     for (const p of products) {
       const key = normalize(p.name);
       if (key && !this.byName.has(key)) this.byName.set(key, p);
+    }
+    for (const p of products) {
+      for (const a of p.aliases ?? []) {
+        const key = normalize(a);
+        if (key && !this.byName.has(key)) this.byName.set(key, p);
+      }
     }
     this.longestFirst = [...this.byName].map(([key, product]) => ({ key, product }))
       .sort((a, b) => b.key.length - a.key.length);
@@ -44,7 +60,7 @@ export class Catalog {
   match(name: string): Product | undefined {
     const key = normalize(name);
     if (!key) return undefined;
-    const exact = this.byName.get(key);
+    const exact = this.bySpelling.get(name.trim().toLowerCase()) ?? this.byName.get(key);
     if (exact) return exact;
     const padded = ` ${key} `;
     return this.longestFirst.find((e) => padded.includes(` ${e.key} `))?.product;
@@ -52,7 +68,7 @@ export class Catalog {
 
   /** Only an exact (normalized) name match. */
   exact(name: string): Product | undefined {
-    return this.byName.get(normalize(name));
+    return this.bySpelling.get(name.trim().toLowerCase()) ?? this.byName.get(normalize(name));
   }
 
   /** Master-list items matching what the user is typing, best first. */
@@ -61,17 +77,24 @@ export class Catalog {
     if (!q) return [];
     const nq = normalize(q);
     const scored: { p: Product; score: number }[] = [];
+    const scoreOf = (text: string) => {
+      const name = text.toLowerCase();
+      if (name.startsWith(q)) return 0;
+      if (name.split(/[\s-]+/).some((w) => w.startsWith(q))) return 1;
+      if (name.includes(q) || (nq && normalize(name).includes(nq))) return 2;
+      return -1;
+    };
     for (const p of this.products) {
       if (exclude.has(p.id)) continue;
-      const name = p.name.toLowerCase();
-      let score = -1;
-      if (name.startsWith(q)) score = 0;
-      else if (name.split(/[\s-]+/).some((w) => w.startsWith(q))) score = 1;
-      else if (name.includes(q) || (nq && normalize(name).includes(nq))) score = 2;
-      if (score >= 0) scored.push({ p, score });
+      // Its name, or (a little lower) one of its other names: "scallions" finds Green onions.
+      const byName = scoreOf(p.name);
+      const byAlias = Math.min(...(p.aliases ?? []).map(scoreOf).filter((x) => x >= 0).map((x) => x + 0.5), Infinity);
+      const score = byName >= 0 ? byName : byAlias;
+      if (score >= 0 && score < Infinity) scored.push({ p, score });
     }
+    // Ties: the more common first, then the shorter name.
     return scored
-      .sort((a, b) => a.score - b.score || a.p.name.length - b.p.name.length || a.p.name.localeCompare(b.p.name))
+      .sort((a, b) => a.score - b.score || (a.p.rank ?? 9999) - (b.p.rank ?? 9999) || a.p.name.length - b.p.name.length || a.p.name.localeCompare(b.p.name))
       .slice(0, limit)
       .map((s) => s.p);
   }

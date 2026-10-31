@@ -1,4 +1,5 @@
 import { normalize, type Catalog } from './catalog';
+import { guessCategory } from './guess';
 import { locateProduct } from './locate';
 import type { Product, StoreLayout } from './types';
 
@@ -24,7 +25,7 @@ export function quickAddItems(text: string, catalog: Catalog): { created: Produc
       existing.push(found);
       continue;
     }
-    const guess = catalog.match(name)?.categoryId;
+    const guess = guessCategory(name, catalog)?.categoryId;
     created.push({
       id: `p-${newId()}`,
       name: capitalize(name),

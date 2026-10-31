@@ -8,13 +8,13 @@ import { locateProduct } from './locate';
 import type { Product, Shelf, StoreLayout } from './types';
 
 const products: Product[] = [
-  { id: 'apples', name: 'Apples', categoryId: 'fruit', clues: { s: { kind: 'dept', dept: 'produce' } } },
-  { id: 'bread', name: 'Bread', categoryId: 'bakery', clues: { s: { kind: 'aisle', aisle: '3', side: 'R', pos: 'front' } } },
-  { id: 'cereal', name: 'Cheerios', categoryId: 'breakfast', clues: { s: { kind: 'aisle', aisle: '3', side: 'R', pos: 'back' } } },
-  { id: 'milk', name: 'Milk', categoryId: 'dairy', clues: { s: { kind: 'dept', dept: 'dairy' } } },
-  { id: 'peas', name: 'Peas', categoryId: 'icecream', clues: { s: { kind: 'freezer' } } },
+  { id: 'apples', name: 'Apples', categoryId: 'produce_fruits', clues: { s: { kind: 'dept', dept: 'produce' } } },
+  { id: 'bread', name: 'Bread', categoryId: 'bakery_bread', clues: { s: { kind: 'aisle', aisle: '3', side: 'R', pos: 'front' } } },
+  { id: 'cereal', name: 'Cheerios', categoryId: 'breakfast_cereal', clues: { s: { kind: 'aisle', aisle: '3', side: 'R', pos: 'back' } } },
+  { id: 'milk', name: 'Milk', categoryId: 'dairy_eggs', clues: { s: { kind: 'dept', dept: 'dairy' } } },
+  { id: 'peas', name: 'Peas', categoryId: 'frozen_desserts_ice', clues: { s: { kind: 'freezer' } } },
   { id: 'gum', name: 'Gum', clues: { s: { kind: 'checkout' } } },
-  { id: 'granola', name: 'Granola', categoryId: 'breakfast' },
+  { id: 'granola', name: 'Granola', categoryId: 'breakfast_cereal' },
 ];
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
   gen: { enabled: true, entrance: 'left', locked: [] } };
@@ -52,7 +52,7 @@ describe('map from aisle answers', () => {
     expect(l.entrance).toEqual({ x: Math.floor(l.width / 2), y: l.height - 1 });
     expect(p('g-checkout').y).toBeGreaterThan(p('g-shelf-1-L').y + 14);
     // Categories on the shelf, back of the store (top) first.
-    expect((p('g-shelf-3-R') as Shelf).categories).toEqual(['breakfast', 'bakery']);
+    expect((p('g-shelf-3-R') as Shelf).categories).toEqual(['breakfast_cereal', 'bakery_bread']);
     // Everything reachable.
     const floor = new Floor(l);
     for (const q of l.places) expect(floor.reachable(l.entrance, { x: q.x, y: q.y })).toBe(true);
@@ -95,7 +95,7 @@ describe('map from aisle answers', () => {
     expect(locked.sort()).toEqual(['g-dept-dairy', 'g-shelf-2-R']);
     l = { ...edited, gen: { ...edited.gen!, locked } };
     // A new answer: aisle 4 exists.
-    const more = [...products, { id: 'chips', name: 'Chips', categoryId: 'snacks', clues: { s: { kind: 'aisle' as const, aisle: '4', side: 'R' as const } } }];
+    const more = [...products, { id: 'chips', name: 'Chips', categoryId: 'snacks_chips', clues: { s: { kind: 'aisle' as const, aisle: '4', side: 'R' as const } } }];
     const r = regenerate(l, buildModel(more, 's'));
     expect(r.places.find((p) => p.id === 'g-shelf-2-R')!.label).toBe('Cereal');
     expect(r.places.some((p) => p.id === 'g-dept-dairy')).toBe(false);
@@ -122,15 +122,15 @@ describe('walls as chains of sections, and things out in the open', () => {
   const c = (id: string, categoryId: string | undefined, clue: Product['clues'] extends infer _ ? any : never): Product =>
     ({ id, name: id, ...(categoryId && { categoryId }), clues: { s: clue } });
   const shop: Product[] = [
-    c('apples', 'fruit', { kind: 'wall', wall: 'right', part: 'front' }),
-    c('bread', 'bakery', { kind: 'wall', wall: 'right', part: 'back' }),
-    c('steak', 'meat', { kind: 'wall', wall: 'back', part: 'left' }),
-    c('juice', 'water', { kind: 'wall', wall: 'back', part: 'right', temp: 'chilled' }),
+    c('apples', 'produce_fruits', { kind: 'wall', wall: 'right', part: 'front' }),
+    c('bread', 'bakery_bread', { kind: 'wall', wall: 'right', part: 'back' }),
+    c('steak', 'meat_seafood', { kind: 'wall', wall: 'back', part: 'left' }),
+    c('juice', 'beverages_water', { kind: 'wall', wall: 'back', part: 'right', temp: 'chilled' }),
     c('cheese', undefined, { kind: 'wall', wall: 'left', part: 'back', temp: 'chilled' }),
-    c('pizza', 'frozen', { kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' }),
-    c('melon', 'fruit', { kind: 'open', near: 'entrance', fixture: 'table' }),
-    c('icecream', 'icecream', { kind: 'open', near: 'middle', fixture: 'case', temp: 'frozen' }),
-    c('cereal', 'breakfast', { kind: 'aisle', aisle: '5' }),
+    c('pizza', 'frozen_pizza_appetizers', { kind: 'wall', wall: 'left', part: 'front', temp: 'frozen' }),
+    c('melon', 'produce_fruits', { kind: 'open', near: 'entrance', fixture: 'table' }),
+    c('frozen_desserts_ice', 'frozen_desserts_ice', { kind: 'open', near: 'middle', fixture: 'case', temp: 'frozen' }),
+    c('cereal', 'breakfast_cereal', { kind: 'aisle', aisle: '5' }),
   ];
   const l = regenerate({ ...blank, gen: { enabled: true, entrance: 'right', locked: [] } }, buildModel(shop, 's'));
   const get = (id: string) => { const p = l.places.find((x) => x.id === id); if (!p) throw new Error(`no ${id}: ${l.places.map((x) => x.id)}`); return p; };
@@ -174,7 +174,7 @@ describe('walls as chains of sections, and things out in the open', () => {
     expect(where('cheese')).toBe('g-wall-left-chilled');
     expect(where('juice')).toBe('g-wall-back-chilled');
     expect(where('melon')).toBe('g-open-entrance-table-room');
-    expect(where('icecream')).toBe('g-open-middle-case-frozen');
+    expect(where('frozen_desserts_ice')).toBe('g-open-middle-case-frozen');
     const floor = new Floor(l);
     for (const p of l.places) {
       const f = p.kind === 'shelf' ? { x: p.x, y: p.y } : { x: p.x, y: p.y };
@@ -187,7 +187,7 @@ describe('what a rebuild changed', () => {
   it('lists new and changed parts, not the ones left as they were', async () => {
     const { changedParts } = await import('./generate');
     const before = regenerate(blank, buildModel(products, 's'));
-    const more = [...products, { id: 'chips', name: 'Chips', categoryId: 'snacks', clues: { s: { kind: 'aisle' as const, aisle: '2', side: 'R' as const } } }];
+    const more = [...products, { id: 'chips', name: 'Chips', categoryId: 'snacks_chips', clues: { s: { kind: 'aisle' as const, aisle: '2', side: 'R' as const } } }];
     const after = regenerate(before, buildModel(more, 's'));
     const changed = changedParts(before, after);
     // Aisle 2 is no longer a guess, and its right-hand shelf now stocks snacks.
@@ -197,7 +197,7 @@ describe('what a rebuild changed', () => {
 });
 
 describe('the edges of the store', () => {
-  const aisleAt = (id: string, n: string): Product => ({ id, name: id, categoryId: 'snacks', clues: { s: { kind: 'aisle', aisle: n } } });
+  const aisleAt = (id: string, n: string): Product => ({ id, name: id, categoryId: 'snacks_chips', clues: { s: { kind: 'aisle', aisle: n } } });
   const blank2: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
     gen: { enabled: true, entrance: 'left', locked: [] } };
 
@@ -211,7 +211,7 @@ describe('the edges of the store', () => {
       aisleAt('a', '1'), aisleAt('b', '2'), aisleAt('c', '3'),
       { id: 'gum', name: 'Gum', clues: { s: { kind: 'checkout' } } },
       { id: 'cards', name: 'Cards', categoryId: 'cards', clues: { s: { kind: 'wall', wall: 'front', part: 'left' } } },
-      { id: 'water', name: 'Water', categoryId: 'water', clues: { s: { kind: 'wall', wall: 'front', part: 'right' } } },
+      { id: 'beverages_water', name: 'Water', categoryId: 'beverages_water', clues: { s: { kind: 'wall', wall: 'front', part: 'right' } } },
     ];
     const l = regenerate(blank2, buildModel(ps, 's'));
     const front = l.places.filter((p) => p.id.startsWith('g-wall-front'));
@@ -221,7 +221,7 @@ describe('the edges of the store', () => {
     expect(left.kind === 'shelf' && left.x + left.length).toBeLessThan(l.entrance.x);
     expect(right.x).toBeGreaterThan(l.entrance.x);
     expect(left.categories).toEqual(['cards']);
-    expect(right.categories).toEqual(['water']);
+    expect(right.categories).toEqual(['beverages_water']);
     // The door is on the bottom row, the checkouts just above it, nothing further down.
     expect(l.entrance.y).toBe(l.height - 1);
     const co = l.places.find((p) => p.id === 'g-checkout')!;
@@ -237,10 +237,10 @@ describe('the edges of the store', () => {
 describe('sample-store fixes', () => {
   const blank3: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
     gen: { enabled: true, entrance: 'left', locked: [] } };
-  const aisleAt = (id: string, n: string, categoryId = 'snacks'): Product => ({ id, name: id, categoryId, clues: { s: { kind: 'aisle', aisle: n } } });
+  const aisleAt = (id: string, n: string, categoryId = 'snacks_chips'): Product => ({ id, name: id, categoryId, clues: { s: { kind: 'aisle', aisle: n } } });
 
   it('the back wall stops at the outermost shelf on a side with nothing along its wall', () => {
-    const ps: Product[] = [aisleAt('a', '1'), aisleAt('b', '2'), { id: 'milk', name: 'Milk', categoryId: 'dairy', clues: { s: { kind: 'dept', dept: 'dairy' } } }];
+    const ps: Product[] = [aisleAt('a', '1'), aisleAt('b', '2'), { id: 'milk', name: 'Milk', categoryId: 'dairy_eggs', clues: { s: { kind: 'dept', dept: 'dairy' } } }];
     const l = regenerate(blank3, buildModel(ps, 's'));
     const shelves = l.places.filter((p) => p.id.startsWith('g-shelf-')).map(footprint);
     const back = footprint(l.places.find((p) => p.id === 'g-dept-dairy')!);
@@ -251,8 +251,8 @@ describe('sample-store fixes', () => {
   it('a stand by the back wall goes in a strip under it, its answer finds it, and it doesn’t take the whole category', () => {
     const ps: Product[] = [
       aisleAt('a', '1'), aisleAt('b', '2'),
-      { id: 'apples', name: 'Apples', categoryId: 'fruit', clues: { s: { kind: 'dept', dept: 'produce' } } },
-      { id: 'melon', name: 'Melon', categoryId: 'fruit', clues: { s: { kind: 'open', near: 'back', fixture: 'stand' } } },
+      { id: 'apples', name: 'Apples', categoryId: 'produce_fruits', clues: { s: { kind: 'dept', dept: 'produce' } } },
+      { id: 'melon', name: 'Melon', categoryId: 'produce_fruits', clues: { s: { kind: 'open', near: 'back', fixture: 'stand' } } },
     ];
     let l = regenerate(blank3, buildModel(ps, 's'));
     const stand = l.places.find((p) => p.id.startsWith('g-open-'))!;
@@ -290,27 +290,27 @@ describe('what the answers do and don’t say', () => {
 
   it('"Aisle 3" with no side claims neither side, and doesn’t move onto a wall', () => {
     const ps: Product[] = [
-      { id: 'a', name: 'Cereal', categoryId: 'breakfast', clues: { s: { kind: 'aisle', aisle: '1' } } },
-      { id: 'b', name: 'Chips', categoryId: 'snacks', clues: { s: { kind: 'aisle', aisle: '3' } } },
-      { id: 'c', name: 'Pasta', categoryId: 'pasta', clues: { s: { kind: 'aisle', aisle: '2', side: 'L' } } },
-      { id: 'f', name: 'Frozen pizza', categoryId: 'frozen', clues: { s: { kind: 'wall', wall: 'left' } } },
+      { id: 'a', name: 'Cereal', categoryId: 'breakfast_cereal', clues: { s: { kind: 'aisle', aisle: '1' } } },
+      { id: 'b', name: 'Chips', categoryId: 'snacks_chips', clues: { s: { kind: 'aisle', aisle: '3' } } },
+      { id: 'c', name: 'Pasta', categoryId: 'pasta_dry', clues: { s: { kind: 'aisle', aisle: '2', side: 'L' } } },
+      { id: 'f', name: 'Frozen pizza', categoryId: 'frozen_meals', clues: { s: { kind: 'wall', wall: 'left' } } },
     ];
     const l = regenerate(blank4, buildModel(ps, 's'));
     const has = (id: string, cat: string) => !!l.places.find((p) => p.id === id)?.categories.includes(cat);
-    expect([has('g-shelf-1-L', 'breakfast'), has('g-shelf-1-R', 'breakfast')]).toEqual([true, true]);
-    expect([has('g-shelf-2-L', 'pasta'), has('g-shelf-2-R', 'pasta')]).toEqual([true, false]); // a side was said
+    expect([has('g-shelf-1-L', 'breakfast_cereal'), has('g-shelf-1-R', 'breakfast_cereal')]).toEqual([true, true]);
+    expect([has('g-shelf-2-L', 'pasta_dry'), has('g-shelf-2-R', 'pasta_dry')]).toEqual([true, false]); // a side was said
     // Aisle 3 is the outer aisle: its left side is the freezer wall, which doesn't take the chips.
     expect(l.places.some((p) => p.id === 'g-shelf-3-L')).toBe(false);
-    expect(has('g-dept-frozen', 'snacks')).toBe(false);
+    expect(has('g-dept-frozen', 'snacks_chips')).toBe(false);
     expect(resolveClue(ps[1].clues!.s, l, ps[1])).toMatch(/^g-shelf-3-R/);
   });
 
   it('two tables said alike stay two when the shopper says "another one"', () => {
     const table = (n?: number) => ({ kind: 'open' as const, near: 'entrance' as const, fixture: 'table' as const, ...(n && { n }) });
     const ps: Product[] = [
-      { id: 'g', name: 'Grapes', categoryId: 'fruit', clues: { s: table() } },
-      { id: 'p', name: 'Pineapple', categoryId: 'fruit', clues: { s: table(2) } },
-      { id: 'm', name: 'Mangoes', categoryId: 'fruit', clues: { s: table() } },
+      { id: 'g', name: 'Grapes', categoryId: 'produce_fruits', clues: { s: table() } },
+      { id: 'p', name: 'Pineapple', categoryId: 'produce_fruits', clues: { s: table(2) } },
+      { id: 'm', name: 'Mangoes', categoryId: 'produce_fruits', clues: { s: table() } },
     ];
     const l = regenerate(blank4, buildModel(ps, 's'));
     const at = (i: number) => resolveClue(ps[i].clues!.s, l, ps[i])!.split(/[:@]/)[0];

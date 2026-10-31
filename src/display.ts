@@ -7,6 +7,8 @@ export interface Display {
   listIcons?: boolean;
   /** Group the shopping list by shelf/area (off: one list, nearest first). */
   groupList?: boolean;
+  /** Show items' categories and subcategories in the shopping list (headings, or beside where it is). */
+  listCategories?: boolean;
   /** Build the store map from where you pick things up. */
   buildMode: boolean;
   /** In build mode, what picking up on open floor makes. */

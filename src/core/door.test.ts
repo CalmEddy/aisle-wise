@@ -5,7 +5,7 @@ import { buildModel, regenerate } from './generate';
 import type { Product, StoreLayout } from './types';
 
 const p = (id: string, clue: object, categoryId?: string): Product => ({ id, name: id, ...(categoryId && { categoryId }), clues: { s: clue as never } });
-const products = [p('apples', { kind: 'wall', wall: 'right', part: 'front' }, 'fruit'), p('cereal', { kind: 'aisle', aisle: '3' }, 'breakfast'), p('milk', { kind: 'wall', wall: 'left' }, 'dairy')];
+const products = [p('apples', { kind: 'wall', wall: 'right', part: 'front' }, 'produce_fruits'), p('cereal', { kind: 'aisle', aisle: '3' }, 'breakfast_cereal'), p('milk', { kind: 'wall', wall: 'left' }, 'dairy')];
 const catalog = new Catalog(products, []);
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 }, gen: { enabled: true, entrance: 'left', locked: [] } };
 const store = regenerate(blank, buildModel(products, 's'));

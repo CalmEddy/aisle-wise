@@ -54,7 +54,7 @@ test('Aisle, Wall and Open answers, with the fridge/freezer switch', async ({ pa
   expect(await clues(page)).toMatchObject({
     Milk: { kind: 'aisle', aisle: '12', side: 'R', temp: 'chilled' },
     Bread: { kind: 'wall', wall: 'right', part: 'back' },
-    Peas: { kind: 'open', near: 'entrance', fixture: 'case', temp: 'frozen' },
+    'Frozen peas': { kind: 'open', near: 'entrance', fixture: 'case', temp: 'frozen' }, // "Peas" is another name for it
   });
   // The answers build the map: a freezer case out in the open, Bakery on the right wall.
   const layout = (await saved<any[]>(page, 'layouts')).find((l) => l.name === 'Corner');
@@ -83,9 +83,9 @@ test('ask later, then review before you go', async ({ page }) => {
 test('learns which way round the store is from trips, and redraws the map', async ({ page }) => {
   const aisle = (name: string, n: string, c: string) => ({ id: name, name, categoryId: c, clues: { s1: { kind: 'aisle', aisle: n, pos: 'middle' } } });
   const products = [
-    { id: 'Apples', name: 'Apples', categoryId: 'fruit', clues: { s1: { kind: 'dept', dept: 'produce' } } },
-    aisle('Cereal', '1', 'breakfast'), aisle('Coffee', '2', 'coffee'), aisle('Flour', '3', 'baking'),
-    aisle('Pasta', '4', 'pasta'), aisle('Soup', '5', 'canned'), aisle('Ketchup', '6', 'condiments'),
+    { id: 'Apples', name: 'Apples', categoryId: 'produce_fruits', clues: { s1: { kind: 'dept', dept: 'produce' } } },
+    aisle('Cereal', '1', 'breakfast_cereal_sub'), aisle('Coffee', '2', 'beverages_coffee'), aisle('Flour', '3', 'baking_flour_sugar'),
+    aisle('Pasta', '4', 'pasta_dry'), aisle('Soup', '5', 'canned_soup_broth'), aisle('Ketchup', '6', 'condiments_table'),
   ];
   const walk = ['Apples', 'Ketchup', 'Soup', 'Pasta', 'Flour', 'Coffee', 'Cereal'];
   const t0 = Date.now() - 3 * 864e5;
@@ -165,7 +165,7 @@ test('quick bar: next aisles in one tap, number buttons, walls, fridge/freezer',
   await bar.getByRole('button', { name: '🧊 ← Left wall' }).click();
   const products = await saved<any[]>(page, 'products');
   const clue = (n: string) => Object.values(products.find((p) => p.name === n).clues)[0];
-  expect([clue('Cereal'), clue('Pasta'), clue('Chips'), clue('Bread'), clue('Ice cream'), clue('Hummus')]).toEqual([
+  expect([clue('Cereal'), clue('Pasta'), clue('Potato chips'), clue('Bread'), clue('Ice cream'), clue('Hummus')]).toEqual([
     { kind: 'aisle', aisle: '3' }, { kind: 'aisle', aisle: '5' }, { kind: 'aisle', aisle: '7' },
     { kind: 'wall', wall: 'right' }, { kind: 'aisle', aisle: '9', temp: 'frozen' }, { kind: 'wall', wall: 'left', temp: 'chilled' },
   ]);
@@ -256,7 +256,7 @@ test('a second table said like the first: "Another one" keeps them apart', async
 
 test('(testing) clear where one item is, or every item on the list, with Undo', async ({ page }) => {
   const ok = noPageErrors(page);
-  await addItems(page, 'Cereal, Pasta, Chips, Oatmeal');
+  await addItems(page, 'Cereal, Pasta, Chips, Granola');
   for (const [name, n] of [['Cereal', '1'], ['Pasta', '2']] as const) {
     await tick(page, name);
     await page.locator('.where-bar').getByRole('button', { name: '# Aisle…' }).click();
@@ -271,11 +271,11 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   await expect.poll(answered).toEqual(['Pasta']);
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect.poll(answered).toEqual(['Cereal', 'Pasta']);
-  // Oatmeal has no answer, but it's placed by its kind (with the cereal): that clears too, and it's asked about.
-  await page.getByRole('button', { name: 'Clear where Oatmeal is' }).click();
-  await expect(page.getByRole('button', { name: 'Clear where Oatmeal is' })).toHaveCount(0);
-  await tick(page, 'Oatmeal');
-  await expect(page.locator('.where-bar')).toContainText('Where was Oatmeal?');
+  // Granola has no answer, but it's placed by its kind (with the cereal: the same kind): that clears too, and it's asked about.
+  await page.getByRole('button', { name: 'Clear where Granola is' }).click();
+  await expect(page.getByRole('button', { name: 'Clear where Granola is' })).toHaveCount(0);
+  await tick(page, 'Granola');
+  await expect(page.locator('.where-bar')).toContainText('Where was Granola?');
   await page.locator('.where-bar').getByRole('button', { name: 'Later', exact: true }).click();
   // Everything on the list, from the button bar: the map stays as it is.
   const places = async () => JSON.stringify((await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places);
@@ -317,9 +317,9 @@ test('a shelf with no category takes the category of what’s saved on it', asyn
     layouts: [{ id: 's1', name: 'Mine', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
       places: [{ kind: 'shelf', id: 'sh1', label: 'Shelf 1', orientation: 'vertical', x: 5, y: 2, length: 8, categories: [] }] }],
     activeLayout: 's1',
-    products: [{ id: 'pasta', name: 'Pasta', categoryId: 'pasta', locations: { s1: 'sh1@0.5,0.5' } }],
+    products: [{ id: 'pasta', name: 'Pasta', categoryId: 'pasta_dry', locations: { s1: 'sh1@0.5,0.5' } }],
   });
-  await expect.poll(async () => (await saved<any[]>(page, 'layouts'))[0].places[0].categories).toEqual(['pasta']);
+  await expect.poll(async () => (await saved<any[]>(page, 'layouts'))[0].places[0].categories).toEqual(['pasta_dry']);
 });
 
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
@@ -415,7 +415,7 @@ test('a store that labels shelves like B12: set up by example, one-tap next shel
   const p = (label: string) => l.places.find((x: any) => x.label === label);
   expect(p('C1').y).toBeGreaterThan(p('B1').y + 9); // in front of B
   const products = await saved<any[]>(page, 'products');
-  expect(Object.values(products.find((x) => x.name === 'Oats').clues)[0]).toEqual({ kind: 'shelf', code: 'B13', section: 'B', shelf: 13 });
+  expect(Object.values(products.find((x) => x.name === 'Oatmeal').clues)[0]).toEqual({ kind: 'shelf', code: 'B13', section: 'B', shelf: 13 });
 });
 
 test('a stand across aisles 2–3 at the front: the map puts it there and the shelves make way', async ({ page }) => {

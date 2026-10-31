@@ -5,7 +5,7 @@ import { parseLabel, type LabelStyle } from './labels';
 import { blockSubject, pendingPlacements, placementOptions } from './placement';
 import type { Product, Shelf, StoreLayout } from './types';
 
-const aisle = (n: number): Product => ({ id: `p${n}`, name: `P${n}`, categoryId: 'snacks', clues: { s: { kind: 'aisle', aisle: String(n), side: 'L' } } });
+const aisle = (n: number): Product => ({ id: `p${n}`, name: `P${n}`, categoryId: 'snacks_chips', clues: { s: { kind: 'aisle', aisle: String(n), side: 'L' } } });
 const products = [1, 2, 3, 4, 5, 6].map(aisle);
 const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 2, y: 23 }, checkout: { x: 15, y: 23 },
   gen: { enabled: true, entrance: 'left', locked: [] } };
@@ -57,7 +57,7 @@ describe('blocks of shelving that run different ways', () => {
 });
 
 describe('areas that cut through shelves', () => {
-  const promo: Product = { id: 'promo', name: 'Promo', categoryId: 'snacks', clues: { s: { kind: 'open', fixture: 'stand', across: { from: '2', to: '4', part: 'front' } } } };
+  const promo: Product = { id: 'promo', name: 'Promo', categoryId: 'snacks_chips', clues: { s: { kind: 'open', fixture: 'stand', across: { from: '2', to: '4', part: 'front' } } } };
   it('puts the area across those aisles at the front, and the shelves there make way', async () => {
     const { describeClue, resolveClue } = await import('./clues');
     const all = [...products, promo];
