@@ -506,6 +506,23 @@ export default function App() {
     return snapshot;
   }
 
+  /**
+   * (For testing the map; to be removed.) Forgets where these items are in this store: saved spots and answers.
+   * Returns what Undo restores.
+   */
+  function clearWhere(list: ListItem[]): Snapshot {
+    const snapshot: Snapshot = { items, products, layouts };
+    const ids = new Set(list.map((i) => productFor(i, catalog)?.id).filter(Boolean));
+    setProducts((prev) => prev.map((p) => {
+      if (!ids.has(p.id) || (!p.locations?.[layout.id] && !p.clues?.[layout.id])) return p;
+      const { [layout.id]: _l, ...locations } = p.locations ?? {};
+      const { [layout.id]: _c, ...clues } = p.clues ?? {};
+      void _l; void _c;
+      return { ...p, locations, clues };
+    }));
+    return snapshot;
+  }
+
   /** Whether to ask "Where was it?" at check-off in this store. */
   const askWhere = !display.noAskStores?.includes(layout.id);
   const setAskWhere = (on: boolean) => setDisplay((d) => ({
@@ -998,6 +1015,7 @@ export default function App() {
             }),
             skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); },
             setLabels,
+            clearWhere,
             door: doorAsk,
             setDoor: (f) => {
               const gen = layout.gen;

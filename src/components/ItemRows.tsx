@@ -92,7 +92,7 @@ export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionNam
 
 export type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -117,7 +117,13 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
    */
   simple?: boolean;
   onNotHere?: (i: ListItem) => void;
+  /** (For testing the map) clears where this item is in this store; shown when it has a place here. */
+  onClearWhere?: (i: ListItem) => void;
+  clearable?: (i: ListItem) => boolean;
 }) {
+  const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
+    <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
+  );
   return (
     <ul className={big ? 'items big' : 'items'}>
       {items.map((item) => (
@@ -151,6 +157,7 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                   </span>
                 </label>
                 {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
+                {clearBtn(item)}
                 {onMenu
                   ? <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
                   : <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>}
@@ -180,6 +187,7 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
               title="Show on map"
             >📍</button>
           )}
+          {clearBtn(item)}
           {onMenu && (
             <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
           )}

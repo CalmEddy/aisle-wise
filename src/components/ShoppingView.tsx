@@ -80,6 +80,8 @@ interface Props {
     ask: boolean;
     setAsk: (on: boolean) => void;
     setClue: (item: ListItem, clue: Clue | undefined) => Snapshot;
+    /** (For testing the map; to be removed.) Forgets where these items are in this store. Returns what Undo restores. */
+    clearWhere: (items: ListItem[]) => Snapshot;
     notePick: (item: ListItem, picked: boolean) => void;
     /** The cart was cleared: the next check-off starts a new trip. */
     newTrip: () => void;
@@ -828,6 +830,20 @@ export function ShoppingView(props: Props) {
 
   const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);
 
+  // ---- Clearing where things are (for testing the map; to be removed) ----
+  /** Whether an item has a saved spot or an answer in this store. */
+  const hasWhereHere = (item: ListItem) => { const p = productFor(item, catalog); return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]); };
+  function clearOneWhere(item: ListItem) {
+    const snapshot = props.where.clearWhere([item]);
+    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });
+  }
+  function clearAllWhere() {
+    const these = items.filter(hasWhereHere);
+    if (!these.length) { setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `Nothing on the list has a place at ${layout.name}.` }); return; }
+    const snapshot = props.where.clearWhere(these);
+    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.` });
+  }
+
   /** Takes items off the list, with Undo. */
   function removeWithUndo(gone: ListItem[]) {
     if (!gone.length) return;
@@ -982,7 +998,7 @@ export function ShoppingView(props: Props) {
               <h3>Nearest first</h3>
               <span className="muted small count-pill">{nearestFirst.length} item{nearestFirst.length === 1 ? '' : 's'}</span>
             </div>
-            <ItemRows
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere}
               items={nearestFirst.map((e) => e.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
@@ -1005,11 +1021,11 @@ export function ShoppingView(props: Props) {
         {grouped && nextVisit && (
           <div className="card route-list">
           <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={sub} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={sub} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
           )} />
         {laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={sub} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={sub} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
           )} />
         ))}
           </div>
@@ -1021,7 +1037,7 @@ export function ShoppingView(props: Props) {
               {byClue.some((b) => b.clue) ? 'By aisle' : 'In typical store order'}
               <span className="muted small"> · {byClue.some((b) => !b.clue) ? 'until you say where things are' : 'not on the map yet'}</span>
             </h3>
-            <ItemRows
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere}
               items={byClue.map((b) => b.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
@@ -1114,7 +1130,7 @@ export function ShoppingView(props: Props) {
         {done.length > 0 && (
           <details className="card done">
             <summary>In the cart ({done.length})</summary>
-            <ItemRows items={done} onToggle={toggle} onRemove={removeWithUndoOne} iconOf={iconOf} simple />
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={done} onToggle={toggle} onRemove={removeWithUndoOne} iconOf={iconOf} simple />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
         )}
@@ -1182,6 +1198,10 @@ export function ShoppingView(props: Props) {
                 )}
                 <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
                   aria-label="View settings" title="View settings">⚙</button>
+                {!building && (
+                  <button type="button" className="toggle icon-only action dev-clear" onClick={clearAllWhere}
+                    aria-label="Clear all locations (testing)" title="Clear where every item on the list is, at this store (testing)">⊘</button>
+                )}
               </>
             )}
           />

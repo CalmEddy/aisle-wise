@@ -954,3 +954,6 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .dept-chip.dragging { opacity: 0.35; }
 .dept-tray { min-height: 40px; }
 .dept-ghost { position: fixed; transform: translate(-50%, -120%); pointer-events: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.25); }
+
+/* Clearing where things are (testing the map; to be removed). */
+.icon.clear-where { opacity: 0.6; }

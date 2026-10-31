@@ -257,6 +257,30 @@ test('a second table said like the first: "Another one" keeps them apart', async
   ok();
 });
 
+test('(testing) clear where one item is, or every item on the list, with Undo', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await addItems(page, 'Cereal, Pasta, Chips');
+  for (const [name, n] of [['Cereal', '1'], ['Pasta', '2']] as const) {
+    await tick(page, name);
+    await page.locator('.where-bar').getByRole('button', { name: '# Aisle…' }).click();
+    await page.locator('.where-bar').getByRole('button', { name: n, exact: true }).click();
+    await page.locator('.where-bar').getByRole('button', { name: 'Save' }).click();
+  }
+  expect(Object.keys(await clues(page)).sort()).toEqual(['Cereal', 'Pasta']);
+  // One tap on a row.
+  await page.locator('details.done summary').click(); // checked-off items are in the cart
+  const answered = async () => Object.entries(await clues(page)).filter(([, c]) => c).map(([n]) => n).sort();
+  await page.getByRole('button', { name: 'Clear where Cereal is' }).click();
+  await expect.poll(answered).toEqual(['Pasta']);
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(answered).toEqual(['Cereal', 'Pasta']);
+  // Everything on the list, from the button bar.
+  await page.getByRole('button', { name: 'Clear all locations (testing)' }).click();
+  await expect(page.locator('.toast')).toContainText('Cleared where 2 items are');
+  await expect.poll(answered).toEqual([]);
+  ok();
+});
+
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
   const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');
