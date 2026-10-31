@@ -714,28 +714,25 @@ export function ShoppingView(props: Props) {
       setNote(props.build.pickUpHere(item.name, item.id));
       return;
     }
-    const before = { items, products: catalog.products };
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
     props.where.notePick(item, !item.done);
     // Picking something up tells us where the shopper is standing.
     const loc = locate(item);
     if (!item.done && loc.kind === 'spot') setPosition(loc.spot.point);
-    // Nothing saved about where it is in this store yet: ask.
-    if (!item.done && props.where.ask && isUnknownHere(item) && askAtCheckout) {
+    // Nothing saved about where it is in this store yet: ask (when the map already has its kind somewhere,
+    // that's the first, one-tap answer).
+    const ask = needsPlace(item);
+    if (!item.done && props.where.ask && ask && askAtCheckout) {
       setLaterHere((ids) => [...ids.filter((id) => id !== item.id), item.id]);
-    } else if (!item.done && props.where.ask && isUnknownHere(item)) {
+    } else if (!item.done && props.where.ask && ask) {
       // Not answered the last one? It waits for later; this one takes the bar.
       if (whereBarFor && whereBarFor.id !== item.id) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
       setWhereBarFor(item);
-    } else if (!item.done && props.where.ask && knownByCategory(item)) {
-      // Not asked: the map already has its kind of thing in one place. It might have been on a display or
-      // table this time, though: one tap to say so.
-      const where = knownByCategory(item)!;
-      setToast({
-        snapshot: before, added: [], mode: 'list', note: `${item.name} · ${where}`,
-        action: { label: 'Somewhere else?', run: () => { setToast(null); setWhereFor(item); } },
-      });
     }
+  }
+  /** No place of its own here (none saved or answered): worth a "Where was it?", even if the map has its kind. */
+  function needsPlace(item: ListItem) {
+    return isUnknownHere(item) || !!knownByCategory(item);
   }
   /** Where the map puts an item with no answer of its own, by its kind (the one place that stocks it); else undefined. */
   function knownByCategory(item: ListItem): string | undefined {
@@ -804,7 +801,7 @@ export function ShoppingView(props: Props) {
   const placing = asked ?? pending.find((sub) => !placeLater.includes(sub.ref));
   const laterHere = (askLater[layout.id] ?? [])
     .map((id) => items.find((i) => i.id === id))
-    .filter((i): i is ListItem => !!i && isUnknownHere(i));
+    .filter((i): i is ListItem => !!i && needsPlace(i));
   const setLaterHere = (fn: (ids: string[]) => string[]) =>
     setAskLater((prev) => ({ ...prev, [layout.id]: fn(prev[layout.id] ?? []) }));
   /** After answering (or skipping), the next one waiting, if reviewing the ask-later list. */

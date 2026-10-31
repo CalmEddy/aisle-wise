@@ -31,7 +31,7 @@ import {
 import type { Clue, GeoPoint, Rect, SectionShape } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
-import { clampPlace } from './core/geometry';
+import { clampPlace, parseExactKey } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
@@ -427,6 +427,24 @@ export default function App() {
   /** Things bought before, for "Buy again" in the add window. */
   const buyAgain = useMemo(() => usuals(trips), [trips]);
   /** What all the trips here say (including one in progress): for the one question. */
+  // A shelf or area with no category takes the categories of what's saved on it (so the map knows what's there,
+  // and other things of that kind are placed by it). Not a hand edit: the map keeps updating as usual.
+  useEffect(() => {
+    const stock = new Map<string, string[]>();
+    for (const p of products) {
+      const key = p.locations?.[layout.id];
+      if (!key || !p.categoryId) continue;
+      const placeId = parseExactKey(key)?.placeId ?? key.split(':')[0];
+      const place = layout.places.find((pl) => pl.id === placeId);
+      if (!place || place.categories.length) continue;
+      stock.set(placeId, [...new Set([...(stock.get(placeId) ?? []), p.categoryId])]);
+    }
+    if (!stock.size) return;
+    setLayouts((prev) => prev.map((l) => (l.id !== layout.id ? l : {
+      ...l, places: l.places.map((pl) => (stock.has(pl.id) && !pl.categories.length ? { ...pl, categories: stock.get(pl.id)! } : pl)),
+    })));
+  }, [products, layout, setLayouts]);
+
   const learned = useMemo(() => learnArrangement(layout, products, trips, catalog), [layout, products, trips, catalog]);
   // What the trips clearly show goes on the map straight away (mid-trip too); the changes are outlined.
   const learnedKey = JSON.stringify(learned.apply);

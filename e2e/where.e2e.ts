@@ -171,12 +171,13 @@ test('quick bar: next aisles in one tap, number buttons, walls, fridge/freezer',
   ]);
 });
 
-test('no question when the map already knows the category; or all at checkout in one list', async ({ page }) => {
+test('the map already has its kind: one tap on its spot; or all at checkout in one list', async ({ page }) => {
   await addItems(page, 'Bananas, Lettuce, Jam, Tea, Soap');
   await tick(page, 'Bananas');
   await page.locator('.where-bar .btn.primary').click(); // Produce: the map now stocks fruit and veg there
   await tick(page, 'Lettuce');
-  await expect(page.locator('.where-bar')).toHaveCount(0); // veg is only in Produce: not asked
+  await page.locator('.where-bar').getByRole('button', { name: '📍 Produce' }).click(); // veg is in Produce: first, one tap
+  await expect(page.locator('.where-bar')).toHaveCount(0);
   // Switch to asking at checkout.
   await tick(page, 'Jam');
   await page.locator('.where-bar').getByRole('button', { name: 'Ask me at checkout' }).click();
@@ -194,15 +195,15 @@ test('no question when the map already knows the category; or all at checkout in
   await expect(list.getByRole('checkbox')).toBeChecked();
 });
 
-test('not asked because the map knows it? one tap says it was on a display; the front wall is an answer too', async ({ page }) => {
+test('the map knows its kind, but it was on a display; the front wall is an answer too', async ({ page }) => {
   const ok = noPageErrors(page);
   await addItems(page, 'Bananas, Melon, Cards');
   await tick(page, 'Bananas');
   await page.locator('.where-bar .btn.primary').click(); // Produce
   await tick(page, 'Melon');
-  await expect(page.locator('.where-bar')).toHaveCount(0); // fruit is in Produce: not asked…
-  const toast = page.locator('.toast', { hasText: 'Melon · Produce' });
-  await toast.getByRole('button', { name: 'Somewhere else?' }).click(); // …but it was on a stand by the door
+  const bar = page.locator('.where-bar');
+  await expect(bar.getByRole('button', { name: '📍 Produce' })).toBeVisible(); // fruit is in Produce: offered first…
+  await bar.getByRole('button', { name: /Other/ }).click(); // …but it was on a stand by the door
   await page.getByRole('tab', { name: 'Open' }).click();
   await page.getByRole('button', { name: 'Stand / display' }).click();
   await page.getByRole('button', { name: 'Near the door' }).click();
@@ -309,6 +310,16 @@ test('put straight in the cart with no place here: "Where was it?" opens, with w
   await bar.getByRole('button', { name: '📍 Aisle 3' }).click();
   await expect.poll(async () => (await clues(page)).Oatmeal).toEqual({ kind: 'aisle', aisle: '3' });
   ok();
+});
+
+test('a shelf with no category takes the category of what’s saved on it', async ({ page }) => {
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Mine', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
+      places: [{ kind: 'shelf', id: 'sh1', label: 'Shelf 1', orientation: 'vertical', x: 5, y: 2, length: 8, categories: [] }] }],
+    activeLayout: 's1',
+    products: [{ id: 'pasta', name: 'Pasta', categoryId: 'pasta', locations: { s1: 'sh1@0.5,0.5' } }],
+  });
+  await expect.poll(async () => (await saved<any[]>(page, 'layouts'))[0].places[0].categories).toEqual(['pasta']);
 });
 
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
