@@ -299,3 +299,30 @@ test('an area put down over shelves can cut them', async ({ page }) => {
   await page.locator('.build-top').getByRole('button', { name: 'Undo' }).click();
   expect((await layout(page)).places.filter((p: any) => p.kind === 'shelf')).toHaveLength(6);
 });
+
+test('pieces side by side on a wall swap with one tap, or by dragging one onto another', async ({ page }) => {
+  const ok = noPageErrors(page);
+  const h = (id: string, label: string, x: number, length: number) => ({ kind: 'shelf', id, label, orientation: 'horizontal', x, y: 0, length, back: -1, categories: [] });
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Wall', width: 24, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 6, y: 15 },
+      places: [h('meat', 'Meat', 1, 6), h('cheese', 'Cheese', 7, 3), h('milk', 'Milk', 10, 4)] }],
+    activeLayout: 's1',
+    products: [{ id: 'steak', name: 'Steak', categoryId: 'meat_beef', locations: { s1: 'meat@0.5,0.5' } }],
+  });
+  const xs = async () => Object.fromEntries((await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => [p.id, p.x]));
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await tapMap(page, 3, 0);
+  await page.getByRole('toolbar', { name: /Change Meat/ }).getByRole('button', { name: 'Move shelf right' }).click();
+  await expect.poll(xs).toEqual({ cheese: 1, meat: 4, milk: 10 });
+  await expect(page.getByText('Swapped with “Cheese”.')).toBeVisible();
+  // What's saved on it went with it.
+  expect((await saved<any[]>(page, 'products')).find((p) => p.id === 'steak').locations).toEqual({ s1: 'meat@0.5,0.5' });
+  // Undo puts them back.
+  await page.getByRole('region', { name: 'Edit map' }).getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(xs).toEqual({ meat: 1, cheese: 7, milk: 10 });
+  // Milk dragged onto Meat: Milk takes its place, the rest move over.
+  await tapMap(page, 11, 0);
+  await dragMap(page, [11, 0], [2, 0]);
+  await expect.poll(xs).toEqual({ milk: 1, meat: 5, cheese: 11 });
+  ok();
+});

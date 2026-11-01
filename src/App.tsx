@@ -12,6 +12,7 @@ import { categoryLook, defaultCategories, defaultProducts } from './core/categor
 import { hasOldCategories, migrateCategories } from './core/recategorize';
 import { guessCategory } from './core/guess';
 import { withHoldings } from './core/holdings';
+import { moveOnto, swapAlong } from './core/swap';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
@@ -591,6 +592,20 @@ export default function App() {
     return true;
   }
 
+  /** Swaps a piece with the next one along its line (Meat ↔ Cheese on a wall); false if they can't swap. */
+  function swapPlace(placeId: string, dx: number, dy: number): boolean {
+    const r = swapAlong(layout, placeId, dx, dy);
+    if (r) replaceLayout(r.layout);
+    return !!r;
+  }
+  /** A piece dragged onto another in its line, from where it started: takes its place, the ones between move over. */
+  function movePlaceOnto(placeId: string, ontoId: string, from: Point): boolean {
+    const base = { ...layout, places: layout.places.map((p) => (p.id === placeId ? { ...p, x: from.x, y: from.y } : p)) };
+    const next = moveOnto(base, placeId, ontoId);
+    if (next) replaceLayout(next);
+    return !!next;
+  }
+
   /** What Undo puts back for a change to the current store. */
   const snapshotNow = (): Snapshot => ({ items, products, layouts });
 
@@ -1033,7 +1048,7 @@ export default function App() {
           quickAdd={quickAdd}
           build={{
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
-            startBlankStore, updatePlace, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
+            startBlankStore, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
             store: {
               layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id,
               gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,

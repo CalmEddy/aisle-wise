@@ -136,11 +136,12 @@ export function describeExact(p: Place, s: ExactSpot): string {
 // ---------------------------------------------------------------------------
 // Category sections
 
-/** Where a category sits in a place, as an exact spot. Sections share the shelf (or the area's long side) equally. */
+/** Where a category sits in a place, as an exact spot: where its things were found, else an equal share of the shelf (or the area's long side). */
 export function categorySpot(p: Place, categoryId: string): ExactSpot | undefined {
   const i = p.categories.indexOf(categoryId);
   if (i < 0) return undefined;
-  const t = (i + 0.5) / p.categories.length;
+  const sec = p.sections?.find((s) => s.categoryId === categoryId);
+  const t = sec ? sec.at : (i + 0.5) / p.categories.length;
   if (p.kind === 'shelf') return { u: t, v: 0.5 };
   return runsAlongX(p) ? { u: t, v: 0.5 } : { u: 0.5, v: t };
 }
@@ -156,11 +157,13 @@ export function sectionShapes(p: Place): SectionShape[] {
   const r = footprint(p);
   const n = p.categories.length;
   const alongX = runsAlongX(p);
-  return p.categories.map((categoryId, i) => ({
+  // Sized from where things were found if known, else equal shares.
+  const spans = p.sections ?? p.categories.map((categoryId, i) => ({ categoryId, from: i / n, to: (i + 1) / n }));
+  return spans.map(({ categoryId, from, to }) => ({
     categoryId,
     rect: alongX
-      ? { x: r.x + (r.w * i) / n, y: r.y, w: r.w / n, h: r.h }
-      : { x: r.x, y: r.y + (r.h * i) / n, w: r.w, h: r.h / n },
+      ? { x: r.x + r.w * from, y: r.y, w: r.w * (to - from), h: r.h }
+      : { x: r.x, y: r.y + r.h * from, w: r.w, h: r.h * (to - from) },
   }));
 }
 

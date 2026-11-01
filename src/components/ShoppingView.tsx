@@ -10,6 +10,7 @@ import { addedRect, nextShelves, skippedShelves } from '../core/rows';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
+import { touchingInLine } from '../core/swap';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout, Temp, Wall } from '../core/types';
@@ -126,6 +127,10 @@ export interface BuildApi {
   markHere: (which: 'entrance' | 'checkout') => Snapshot;
   startBlankStore: () => void;
   updatePlace: (placeId: string, patch: Partial<Place>) => boolean;
+  /** Swaps a piece with the next one along its line; false if they can't swap. */
+  swapPlace: (placeId: string, dx: number, dy: number) => boolean;
+  /** A piece dragged onto another in its line (from where it started): takes its place. */
+  movePlaceOnto: (placeId: string, ontoId: string, from: Point) => boolean;
   deletePlace: (placeId: string) => void;
   /** What Undo would put back right now. */
   snapshot: () => Snapshot;
@@ -155,7 +160,7 @@ export interface BuildApi {
 
 /** Dragging something on the map in build mode's Walk tool. */
 type MapDrag =
-  | { mode: 'move' | 'resize'; id: string; start: Point; orig: Place; snapshot: Snapshot; moved: boolean }
+  | { mode: 'move' | 'resize'; id: string; start: Point; orig: Place; snapshot: Snapshot; moved: boolean; last?: Point }
   | { mode: 'entrance' | 'checkout'; start: Point; snapshot: Snapshot; moved: boolean };
 
 const overlapsRect = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
@@ -369,7 +374,17 @@ export function ShoppingView(props: Props) {
     } };
     return {
       anchor, title: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'),
-      rows: [[turn, ...size, ...cutBtn, del], arrows((dx, dy) => update({ x: p.x + dx, y: p.y + dy }), p.kind)],
+      rows: [[turn, ...size, ...cutBtn, del], arrows((dx, dy) => {
+        // Right up against the next piece in its line (Meat beside Cheese): the two swap.
+        const next = touchingInLine(layout, p.id, dx, dy);
+        if (next) {
+          const snapshot = props.build.snapshot();
+          if (!props.build.swapPlace(p.id, dx, dy)) return false;
+          say(`Swapped with “${next.label || next.kind}”.`, snapshot);
+          return true;
+        }
+        return update({ x: p.x + dx, y: p.y + dy });
+      }, p.kind)],
     };
   }
   const mapTools = !building ? undefined
@@ -448,6 +463,7 @@ export function ShoppingView(props: Props) {
     const dy = c.y - d.start.y;
     if (!d.moved && !dx && !dy) return;
     d.moved = true;
+    if ('orig' in d) d.last = c;
     if (!('orig' in d)) {
       props.build.markAt(d.mode, c);
     } else if (d.mode === 'move') {
@@ -468,6 +484,15 @@ export function ShoppingView(props: Props) {
     // The click that the drag's release fires straight away shouldn't also move you.
     ignoreTap.current = true;
     setTimeout(() => { ignoreTap.current = false; }, 0);
+    // Let go on another piece in its line: it takes that one's place, and the ones between move over.
+    if ('orig' in d && d.mode === 'move' && d.last) {
+      const at = d.last;
+      const onto = layout.places.find((p) => p.id !== d.id && contains(footprint(p), at));
+      if (onto && props.build.movePlaceOnto(d.id, onto.id, { x: d.orig.x, y: d.orig.y })) {
+        setNote({ kind: 'message', text: `Put “${d.orig.label || d.orig.kind}” where “${onto.label || onto.kind}” was.`, snapshot: d.snapshot });
+        return;
+      }
+    }
     const what = !('orig' in d) ? (d.mode === 'entrance' ? 'Entrance moved.' : 'Checkout moved.')
       : d.mode === 'move' ? `Moved “${d.orig.label || d.orig.kind}”.` : `Resized “${d.orig.label || d.orig.kind}”.`;
     setNote({ kind: 'message', text: what, snapshot: d.snapshot });

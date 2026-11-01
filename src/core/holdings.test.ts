@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
 import { defaultCategories } from './categories';
+import { categorySpot, exactKey } from './geometry';
 import { withHoldings } from './holdings';
 import { locateProduct } from './locate';
 import { stocking } from './taxonomy';
@@ -75,5 +76,36 @@ describe('what a place holds, from the items put there', () => {
     const l = layout([shelf('a', 'Shelf 1', 2, ['spices_seasonings']), shelf('b', 'Shelf 2', 5, ['intl_mexican_latin'])]);
     const salsa: Product = { id: 'x', name: 'Salsa', categoryId: 'condiments_salsa_dips', locations: { s: 'b', other: 'a' } };
     expect(where(salsa, withHoldings(l, [salsa]), [salsa])).toBe('b');
+  });
+});
+
+describe('sections sized from where things were found', () => {
+  const wall = (categories: string[]) => layout([{ ...shelf('w', 'Back wall', 2, categories), length: 10 } as Place]);
+  const found = (name: string, categoryId: string, u: number): Product => ({ id: name, name, categoryId, locations: { s: exactKey('w', { u, v: 0.5 }) } });
+  const near = (a: number | undefined, b: number) => expect(a).toBeCloseTo(b, 3);
+
+  it('each section runs where its things were found; something new of a kind goes by them', () => {
+    const ps = [found('Steak', 'meat_beef', 0.1), found('Ground beef', 'meat_beef', 0.2), found('Cheddar', 'cheese_block', 0.45), found('Milk', 'dairy_milk', 0.9)];
+    const w = withHoldings(wall(['meat_beef', 'cheese_block', 'dairy_milk']), ps).places[0];
+    const s = w.sections!;
+    expect(s.map((x) => x.categoryId)).toEqual(['meat_beef', 'cheese_block', 'dairy_milk']);
+    near(s[0].from, 0); near(s[0].to, 0.3); near(s[1].to, 0.675); near(s[2].to, 1);
+    near(categorySpot(w, 'meat_beef')?.u, 0.15);
+    const ribeye = { id: 'r', name: 'Ribeye', categoryId: 'meat_beef' } as Product;
+    const r = locateProduct(ribeye, withHoldings(wall(['meat_beef', 'cheese_block', 'dairy_milk']), [...ps, ribeye]), new Catalog([...ps, ribeye], defaultCategories));
+    expect(r.kind === 'spot' && r.spot.point.y).toBe(3); // 0.15 of the way along a 10-square shelf from y 2
+  });
+
+  it('one kind it holds goes in between, where its things are', () => {
+    const ps = [found('Milk', 'dairy_milk', 0.9), found('Cheddar', 'cheese_block', 0.5)];
+    const w = withHoldings(wall(['meat_beef', 'dairy_milk']), ps).places[0];
+    expect(w.categories).toEqual(['meat_beef', 'cheese_block', 'dairy_milk']);
+  });
+
+  it('where things were found doesn’t fit the order set by hand: equal shares, in that order', () => {
+    const ps = [found('Milk', 'dairy_milk', 0.9), found('Steak', 'meat_beef', 0.1)];
+    const w = withHoldings(wall(['dairy_milk', 'meat_beef']), ps).places[0];
+    expect(w.sections).toBeUndefined();
+    expect(w.categories).toEqual(['dairy_milk', 'meat_beef']);
   });
 });

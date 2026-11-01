@@ -38,6 +38,8 @@ interface PlaceBase {
   own?: string[];
   /** Its name before the main category was added ("Shelf 3" of "Shelf 3 - International"). */
   baseLabel?: string;
+  /** (Worked out, never saved) Where each category's section runs along the place, 0–1, from where its items were found. */
+  sections?: { categoryId: string; from: number; to: number; at: number }[];
 }
 
 /** Freezer or fridge. */
