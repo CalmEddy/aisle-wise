@@ -58,17 +58,17 @@ export function nextLabel(l: StoreLayout, kind: Place['kind']): string {
 const inBounds = (l: StoreLayout, p: Point) => p.x >= 0 && p.y >= 0 && p.x < l.width && p.y < l.height;
 
 /** Is a square free for a new shelf/area: inside the store and not part of another place? */
-function free(l: StoreLayout, p: Point, exceptId?: string): boolean {
+export function free(l: StoreLayout, p: Point, exceptId?: string): boolean {
   return inBounds(l, p) && !l.places.some((pl) => pl.id !== exceptId && contains(footprint(pl), p));
 }
 
 /** Where along a shelf a square is, 0..1 (centre of the square). */
-function alongShelf(s: Shelf, p: Point): number {
+export function alongShelf(s: Shelf, p: Point): number {
   return s.orientation === 'vertical' ? exactSpotAt(s, s.x + 0.5, p.y + 0.5).u : exactSpotAt(s, p.x + 0.5, s.y + 0.5).u;
 }
 
 /** Shelves you're on or standing right beside (not off the end). */
-function shelfBeside(l: StoreLayout, p: Point): Shelf | undefined {
+export function shelfBeside(l: StoreLayout, p: Point): Shelf | undefined {
   let best: Shelf | undefined;
   let bestD = 2;
   for (const pl of l.places) {
@@ -116,7 +116,7 @@ export function rekeyResized(before: Shelf, after: Shelf) {
  * direction, centred where possible and trimmed/shifted to avoid other places
  * and the walls.
  */
-function fitShelf(l: StoreLayout, p: Point, orientation: Orientation, length: number, exceptId?: string): { start: number; length: number } | undefined {
+export function fitShelf(l: StoreLayout, p: Point, orientation: Orientation, length: number, exceptId?: string): { start: number; length: number } | undefined {
   const along = orientation === 'vertical' ? p.y : p.x;
   const cell = (i: number) => (orientation === 'vertical' ? { x: p.x, y: i } : { x: i, y: p.y });
   for (let len = length; len >= 1; len--) {

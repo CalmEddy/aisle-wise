@@ -658,7 +658,8 @@ export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout 
   const rest = [...parts.places.map((p) => ({ id: p.id, r: footprint(p) })), ...parts.aisles.map((a) => ({ id: a.id, r: a as Rect }))]
     .filter((x) => !locked.has(x.id));
   const follow = <T extends { id: string; x: number; y: number }>(k: T, rect: Rect): T => {
-    const now = genPos.get(k.id);
+    // (A part added to carry an aisle on, "g-shelf-3-R~c…", moves with the shelf it carries on.)
+    const now = genPos.get(k.id) ?? genPos.get(k.id.replace(/~c\w+$/, ''));
     if (!isGenerated(k.id) || !now) return k;
     const was = origin[k.id];
     origin[k.id] = now;

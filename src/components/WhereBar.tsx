@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { HereOption } from '../core/here';
 import { topOf } from '../core/taxonomy';
 import { aisleNumber, DEPTS, describeClue, guessDept } from '../core/clues';
 import type { Clue, Temp, Wall } from '../core/types';
@@ -51,7 +52,7 @@ export interface MapSpot {
   spot?: string;
 }
 
-export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], mapSpots = [], onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onSavePlace, onOther, onLater }: {
+export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], mapSpots = [], here, onHere, onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onSavePlace, onOther, onLater }: {
   itemName: string;
   categoryId?: string;
   recentAisles: string[];
@@ -66,6 +67,9 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   sections?: string[];
   /** Where the map already has this kind of thing (first, one tap each). */
   mapSpots?: MapSpot[];
+  /** What can be chosen or built where you're standing ("Where I'm standing"). */
+  here?: HereOption[];
+  onHere?: (o: HereOption) => void;
   /** Saves a map spot drawn by hand as the item's place. */
   onSavePlace?: (spotKey: string) => void;
   /** A shelf label was typed but the store's style isn't set up: set it up from this example. */
@@ -81,6 +85,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   const [temp, setTemp] = useState<Temp | undefined>(guessTemp(categoryId));
   const [typing, setTyping] = useState<string>();
   const [letters, setLetters] = useState(false);
+  const [standing, setStanding] = useState(false);
   const dept = guessDept(categoryId);
   const d = dept && DEPTS.find((x) => x.id === dept);
   const cold = temp === 'frozen' ? '❄ ' : temp === 'chilled' ? '🧊 ' : '';
@@ -137,7 +142,14 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
         </span>
         <button className="link" onClick={onLater}>{laterLabel}</button>
       </div>
-      {typing === undefined ? (
+      {standing && here && onHere ? (
+        <div className="where-bar-choices where-bar-here" role="group" aria-label="Where I’m standing">
+          <button className="link" onClick={() => setStanding(false)} aria-label="Back">‹</button>
+          {here.map((o, i) => (
+            <button key={`${o.kind}-${o.label}`} className={`btn${i === 0 ? ' primary' : ''}`} onClick={() => onHere(o)}>{o.label}</button>
+          ))}
+        </div>
+      ) : typing === undefined ? (
         <div className="where-bar-choices">
           {spotChips.map((x, i) => (
             <button key={`m-${x.key}`} className={`btn map-spot${i === 0 ? ' primary' : ''}`} title="Where the map has this kind of thing"
@@ -151,6 +163,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
             const here = shelfTrail[shelfTrail.length - 1]?.section;
             setTyping(labels && here ? formatLabel(labels, here) : '');
           }}>{labels ? '# Shelf…' : '# Aisle…'}</button>
+          {here && here.length > 0 && onHere && <button className="btn" onClick={() => setStanding(true)}>🧍 Where I’m standing</button>}
           <button className="btn" onClick={onOther}>Other…</button>
           {onAskAtCheckout && <button className="link where-bar-checkout" onClick={onAskAtCheckout}>Ask me at checkout</button>}
         </div>

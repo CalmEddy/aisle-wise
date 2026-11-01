@@ -14,6 +14,7 @@ import { guessCategory } from './core/guess';
 import { withHoldings } from './core/holdings';
 import { moveOnto, swapAlong } from './core/swap';
 import { endKey, extended, extensionsDue, withReach, type Extension } from './core/extend';
+import { buildHere, hereOptions, type HereOption } from './core/here';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
@@ -301,7 +302,7 @@ export default function App() {
       const was = before.places.find((p) => p.id === id) ?? before.aisles?.find((a) => a.id === id);
       if (was && !origin[id]) origin[id] = { x: was.x, y: was.y };
     }
-    return { ...after, gen: { ...after.gen, locked: [...after.gen.locked, ...edited], origin } };
+    return { ...after, gen: { ...after.gen, locked: [...new Set([...after.gen.locked, ...edited])], origin } };
   };
   const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? keepEdits(l, next) : l)));
 
@@ -642,6 +643,27 @@ export default function App() {
   /** Something found just past a shelf's end. */
   function notePastEnd(r: ShelfReach) {
     setLayouts((prev) => prev.map((l) => (l.id === layout.id ? withReach(l, r) : l)));
+  }
+
+  // ---- "Where was it?" → where I'm standing ----
+  /** What can be built or chosen where the shopper is standing. */
+  const hereChoices = useMemo(() => hereOptions(layout, position), [layout, position]);
+  /** Builds the choice where the shopper stands and saves the item there. Returns what Undo restores and what was done. */
+  function placeHere(productId: string, o: HereOption): { snapshot: Snapshot; note: string } | undefined {
+    const product = catalog.productById.get(productId);
+    if (!product) return undefined;
+    const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
+    const r = buildHere(layout, position, o, category);
+    if (!r) return undefined;
+    const snapshot = snapshotNow();
+    if (r.layout !== layout) replaceLayout(r.layout);
+    setProducts((prev) => prev.map((p) => {
+      const k = p.locations?.[layout.id];
+      const nk = k && r.rekey ? r.rekey(k) : k;
+      if (p.id === productId && r.spotKey) return { ...p, locations: { ...p.locations, [layout.id]: r.spotKey }, notAt: p.notAt?.filter((id) => id !== layout.id) };
+      return nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk! } } : p;
+    }));
+    return { snapshot, note: r.note };
   }
 
   /** What Undo puts back for a change to the current store. */
@@ -1110,6 +1132,7 @@ export default function App() {
             } }}
           undo={undo}
           shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
+          here={{ options: hereChoices, place: placeHere }}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}
           position={position}

@@ -629,3 +629,28 @@ test('a map broken by an older version (a changed shelf in the way of a new aisl
   const x = (id: string) => l.places.find((p: any) => p.id === id).x;
   expect(x('g-shelf-1-L')).toBeGreaterThan(x('g-shelf-2-L')); // aisle 1 on the right, beside its own shelf
 });
+
+test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carries on there in one tap', async ({ page }) => {
+  const ok = noPageErrors(page);
+  const v = (id: string, label: string, x: number) => ({ kind: 'shelf', id, label, orientation: 'vertical', x, y: 2, length: 10, categories: [] });
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Mine', width: 20, height: 22, entrance: { x: 1, y: 21 }, checkout: { x: 15, y: 21 },
+      places: [v('l', '3L', 5), v('r', '3R', 8)], aisles: [{ id: 'a3', label: 'Aisle 3', x: 6, y: 2, w: 2, h: 10 }] }],
+    activeLayout: 's1',
+  });
+  await addItems(page, 'Pickles');
+  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  await tapMap(page, 8, 15); // standing below 3R, past the walkway
+  await tick(page, 'Pickles');
+  const bar = page.locator('.where-bar');
+  await bar.getByRole('button', { name: '🧍 Where I’m standing' }).click();
+  await bar.getByRole('button', { name: 'Aisle 3 carries on here · 3R' }).click();
+  const places = async () => (await saved<any[]>(page, 'layouts'))[0].places;
+  await expect.poll(async () => (await places()).map((p: any) => `${p.label}@${p.x},${p.y}+${p.length}`)).toEqual(['3L@5,2+10', '3R@8,2+10', '3L@5,14+3', '3R@8,14+3']);
+  const pickles = (await saved<any[]>(page, 'products')).find((p) => p.name === 'Pickles');
+  expect(pickles.locations.s1.split('@')[0]).toBe((await places())[3].id);
+  await expect(page.locator('.toast')).toContainText('Aisle 3 carries on here');
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await expect.poll(async () => (await places()).length).toBe(2);
+  ok();
+});

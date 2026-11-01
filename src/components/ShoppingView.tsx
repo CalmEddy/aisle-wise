@@ -12,6 +12,7 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { touchingInLine } from '../core/swap';
 import { pastEnd, type Extension } from '../core/extend';
+import type { HereOption } from '../core/here';
 import { ExtendCard } from './ExtendCard';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
@@ -67,6 +68,12 @@ interface Props {
   /** A changed part has been looked at (tapped in Edit map). */
   onSeenChange: (id: string) => void;
   layout: StoreLayout;
+  /** "Where was it?" → where I'm standing: what can be chosen or built there. */
+  here: {
+    options: HereOption[];
+    /** Builds the choice and saves the item there; returns what Undo restores and what was done. */
+    place: (productId: string, o: HereOption) => { snapshot: Snapshot; note: string } | undefined;
+  };
   /** Shelves that seem to run further than the map shows. */
   shelves: {
     due: Extension[];
@@ -948,6 +955,16 @@ export function ShoppingView(props: Props) {
     }
     return out;
   }
+  /** "Where I'm standing": builds the choice there (straight away, with Undo) and saves the item on it. */
+  function placeHereFor(item: ListItem, o: HereOption) {
+    const product = productFor(item, catalog);
+    if (!product) return;
+    const r = props.here.place(product.id, o);
+    if (!r) { setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: 'No room for that here.' }); return; }
+    if (whereBarFor?.id === item.id) setWhereBarFor(null);
+    setToast({ snapshot: r.snapshot, added: [], mode: 'list', note: `${item.name}: ${r.note}` });
+    nextWhere(item);
+  }
   /** Saves a place drawn by hand as where an item is here. */
   function savePlace(item: ListItem, spotKey: string) {
     const product = productFor(item, catalog);
@@ -1606,6 +1623,8 @@ export function ShoppingView(props: Props) {
           sections={storeSections}
           mapSpots={mapSpotsFor(whereBarFor)}
           onSavePlace={(key) => savePlace(whereBarFor, key)}
+          here={productFor(whereBarFor, catalog) ? props.here.options : undefined}
+          onHere={(o) => placeHereFor(whereBarFor, o)}
           onNeedLabels={(code) => setLabelSetup({ code, item: whereBarFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
           lastClue={lastClue}
