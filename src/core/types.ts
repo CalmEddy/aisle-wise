@@ -127,6 +127,11 @@ export interface GeneratedMap extends Arrangement {
   entrance: 'left' | 'right';
   /** Generated parts (by id) the shopper changed or deleted: never regenerated. */
   locked: string[];
+  /**
+   * Where the map had each changed part when the shopper changed it. When the map is rebuilt and the part's place
+   * moves (an aisle added beside it, the store grows), the changed part moves by as much, keeping the changes.
+   */
+  origin?: Record<string, Point>;
   /** What the current map was generated from (to know when to regenerate). */
   key?: string;
   /** Settings the shopper chose or answered: never changed by learning. */

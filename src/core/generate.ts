@@ -1,7 +1,7 @@
 import { acrossRect, aisleNumber, DEPTS, findAisle, guessDept, islandKey, sectionNumber } from './clues';
 import { formatLabel, shelfOffsets, type LabelStyle } from './labels';
 import { footprint } from './geometry';
-import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, MainWall, Place, Product, Rect, SectionShape, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
+import type { Across, AisleLabel, AislePos, Area, Arrangement, Orientation, Placement, Clue, Dept, Fixture, GeneratedMap, OpenNear, MainWall, Place, Point, Product, Rect, SectionShape, Shelf, StoreLayout, Temp, Wall, WallPart } from './types';
 
 /**
  * Building a store map from shoppers' "Where was it?" answers.
@@ -242,7 +242,7 @@ export type GenSettings = Arrangement & Pick<GeneratedMap, 'entrance' | 'placeme
 /** A short fingerprint of what a map would be generated from. */
 export function modelKey(model: StoreModel, settings: GenSettings): string {
   return JSON.stringify({
-    v: 2, // the layout rules (back at the top, aisle 1 on the right, entrance in the middle)
+    v: 3, // the layout rules (back at the top, aisle 1 on the right, entrance in the middle); 3: changed parts move with the map
     // Only when not the usual, so maps made before these settings existed aren't rebuilt.
     ...(settings.aisleOne === 'far' && { a1: 'far' }),
     ...(settings.produce === 'far' && { p: 'far' }),
@@ -650,15 +650,32 @@ export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout 
   // Aisles the shopper has given a number to elsewhere (e.g. the front half of a cut aisle) aren't generated again.
   const elsewhere = (label: string) => keptAisles.some((k) => k.id !== `g-aisle-${label}` && findAisle({ ...layout, aisles: [k] }, label));
   const parts = generateParts({ ...model, aisles: model.aisles.filter((a) => !elsewhere(a.label)) }, { ...gen, labels: layout.labels });
-  const taken = kept.map(footprint);
+  // Changed parts move with the map: by as much as the map moved them since they were changed (an aisle added
+  // beside them, the walls further out), keeping the changes. One changed before this was kept (no origin) and now
+  // in the way of the rebuilt map goes where the map now has it.
+  const origin: Record<string, Point> = { ...gen.origin };
+  const genPos = new Map<string, Point>([...parts.places, ...parts.aisles].map((p) => [p.id, { x: p.x, y: p.y }]));
+  const rest = [...parts.places.map((p) => ({ id: p.id, r: footprint(p) })), ...parts.aisles.map((a) => ({ id: a.id, r: a as Rect }))]
+    .filter((x) => !locked.has(x.id));
+  const follow = <T extends { id: string; x: number; y: number }>(k: T, rect: Rect): T => {
+    const now = genPos.get(k.id);
+    if (!isGenerated(k.id) || !now) return k;
+    const was = origin[k.id];
+    origin[k.id] = now;
+    if (was) return { ...k, x: k.x + now.x - was.x, y: k.y + now.y - was.y };
+    return rest.some((x) => overlaps(x.r, rect)) ? { ...k, x: now.x, y: now.y } : k;
+  };
+  const keptPlaces = kept.map((p) => follow(p, footprint(p)));
+  const keptLabels = keptAisles.map((a) => follow(a, a));
+  const taken = keptPlaces.map(footprint);
   const places = [
-    ...kept,
+    ...keptPlaces,
     ...parts.places.filter((p) => !locked.has(p.id) && !taken.some((t) => overlaps(t, footprint(p)))),
   ];
-  const aisles = [...keptAisles, ...parts.aisles.filter((a) => !locked.has(a.id) && !keptAisles.some((k) => overlaps(k, a)))];
+  const aisles = [...keptLabels, ...parts.aisles.filter((a) => !locked.has(a.id) && !keptLabels.some((k) => overlaps(k, a)))];
   // Big enough for everything kept, too.
-  const width = Math.max(parts.width, ...kept.map((p) => { const f = footprint(p); return f.x + f.w + 1; }));
-  const height = Math.max(parts.height, ...kept.map((p) => { const f = footprint(p); return f.y + f.h + 1; }));
+  const width = Math.max(parts.width, ...keptPlaces.map((p) => { const f = footprint(p); return f.x + f.w + 1; }));
+  const height = Math.max(parts.height, ...keptPlaces.map((p) => { const f = footprint(p); return f.y + f.h + 1; }));
   return {
     ...layout,
     width,
@@ -667,7 +684,7 @@ export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout 
     aisles,
     entrance: locked.has('g-entrance') ? layout.entrance : parts.entrance,
     checkout: locked.has('g-checkout-point') ? layout.checkout : parts.checkout,
-    gen: { ...gen, key: modelKey(model, { ...gen, labels: layout.labels }) },
+    gen: { ...gen, key: modelKey(model, { ...gen, labels: layout.labels }), ...(Object.keys(origin).length && { origin }) },
   };
 }
 

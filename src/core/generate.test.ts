@@ -319,3 +319,45 @@ describe('what the answers do and don’t say', () => {
     expect(l.places.filter((p) => p.id.startsWith('g-open-')).map((p) => p.label).sort()).toEqual(['Produce table', 'Produce table 2']);
   });
 });
+
+describe('changed parts when the map is rebuilt', () => {
+  const P = (name: string, categoryId: string, clue: Product['clues'] extends Record<string, infer C> | undefined ? C : never): Product => ({ id: name, name, categoryId, clues: { s: clue } });
+  const base: Product[] = [
+    P('Bananas', 'produce_fruits', { kind: 'dept', dept: 'produce' }), P('Steak', 'meat_beef', { kind: 'dept', dept: 'meat' }),
+    P('Milk', 'dairy_milk', { kind: 'wall', wall: 'left', temp: 'chilled' }), P('Ice cream', 'frozen_desserts_ice', { kind: 'wall', wall: 'left', temp: 'frozen' }),
+    P('Cereal', 'breakfast_cereal', { kind: 'aisle', aisle: '1' }), P('Pasta', 'pasta_dry', { kind: 'aisle', aisle: '3' }),
+  ];
+  const blank: StoreLayout = { id: 's', name: 'S', width: 30, height: 24, places: [], entrance: { x: 15, y: 23 }, checkout: { x: 15, y: 23 }, gen: { enabled: true, entrance: 'left', locked: [] } };
+  const three = regenerate(blank, buildModel(base, 's'));
+  const four = buildModel([...base, P('Soup', 'canned_soup_broth', { kind: 'aisle', aisle: '4' })], 's');
+  const shelves = (l: StoreLayout) => l.places.filter((p) => /^g-shelf-/.test(p.id)).map((p) => p.id).sort();
+  const changed = (id: string, origin: boolean): StoreLayout => {
+    const was = three.places.find((p) => p.id === id)!;
+    return {
+      ...three,
+      places: three.places.map((p) => (p.id === id ? { ...p, label: 'Mine' } : p)),
+      gen: { ...three.gen!, locked: [id], ...(origin && { origin: { [id]: { x: was.x, y: was.y } } }) },
+    };
+  };
+
+  it('an aisle added beside a changed shelf: every aisle is still there, and the shelf keeps its change', () => {
+    for (const origin of [true, false]) { // (false: changed before parts remembered where they were)
+      const l = regenerate(changed('g-shelf-1-L', origin), four);
+      expect(shelves(l), String(origin)).toEqual(['g-shelf-1-L', 'g-shelf-2-L', 'g-shelf-2-R', 'g-shelf-3-L', 'g-shelf-3-R', 'g-shelf-4-R']);
+      expect((l.aisles ?? []).map((a) => a.label).sort()).toEqual(['Aisle 1', 'Aisle 2', 'Aisle 3', 'Aisle 4']);
+      const mine = l.places.find((p) => p.id === 'g-shelf-1-L')!;
+      expect(mine.label).toBe('Mine');
+      // Beside aisle 1, as before: aisle 1 is the walkway right next to it.
+      const a1 = l.aisles!.find((a) => a.label === 'Aisle 1')!;
+      expect(mine.x + 1).toBe(a1.x);
+    }
+  });
+
+  it('a changed department moves with its wall when the store gets wider', () => {
+    const l = regenerate(changed('g-dept-produce', true), four);
+    const produce = l.places.find((p) => p.id === 'g-dept-produce')!;
+    expect(produce.label).toBe('Mine');
+    expect(produce.x).toBeGreaterThan(three.places.find((p) => p.id === 'g-dept-produce')!.x);
+    expect(l.gen!.origin!['g-dept-produce']).toEqual({ x: produce.x, y: produce.y });
+  });
+});

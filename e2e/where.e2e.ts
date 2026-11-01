@@ -604,3 +604,28 @@ test('things put just past a shelf’s end: the shelf is offered longer at the e
   await expect(card).toHaveCount(0);
   ok();
 });
+
+test('a map broken by an older version (a changed shelf in the way of a new aisle) is repaired when it loads', async ({ page }) => {
+  const shelf = (id: string, x: number, label = id.replace(/^g-shelf-/, '').replace('-', '')) =>
+    ({ kind: 'shelf', id, label, orientation: 'vertical', x, y: 3, length: 10, categories: [] });
+  const clue = (aisle: string) => ({ s1: { kind: 'aisle', aisle } });
+  // As the screenshot had it: 4R|3L, 3R|1L, 2R — shelf 1L (changed earlier) where 2L belongs, 2L gone.
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Built', width: 20, height: 16, entrance: { x: 9, y: 15 }, checkout: { x: 9, y: 15 },
+      places: [shelf('g-shelf-4-R', 4), shelf('g-shelf-3-L', 5), shelf('g-shelf-3-R', 8), { ...shelf('g-shelf-1-L', 9), label: '1L' }, shelf('g-shelf-2-R', 12)],
+      aisles: [{ id: 'g-aisle-4', label: 'Aisle 4', x: 2, y: 3, w: 2, h: 10 }, { id: 'g-aisle-3', label: 'Aisle 3', x: 6, y: 3, w: 2, h: 10 }, { id: 'g-aisle-1', label: 'Aisle 1', x: 10, y: 3, w: 2, h: 10 }],
+      gen: { enabled: true, entrance: 'left', locked: ['g-shelf-1-L'], key: 'from an older version' } }],
+    activeLayout: 's1',
+    products: [
+      { id: 'c', name: 'Cereal', categoryId: 'breakfast_cereal', clues: clue('1') },
+      { id: 'p', name: 'Pasta', categoryId: 'pasta_dry', clues: clue('3') },
+      { id: 's', name: 'Soup', categoryId: 'canned_soup_broth', clues: clue('4') },
+    ],
+  });
+  const ids = async () => (await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => p.id).filter((id: string) => id.startsWith('g-shelf-')).sort();
+  await expect.poll(ids).toContain('g-shelf-2-L');
+  const l = (await saved<any[]>(page, 'layouts'))[0];
+  expect(l.aisles.map((a: any) => a.label).sort()).toEqual(['Aisle 1', 'Aisle 2', 'Aisle 3', 'Aisle 4']);
+  const x = (id: string) => l.places.find((p: any) => p.id === id).x;
+  expect(x('g-shelf-1-L')).toBeGreaterThan(x('g-shelf-2-L')); // aisle 1 on the right, beside its own shelf
+});

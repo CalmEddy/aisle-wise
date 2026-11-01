@@ -294,7 +294,14 @@ export default function App() {
   /** A shopper's change to a store. Generated parts they change are kept as they are from then on. */
   const keepEdits = (before: StoreLayout, after: StoreLayout): StoreLayout => {
     const edited = newlyEdited(before, after);
-    return edited.length && after.gen ? { ...after, gen: { ...after.gen, locked: [...after.gen.locked, ...edited] } } : after;
+    if (!edited.length || !after.gen) return after;
+    // Where the map had them, so they move with it when it's rebuilt.
+    const origin = { ...after.gen.origin };
+    for (const id of edited) {
+      const was = before.places.find((p) => p.id === id) ?? before.aisles?.find((a) => a.id === id);
+      if (was && !origin[id]) origin[id] = { x: was.x, y: was.y };
+    }
+    return { ...after, gen: { ...after.gen, locked: [...after.gen.locked, ...edited], origin } };
   };
   const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? keepEdits(l, next) : l)));
 
