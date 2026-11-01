@@ -41,4 +41,10 @@ describe('swapping pieces along a wall', () => {
     const deep = store([{ kind: 'area', id: 'produce', label: 'P', x: 0, y: 0, w: 3, h: 3, categories: [] }, h('b', 3, 3), h('under', 3, 3, 2)]);
     expect(swapAlong(deep, 'produce', 1, 0)).toBeUndefined();
   });
+
+  it('the checkout is never swapped', () => {
+    const l = store([h('a', 1, 4), { kind: 'area', id: 'g-checkout', label: 'Checkout', x: 5, y: 0, w: 3, h: 1, categories: [] }]);
+    expect(neighbourInLine(l, 'a', 1, 0)).toBeUndefined();
+    expect(moveOnto(l, 'a', 'g-checkout')).toBeUndefined();
+  });
 });

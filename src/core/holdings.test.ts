@@ -109,3 +109,14 @@ describe('sections sized from where things were found', () => {
     expect(w.categories).toEqual(['dairy_milk', 'meat_beef']);
   });
 });
+
+describe('a kind with no section of its own in a long department', () => {
+  it('goes beside what’s known there of its category, not in the category’s general share', () => {
+    const l = layout([{ ...shelf('dairy', 'Dairy', 2, ['dairy_eggs', 'cheese']), orientation: 'horizontal', y: 0, length: 24 } as Place]);
+    const milk: Product = { id: 'm', name: 'Milk', categoryId: 'dairy_milk', locations: { s: exactKey('dairy', { u: 0.6, v: 0.5 }) } };
+    const yogurt = { id: 'y', name: 'Yogurt', categoryId: 'dairy_yogurt' } as Product;
+    const ps = [milk, yogurt];
+    const r = locateProduct(yogurt, withHoldings(l, ps), new Catalog(ps, defaultCategories));
+    expect(r.kind === 'spot' && r.spot.key).toBe(milk.locations!.s);
+  });
+});

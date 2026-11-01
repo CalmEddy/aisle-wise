@@ -15,6 +15,9 @@ const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y
 const along = (r: Rect, x: boolean) => (x ? [r.x, r.x + r.w] : [r.y, r.y + r.h]);
 const across = (r: Rect, x: boolean) => (x ? [r.y, r.y + r.h] : [r.x, r.x + r.w]);
 
+/** The checkout stays where it is: never swapped with a shelf. */
+const isCheckout = (p: Place) => p.id === 'g-checkout' || /checkout/i.test(p.label);
+
 /** A piece lies along the line it moves in: a shelf running that way, or any area. */
 const runsWay = (p: Place, x: boolean) => p.kind === 'area' || (p.orientation === 'horizontal') === x;
 
@@ -24,7 +27,7 @@ const runsWay = (p: Place, x: boolean) => p.kind === 'area' || (p.orientation ==
  */
 export function neighbourInLine(l: StoreLayout, id: string, dx: number, dy: number): Place | undefined {
   const a = l.places.find((p) => p.id === id);
-  if (!a || (!dx && !dy)) return undefined;
+  if (!a || (!dx && !dy) || isCheckout(a)) return undefined;
   const x = !!dx;
   const dir = dx || dy;
   if (!runsWay(a, x)) return undefined;
@@ -33,7 +36,7 @@ export function neighbourInLine(l: StoreLayout, id: string, dx: number, dy: numb
   const [c0, c1] = across(fa, x);
   let best: { p: Place; gap: number } | undefined;
   for (const p of l.places) {
-    if (p.id === id || !runsWay(p, x)) continue;
+    if (p.id === id || !runsWay(p, x) || isCheckout(p)) continue;
     const f = footprint(p);
     const [p0, p1] = along(f, x);
     const [q0, q1] = across(f, x);

@@ -76,21 +76,35 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
   // (Not a table or stand: those are displays of a few things, not where the kind lives.)
   // (Only beside one in a place where the kind lives: not a melon on this week's table, or one odd item.)
   const homes = cat ? new Set(homesOf(layout.places, cat).map((p) => p.id)) : new Set<string>();
+  /** Where another item was said or saved to be here (not this week's table or stand). */
+  const spotOf = (other: Product) => {
+    const key = other.locations?.[layout.id] ?? (() => {
+      const c = other.clues?.[layout.id];
+      if (!c || (c.kind === 'open' && (c.across || c.fixture === 'stand' || c.fixture === 'table'))) return undefined;
+      return resolveClue(c, layout, other);
+    })();
+    const spot = key ? resolveSpot(key, layout, catalog) : undefined;
+    return spot && !layout.places.find((pl) => pl.id === spot.placeId)?.display ? spot : undefined;
+  };
   if (cat) {
     for (const other of catalog.products) {
       if (other.id === product.id || other.categoryId !== cat) continue;
-      const key = other.locations?.[layout.id] ?? (() => {
-        const c = other.clues?.[layout.id];
-        if (!c || (c.kind === 'open' && (c.across || c.fixture === 'stand' || c.fixture === 'table'))) return undefined;
-        return resolveClue(c, layout, other);
-      })();
-      const spot = key ? resolveSpot(key, layout, catalog) : undefined;
-      const onDisplay = !!layout.places.find((pl) => pl.id === spot?.placeId)?.display;
-      if (spot && !onDisplay && (!homes.size || homes.has(spot.placeId))) return { kind: 'spot', spot, product, exact: false };
+      const spot = spotOf(other);
+      if (spot && (!homes.size || homes.has(spot.placeId))) return { kind: 'spot', spot, product, exact: false };
     }
   }
   // Not a table or stand: those are offered (📍), never assumed.
   const place = cat ? homesOf(layout.places, cat)[0] : undefined;
+  // Its own kind has no section there (yogurt in a long Dairy wall): beside what's known there of its category
+  // (the milk), not in the category's general share.
+  if (place && !place.categories.includes(cat!)) {
+    const top = topOf(cat!);
+    for (const other of catalog.products) {
+      if (other.id === product.id || !other.categoryId || topOf(other.categoryId) !== top) continue;
+      const spot = spotOf(other);
+      if (spot?.placeId === place.id) return { kind: 'spot', spot, product, exact: false };
+    }
+  }
   const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat!) ? cat : topOf(cat!)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
   if (spot) return { kind: 'spot', spot, product, exact: false };
   return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };

@@ -312,6 +312,6 @@ describe('the sample store layouts, scored', () => {
     expect(total('merged')).toBe(0);
   });
   it('walks little further than the best route, for what it could place', () => {
-    for (const r of scores) expect(r.extraPlaced).toBeLessThanOrEqual(0.1);
+    for (const r of scores) expect(r.extraPlaced).toBeLessThanOrEqual(0.05);
   });
 });
