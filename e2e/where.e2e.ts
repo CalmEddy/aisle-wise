@@ -554,3 +554,53 @@ test('across aisles picked on the mini-map, with a preview of where it goes', as
   await page.getByRole('button', { name: /^Save · Out in the open across aisles 2–3 \(back\)/ }).click();
   await expect.poll(async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places.some((p: any) => p.id.startsWith('g-open-x2-3-back'))).toBe(true);
 });
+
+test('things put just past a shelf’s end: the shelf is offered longer at the end of the trip', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Mine', width: 20, height: 20, entrance: { x: 1, y: 19 }, checkout: { x: 10, y: 19 },
+      places: [{ kind: 'shelf', id: 'sh1', label: 'Cereal', orientation: 'vertical', x: 5, y: 6, length: 8, categories: [] }] }],
+    activeLayout: 's1',
+    products: [{ id: 'jam', name: 'Jam', categoryId: 'breakfast_spreads', locations: { s1: 'sh1@0.5,0.5' } }],
+  });
+  await addItems(page, 'Zorbo, Quibble');
+  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  const dropPast = async (name: string, gy: number) => {
+    const handle = page.getByLabel(new RegExp(`^Drag ${name}`)).first();
+    const from = (await handle.boundingBox())!;
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 20, from.y - 40, { steps: 4 });
+    // While dragging, the map floats at the top: aim at that one (the map on top where it's shown).
+    const to = await page.evaluate(([x, y]) => {
+      const maps = [...document.querySelectorAll('svg.map')] as SVGSVGElement[];
+      const svg = maps.find((m) => { const r = m.getBoundingClientRect(); return m.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }) ?? maps[0];
+      const q = svg.createSVGPoint();
+      q.x = x + 0.5; q.y = y + 0.5;
+      const r = q.matrixTransform(svg.getScreenCTM()!);
+      return { x: r.x, y: r.y };
+    }, [5, gy]);
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await page.mouse.up();
+  };
+  // Two squares above the shelf's top end (toward the back), lined up with it.
+  await dropPast('Zorbo', 4);
+  await dropPast('Quibble', 5);
+  const layout = async () => (await saved<any[]>(page, 'layouts'))[0];
+  await expect.poll(async () => (await layout()).reach?.length ?? 0).toBe(2);
+  // Saved on the shelf's end for now.
+  const products = await saved<any[]>(page, 'products');
+  expect(products.find((p) => p.name === 'Zorbo').locations.s1).toBe('sh1@0,0.5');
+  // Trip done: asked.
+  await tick(page, 'Zorbo');
+  await tick(page, 'Quibble');
+  const card = page.getByRole('group', { name: 'Is Cereal longer?' });
+  await expect(card).toContainText('toward the back');
+  await card.getByRole('button', { name: 'Extend it 2 squares' }).click();
+  await expect.poll(async () => (await layout()).places[0]).toMatchObject({ y: 4, length: 10 });
+  // What was saved on it stays where it was: Jam still at the old middle (y 10).
+  const after = await saved<any[]>(page, 'products');
+  expect(after.find((p) => p.name === 'Jam').locations.s1).toBe('sh1@0.6,0.5');
+  await expect(card).toHaveCount(0);
+  ok();
+});

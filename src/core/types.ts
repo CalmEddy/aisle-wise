@@ -84,6 +84,21 @@ export interface StoreLayout {
   gen?: GeneratedMap;
   /** Where the store is (for picking it automatically when you walk in). */
   geo?: GeoPoint;
+  /** Things found just past a shelf's end (lined up with it): a sign it's longer. See extend.ts. */
+  reach?: ShelfReach[];
+  /** Shelf ends the shopper said go no further ("placeId:start" / "placeId:end"). */
+  keepLength?: string[];
+}
+
+/** Something found past a shelf's end: how far the shelf would have to run to reach it. */
+export interface ShelfReach {
+  placeId: string;
+  end: 'start' | 'end';
+  /** Where along the shelf's line (x for a shelf running across, y for one running up and down) it was found. */
+  to: number;
+  /** The item. */
+  item: string;
+  at: number;
 }
 
 export interface GeoPoint {

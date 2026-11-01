@@ -11,9 +11,11 @@ import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { touchingInLine } from '../core/swap';
+import { pastEnd, type Extension } from '../core/extend';
+import { ExtendCard } from './ExtendCard';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
-import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, Stop, StoreLayout, Temp, Wall } from '../core/types';
+import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, ShelfReach, Stop, StoreLayout, Temp, Wall } from '../core/types';
 import type { Display, SectionLook } from '../display';
 import { DisplayToggles } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
@@ -65,6 +67,16 @@ interface Props {
   /** A changed part has been looked at (tapped in Edit map). */
   onSeenChange: (id: string) => void;
   layout: StoreLayout;
+  /** Shelves that seem to run further than the map shows. */
+  shelves: {
+    due: Extension[];
+    /** Grows the shelf; returns what Undo restores. */
+    extend: (e: Extension) => Snapshot | undefined;
+    /** "Not really": stop asking about that end. */
+    keep: (e: Extension) => void;
+    /** Something was put just past a shelf's end. */
+    notePastEnd: (r: ShelfReach) => void;
+  };
   floor: Floor;
   catalog: Catalog;
   items: ListItem[];
@@ -888,6 +900,11 @@ export function ShoppingView(props: Props) {
   }
 
   const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);
+  /** Grows a shelf that seems to run further, with Undo. */
+  function extendNow(e: Extension) {
+    const snapshot = props.shelves.extend(e);
+    if (snapshot) setToast({ snapshot, added: [], mode: 'list', note: `“${e.label}” extended ${e.by} square${e.by === 1 ? '' : 's'} ${e.way}.` });
+  }
 
   /**
    * Where the map already has an item's kind of thing (canned goods on 3L, vegetables in Produce): one-tap
@@ -983,13 +1000,22 @@ export function ShoppingView(props: Props) {
 
   // --- Drag an item onto a new location (map or stop card) ---
   /** What's under the finger: an exact spot on the map, or a stop in the list. */
+  /** The last drop spot found past a shelf's end. */
+  const droppedPast = useRef<{ key: string; placeId: string; end: 'start' | 'end'; to: number }>();
   const dropKeyAt = (x: number, y: number) => {
     const el = document.elementFromPoint(x, y);
     const svg = el?.closest('svg.map') as SVGSVGElement | null;
     if (svg) {
       const g = toGrid(svg, x, y);
       const place = placeUnder(layout, g.x, g.y);
-      return place ? exactKey(place.id, exactSpotAt(place, g.x, g.y)) : undefined;
+      const cell = { x: Math.floor(g.x), y: Math.floor(g.y) };
+      // Just past a shelf's end, lined up with it: on the shelf's end square (and a sign the shelf runs further).
+      const past = place && contains(footprint(place), cell) ? undefined : pastEnd(layout, cell);
+      if (place && (!past || past.shelf.id !== place.id)) return exactKey(place.id, exactSpotAt(place, g.x, g.y));
+      if (!past) return undefined;
+      const key = exactKey(past.shelf.id, { u: past.end === 'start' ? 0 : 1, v: 0.5 });
+      droppedPast.current = { key, placeId: past.shelf.id, end: past.end, to: past.to };
+      return key;
     }
     return (el?.closest('[data-drop]') as HTMLElement | null)?.dataset.drop;
   };
@@ -1009,6 +1035,11 @@ export function ShoppingView(props: Props) {
       const key = dropKeyAt(e.clientX, e.clientY);
       const loc = locate(drag.item);
       if (key && !(loc.kind === 'spot' && loc.spot.key === key)) setLocation(drag.item, key);
+      const past = droppedPast.current;
+      if (key && past?.key === key) {
+        props.shelves.notePastEnd({ placeId: past.placeId, end: past.end, to: past.to, item: productFor(drag.item, catalog)?.name ?? drag.item.name, at: Date.now() });
+      }
+      droppedPast.current = undefined;
       setDrag(null);
     },
     onPointerCancel() {
@@ -1245,6 +1276,9 @@ export function ShoppingView(props: Props) {
                 }}
                 onSkip={() => props.where.setDoor(undefined)} />
             )}
+            extend={props.shelves.due[0] && (
+              <ExtendCard due={props.shelves.due[0]} onExtend={() => extendNow(props.shelves.due[0])} onKeep={() => props.shelves.keep(props.shelves.due[0])} />
+            )}
             walls={offerWalls(layout) ? () => setWallsOpen('trip') : undefined}
           />
         )}
@@ -1438,6 +1472,9 @@ export function ShoppingView(props: Props) {
               </div>
               <PlacePanel
                 place={editing}
+                due={props.shelves.due.find((d) => d.placeId === editing.id)}
+                onExtend={(d) => { const snapshot = props.shelves.extend(d); if (snapshot) say(`Extended ${d.by} square${d.by === 1 ? '' : 's'} ${d.way}.`, snapshot); }}
+                onKeep={(d) => props.shelves.keep(d)}
                 onChange={(patch) => props.build.updatePlace(editing.id, patch as Partial<Place>)}
                 usedElsewhere={(catId) => layout.places.find((p) => p.id !== editing.id && p.categories.includes(catId))?.label}
                 categories={catalog.categories}

@@ -1,10 +1,16 @@
 import { footprint } from '../core/geometry';
 import type { Area, Category, Place, Point, Shelf } from '../core/types';
 import { CategoryPicker } from './CategoryPicker';
+import { ExtendCard } from './ExtendCard';
+import type { Extension } from '../core/extend';
 
 /** Editing one shelf or area: label, what's stocked there, which side it's stocked from, fridge or freezer. (Turning, size, position and deleting are on the map.) */
-export function PlacePanel({ place, onChange, usedElsewhere, categories, looks }: {
+export function PlacePanel({ place, onChange, usedElsewhere, categories, looks, due, onExtend, onKeep }: {
   place: Place;
+  /** This shelf seems to run further than the map shows. */
+  due?: Extension;
+  onExtend?: (d: Extension) => void;
+  onKeep?: (d: Extension) => void;
   onChange: (patch: Partial<Shelf> | Partial<Area>) => void;
   usedElsewhere: (categoryId: string) => string | undefined;
   categories: Category[];
@@ -27,6 +33,7 @@ export function PlacePanel({ place, onChange, usedElsewhere, categories, looks }
 
   return (
     <section className="card panel">
+      {due && onExtend && onKeep && <ExtendCard compact due={due} onExtend={() => onExtend(due)} onKeep={() => onKeep(due)} />}
       <label className="field">
         <span>{isShelf ? 'Shelf label (shown on the shelf)' : 'Area label'}</span>
         <input value={place.baseLabel ?? place.label} onChange={(e) => onChange({ label: e.target.value })} placeholder={isShelf ? 'e.g. Pasta or 5A' : 'e.g. Bakery'} />

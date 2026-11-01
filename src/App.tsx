@@ -13,11 +13,12 @@ import { hasOldCategories, migrateCategories } from './core/recategorize';
 import { guessCategory } from './core/guess';
 import { withHoldings } from './core/holdings';
 import { moveOnto, swapAlong } from './core/swap';
+import { endKey, extended, extensionsDue, withReach, type Extension } from './core/extend';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, moveHere, nextLabel, pickUp, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
+import { areaHere, blankStore, moveHere, nextLabel, pickUp, rekeyResized, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle, selectionIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
@@ -32,7 +33,7 @@ import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Clue, GeoPoint, Rect, SectionShape } from './core/types';
+import type { Clue, GeoPoint, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
 import { clampPlace } from './core/geometry';
@@ -606,6 +607,36 @@ export default function App() {
     return !!next;
   }
 
+  // ---- Shelves that run further than the map shows (see extend.ts) ----
+  const extendDue = useMemo(() => extensionsDue(shownLayout, products), [shownLayout, products]);
+  /** Grows a shelf at one end; what's saved on it stays where it is. Returns what Undo restores. */
+  function extendShelf(e: Extension): Snapshot | undefined {
+    const shelf = layout.places.find((p): p is Shelf => p.id === e.placeId && p.kind === 'shelf');
+    if (!shelf) return undefined;
+    const snapshot = snapshotNow();
+    const grown = extended(shelf, e.end, e.by);
+    const rekey = rekeyResized(shelf, grown);
+    replaceLayout({
+      ...layout,
+      places: layout.places.map((p) => (p.id === shelf.id ? grown : p)),
+      reach: (layout.reach ?? []).filter((r) => !(r.placeId === shelf.id && r.end === e.end)),
+    });
+    setProducts((prev) => prev.map((p) => {
+      const k = p.locations?.[layout.id];
+      const nk = k ? rekey(k) : k;
+      return nk !== k ? { ...p, locations: { ...p.locations, [layout.id]: nk! } } : p;
+    }));
+    return snapshot;
+  }
+  /** "Not really": that end isn't asked about again. */
+  function keepShelfLength(e: Extension) {
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? { ...l, keepLength: [...new Set([...(l.keepLength ?? []), endKey(e.placeId, e.end)])] } : l)));
+  }
+  /** Something found just past a shelf's end. */
+  function notePastEnd(r: ShelfReach) {
+    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? withReach(l, r) : l)));
+  }
+
   /** What Undo puts back for a change to the current store. */
   const snapshotNow = (): Snapshot => ({ items, products, layouts });
 
@@ -1071,6 +1102,7 @@ export default function App() {
               return setGen({ door: f, sure: [...(gen.sure ?? []), 'entrance'], locked: gen.locked.filter((id) => id !== 'g-entrance' && id !== 'g-checkout-point') });
             } }}
           undo={undo}
+          shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}
           position={position}

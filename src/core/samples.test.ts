@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
 import { defaultCategories } from './categories';
 import { Floor } from './floor';
+import { extensionsDue } from './extend';
 import { buildModel, regenerate } from './generate';
 import { withHoldings } from './holdings';
 import { locateProduct } from './locate';
@@ -208,6 +209,8 @@ export interface Score {
   extraWalking: number;
   extraPlaced: number;
   cards: number;
+  /** "Should this shelf be longer?" asked of the first-trip map, with nothing to suggest it. */
+  extendAsks: number;
 }
 
 export function scoreSample(s: Sample): Score {
@@ -286,6 +289,7 @@ export function scoreSample(s: Sample): Score {
   return {
     sample: s.name, right, wrong, unplaced, heldBack: s.items.filter((it) => !it.first).length,
     sideClaims, merged, misses, extraWalking, extraPlaced, cards: pendingPlacements(first, firstProducts).length,
+    extendAsks: extensionsDue(first, firstProducts).length + extensionsDue(truth, trueProducts).length,
   };
 }
 
@@ -310,6 +314,9 @@ describe('the sample store layouts, scored', () => {
   it('claims no aisle side nobody gave, and keeps different tables apart', () => {
     expect(total('sideClaims')).toBe(0);
     expect(total('merged')).toBe(0);
+  });
+  it('asks to extend no shelf when nothing suggests it', () => {
+    for (const r of scores) expect(r.extendAsks, r.sample).toBe(0);
   });
   it('walks little further than the best route, for what it could place', () => {
     for (const r of scores) expect(r.extraPlaced).toBeLessThanOrEqual(0.05);
