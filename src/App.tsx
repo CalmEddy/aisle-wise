@@ -20,7 +20,7 @@ import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
 import { hasOldAisles, migrateToShelves } from './core/migrate';
-import { areaHere, blankStore, moveHere, nextLabel, pickUp, rekeyResized, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
+import { areaHere, moveHere, nextLabel, pickUp, rekeyResized, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle, selectionIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
@@ -913,8 +913,8 @@ export default function App() {
     setNotice(`${layout.name} will be picked when you’re here.`);
   }
 
-  function startBlankStore() {
-    const fresh = blankStore(`New store ${layouts.length + 1}`);
+  function startBlankStore(templateId = 'blank', aisles?: number) {
+    const fresh = storeFromTemplate(`New store ${layouts.length + 1}`, templateId, aisles);
     setLayouts((prev) => [...prev, fresh]);
     setActiveId(fresh.id);
     setPos({ layoutId: fresh.id, point: fresh.entrance });

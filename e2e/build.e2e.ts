@@ -18,6 +18,8 @@ async function blankStore(page: Page) {
   await openSheet(page, 'Store');
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'New store' }).click();
+  await page.getByRole('radio', { name: /Blank/ }).click();
+  await page.getByRole('button', { name: 'Create store' }).click();
   await page.locator('.toast .icon').click().catch(() => {});
 }
 
@@ -324,5 +326,24 @@ test('pieces side by side on a wall swap with one tap, or by dragging one onto a
   await tapMap(page, 11, 0);
   await dragMap(page, [11, 0], [2, 0]);
   await expect.poll(xs).toEqual({ milk: 1, meat: 5, cheese: 11 });
+  ok();
+});
+
+test('a new store in the editor starts from a default map too', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page);
+  await page.getByRole('button', { name: 'Build mode' }).click();
+  await openSheet(page, 'Store');
+  await page.locator('.store-settings summary').click();
+  await page.getByRole('button', { name: 'New store' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Start the map' });
+  await sheet.getByRole('radio', { name: /Discount store/ }).click();
+  await sheet.getByRole('button', { name: 'Less Aisles' }).click();
+  await sheet.getByRole('button', { name: 'Create store' }).click();
+  await expect.poll(async () => (await layout(page, 'New store'))?.gen?.template).toBe('discount');
+  const l = await layout(page, 'New store');
+  expect(l.gen.template).toBe('discount');
+  expect(l.aisles).toHaveLength(5);
+  await expect(page.locator('svg.map .aisle-label text').first()).toBeAttached();
   ok();
 });

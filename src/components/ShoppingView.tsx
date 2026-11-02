@@ -15,6 +15,7 @@ import { pastEnd, type Extension } from '../core/extend';
 import type { HereOption } from '../core/here';
 import { onlyFromTemplate } from '../core/templates';
 import { ExtendCard } from './ExtendCard';
+import { TemplatePicker } from './TemplatePicker';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, ShelfReach, Stop, StoreLayout, Temp, Wall } from '../core/types';
@@ -147,7 +148,8 @@ export interface BuildApi {
   addAreaHere: () => { placeId: string; snapshot: Snapshot } | undefined;
   stepTo: (dir: Direction) => void;
   markHere: (which: 'entrance' | 'checkout') => Snapshot;
-  startBlankStore: () => void;
+  /** A new store in the editor, from a default map (or 'blank'). */
+  startBlankStore: (templateId: string, aisles?: number) => void;
   updatePlace: (placeId: string, patch: Partial<Place>) => boolean;
   /** Swaps a piece with the next one along its line; false if they can't swap. */
   swapPlace: (placeId: string, dx: number, dy: number) => boolean;
@@ -190,6 +192,7 @@ const overlapsRect = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w &&
 export function ShoppingView(props: Props) {
   const { layout, floor, catalog, items, setItems, setLocation, setAvailable, position, setPosition, onEditLayout } = props;
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [newStoreOpen, setNewStoreOpen] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
   const [picking, setPicking] = useState<{ productId?: string; item?: ListItem; name: string } | null>(null);
   const [menuFor, setMenuFor] = useState<ListItem | null>(null);
@@ -1589,11 +1592,7 @@ export function ShoppingView(props: Props) {
               onWalls={() => setWallsOpen('settings')}
               onPlaceBlock={(ref) => { setPlaceAsked(ref); setSheetOpen(false); }}
               problems={problems}
-              onNewStore={() => {
-                props.build.startBlankStore();
-                setEditingId(undefined);
-                setNote({ kind: 'message', text: 'New blank store started. Tap “I’m at the entrance” where you came in.' });
-              }}
+              onNewStore={() => setNewStoreOpen(true)}
               onPickPlace={(id) => { setToolState('walk'); setEditingId(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
               onUndoable={(text, snapshot) => setNote({ kind: 'message', text, snapshot })}
             />
@@ -1650,6 +1649,13 @@ export function ShoppingView(props: Props) {
           onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
         />
+      )}
+      {newStoreOpen && (
+        <TemplatePicker name="the new store" onClose={() => setNewStoreOpen(false)} onCreate={(id, aisles) => {
+          props.build.startBlankStore(id, aisles);
+          setEditingId(undefined);
+          setNote({ kind: 'message', text: id === 'blank' ? 'New blank store started. Tap “I’m at the entrance” where you came in.' : 'New store started from a default map: dashed parts are guesses until you say where things are.' });
+        }} />
       )}
       {wallsOpen && (
         <DeptWallsSheet
