@@ -30,6 +30,8 @@ const EXTEND_REACH = 6;
 
 const newId = () => Math.random().toString(36).slice(2, 8);
 const runsUp = (a: AisleLabel) => a.h >= a.w;
+/** Along a wall, or a department: stretched, not carried on as an aisle side or turned. */
+const onWall = (s: Shelf) => s.back !== undefined || /^g-(wall|dept)-/.test(s.id);
 const word = (s: Shelf, dir: number) => (s.orientation === 'vertical' ? (dir < 0 ? 'up' : 'down') : (dir < 0 ? 'left' : 'right'));
 
 /** An aisle whose line runs through `p` beyond its end: its walkway and the shelf lines either side. */
@@ -65,7 +67,7 @@ export function hereOptions(l: StoreLayout, p: Point): HereOption[] {
   if (other) out.push({ kind: 'on', placeId: other.id, label: other.label || 'The shelf opposite' });
   if (area) out.push({ kind: 'on', placeId: area.id, label: area.label || 'This area' });
   if (on || area) {
-    if (on) out.push({ kind: 'turn', shelfId: on.id, label: `Turn ${on.label || 'the shelf'} ${on.orientation === 'vertical' ? '↔' : '↕'}` });
+    if (on && !onWall(on)) out.push({ kind: 'turn', shelfId: on.id, label: `Turn ${on.label || 'the shelf'} ${on.orientation === 'vertical' ? '↔' : '↕'}` });
     return out;
   }
   // Open floor.
@@ -75,9 +77,11 @@ export function hereOptions(l: StoreLayout, p: Point): HereOption[] {
     const cross = up ? p.x : p.y;
     const name = line.a.label || 'the aisle';
     const sideName = (s: 'L' | 'R') => (up ? (s === 'L' ? 'left' : 'right') : (s === 'L' ? 'top' : 'bottom'));
-    const sides: ('L' | 'R')[] = cross === line.lo ? ['L'] : cross === line.hi ? ['R'] : ['L', 'R'];
+    // The side you're next to first.
+    const sides: ('L' | 'R')[] = cross === line.lo ? ['L'] : cross === line.hi ? ['R'] : cross - line.lo > line.hi - cross ? ['R', 'L'] : ['L', 'R'];
     for (const side of sides) {
       const flank = flankOf(l, line.a, side, line.dir);
+      if (flank && onWall(flank)) continue; // a department along the wall: stretched instead
       out.push({ kind: 'continue', aisleId: line.a.id, side, label: `${name} carries on here · ${flank?.label || sideName(side)}` });
     }
   }
@@ -169,6 +173,7 @@ function continueAisle(l: StoreLayout, p: Point, o: Extract<HereOption, { kind: 
   for (const side of ['L', 'R'] as const) {
     if (side !== o.side && !freeRun(cols[side], start)) continue; // the other side only if it fits
     const flank = flankOf(l, a, side, line.dir);
+    if (side !== o.side && flank && onWall(flank)) continue; // a department along the wall isn't copied
     const id = gen && flank?.id.startsWith('g-') ? `${flank.id}~c${newId()}` : `s-${newId()}`;
     made.push({
       kind: 'shelf', id, label: flank?.label ?? `${a.label.replace(/^\s*aisle\s*/i, '')}${side}`, orientation, length: len,

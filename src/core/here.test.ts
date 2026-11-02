@@ -20,8 +20,9 @@ describe('“Where I’m standing”', () => {
 
   it('past the end of an aisle, in line with its right side: carry the aisle on, stretch 3R, or something new', () => {
     expect(kinds(hereOptions(store, { x: 8, y: 15 }))).toEqual(['Aisle 3 carries on here · 3R', 'Stretch 3R down 4', 'New shelf ↕', 'New shelf ↔', 'New area']);
-    // In the walkway's line: either side.
+    // In the walkway's line: either side, the one you're next to first.
     expect(kinds(hereOptions(store, { x: 6, y: 15 })).slice(0, 2)).toEqual(['Aisle 3 carries on here · 3L', 'Aisle 3 carries on here · 3R']);
+    expect(kinds(hereOptions(store, { x: 7, y: 15 })).slice(0, 2)).toEqual(['Aisle 3 carries on here · 3R', 'Aisle 3 carries on here · 3L']);
   });
 
   it('carrying the aisle on builds both sides past the walkway, the item on its side, and the aisle runs on', () => {
@@ -64,5 +65,13 @@ describe('carrying an aisle on in a built map', () => {
     const shelf = four.places.find((x) => x.id === 'g-shelf-1-L')!;
     expect(moved.x).toBe(shelf.x); // still in line with 1L
     expect(four.aisles!.find((a) => a.label === 'Aisle 1')!.h).toBeGreaterThan(a1.h); // the aisle still runs on
+  });
+
+  it('a department along the wall beside an aisle is stretched, not carried on as an aisle side or turned', () => {
+    const l: StoreLayout = { ...store, places: [v('l', '3L', 5), { ...v('g-dept-produce', 'Produce', 8), back: 1 }] };
+    expect(kinds(hereOptions(l, { x: 7, y: 15 })).slice(0, 2)).toEqual(['Aisle 3 carries on here · 3L', 'Stretch Produce down 4']);
+    const built = buildHere(l, { x: 6, y: 15 }, hereOptions(l, { x: 6, y: 15 })[0])!;
+    expect(built.layout.places.slice(2).map((p) => p.label)).toEqual(['3L']); // no short "Produce" piece
+    expect(kinds(hereOptions(l, { x: 8, y: 5 }))).toEqual(['Produce']);
   });
 });
