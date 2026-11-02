@@ -15,6 +15,7 @@ import { withHoldings } from './core/holdings';
 import { moveOnto, swapAlong } from './core/swap';
 import { endKey, extended, extensionsDue, withReach, type Extension } from './core/extend';
 import { buildHere, hereOptions, type HereOption } from './core/here';
+import { storeFromTemplate, storeModel, templateKinds } from './core/templates';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
@@ -316,7 +317,7 @@ export default function App() {
     if (!layout.gen && !(hasAnswers && layout.places.length === 0)) return;
     const gen = layout.gen ?? { enabled: true, entrance: 'left' as const, locked: [] };
     if (!gen.enabled) return;
-    const model = buildModel(products, layout.id);
+    const model = storeModel(layout, products);
     if (modelKey(model, { ...gen, labels: layout.labels }) === gen.key) return;
     const after = regenerate({ ...layout, gen }, model);
     // Outline what changed, until the next trip (or it's tapped in Edit map) – but not on a store's
@@ -485,7 +486,7 @@ export default function App() {
   }
   /** The blocks of shelving on this store's generated map, and which way each runs (for Store settings). */
   const storeBlocks = useMemo(() => {
-    const m = buildModel(products, layout.id);
+    const m = storeModel(layout, products);
     const gen = layout.gen;
     const out: { ref: string; name: string; dir: 'vertical' | 'horizontal'; group: boolean; shape?: SectionShape }[] = [];
     for (const g of gen?.aisleGroups ?? []) out.push({ ref: `aisles:${g.from}`, name: `Aisles ${g.from}–${g.to}`, dir: gen?.directions?.[`aisles:${g.from}`] ?? 'horizontal', group: true });
@@ -494,7 +495,7 @@ export default function App() {
   }, [products, layout.id, layout.gen]);
   /** Which arrangement settings this store's map has (for Store settings). */
   const layoutHas = useMemo(() => {
-    const m = buildModel(products, layout.id);
+    const m = storeModel(layout, products);
     const back = unplacedBack(m).map((d) => DEPTS.find((x) => x.id === d)!.name);
     const has = relevant(m);
     return { aisles: has.includes('aisleOne'), produce: has.includes('produce') && m.sections.some((x) => x.dept === 'produce' && !x.wall), backWall: back.length >= 2 ? [back[0], back[back.length - 1]] as [string, string] : undefined };
@@ -647,6 +648,7 @@ export default function App() {
 
   // ---- "Where was it?" → where I'm standing ----
   /** What can be built or chosen where the shopper is standing. */
+  const tplKinds = useMemo(() => templateKinds(layout, products), [layout, products]);
   const hereChoices = useMemo(() => hereOptions(layout, position), [layout, position]);
   /** Builds the choice where the shopper stands and saves the item there. Returns what Undo restores and what was done. */
   function placeHere(productId: string, o: HereOption): { snapshot: Snapshot; note: string } | undefined {
@@ -897,8 +899,8 @@ export default function App() {
   activeIdRef.current = activeId;
 
   /** A new, empty store where you're standing (it learns its layout as you shop). */
-  function newStoreHere(name: string) {
-    const fresh = { ...blankStore(name), ...(here && { geo: here }) };
+  function newStoreHere(name: string, templateId = 'blank', aisles?: number) {
+    const fresh = { ...storeFromTemplate(name, templateId, aisles), ...(here && { geo: here }) };
     setLayouts((prev) => [...prev, fresh]);
     setActiveId(fresh.id);
     setPos({ layoutId: fresh.id, point: fresh.entrance });
@@ -1133,6 +1135,7 @@ export default function App() {
           undo={undo}
           shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
           here={{ options: hereChoices, place: placeHere }}
+          templateKinds={tplKinds}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}
           position={position}

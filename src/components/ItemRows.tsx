@@ -21,9 +21,11 @@ export function overKey(drag: Drag | null, key: string) {
  * order. Each spot is a drop target, so dropping on an item puts the
  * dragged item right next to it.
  */
-export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName }: {
+export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName, likely }: {
   visit: { number: number; stops: Stop[] };
   next?: boolean;
+  /** Placed here only by the store's default map (a guess until said). */
+  likely?: boolean;
   drag: Drag | null;
   /** The item rows for a stop; `sub` gives each a second line (used when a stop is shown as one line). */
   rows: (stop: Stop, sub?: (item: ListItem) => string | undefined) => React.ReactNode;
@@ -43,7 +45,7 @@ export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionNam
   const colors = next ? [] : visit.stops.map((st) => colorOf?.(st));
   const oneColor = colors.length > 0 && colors.every((c) => c && c === colors[0]) ? colors[0] : undefined;
   const tint = (c: string | undefined) => (c ? ({ '--cat': c } as React.CSSProperties) : undefined);
-  const where = `${first.placeLabel || 'Unnamed'}${first.detail ? ` · ${first.detail}` : sectionName?.(first) && visit.stops.length > 1 ? ` · ${sectionName(first)}` : ''}`;
+  const where = `${first.placeLabel || 'Unnamed'}${likely ? ' · likely' : ''}${first.detail ? ` · ${first.detail}` : sectionName?.(first) && visit.stops.length > 1 ? ` · ${sectionName(first)}` : ''}`;
   // One item at one spot: a single line, with where it is under the name.
   if (count === 1) {
     return (
@@ -69,6 +71,7 @@ export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionNam
         {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
         <button className="goto" onClick={() => onGoTo(first)} aria-label={`I'm at ${first.placeLabel || 'this place'}`}>
           {next ? <h2>{first.placeLabel || 'Unnamed'}</h2> : <h3>{first.placeLabel || 'Unnamed'}</h3>}
+          {likely && <span className="muted small likely"> likely</span>}
         </button>
         {count > 1 && <span className="muted small count-pill">{count} items</span>}
       </div>

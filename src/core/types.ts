@@ -127,6 +127,10 @@ export interface GeneratedMap extends Arrangement {
   entrance: 'left' | 'right';
   /** Generated parts (by id) the shopper changed or deleted: never regenerated. */
   locked: string[];
+  /** The default store map it started from (see storeTemplates.ts), if any. */
+  template?: string;
+  /** Aisles to draw at least (1 to this), as the shopper set it when choosing the template. */
+  aisleCount?: number;
   /**
    * Where the map had each changed part when the shopper changed it. When the map is rebuilt and the part's place
    * moves (an aisle added beside it, the store grows), the changed part moves by as much, keeping the changes.

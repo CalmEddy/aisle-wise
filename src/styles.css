@@ -970,3 +970,7 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .holds-list li { display: flex; align-items: center; gap: 8px; }
 .holds-list li > span:first-child { flex: 1; min-width: 0; }
 .btn.small { padding: 4px 10px; font-size: 0.85rem; }
+/* New store: what it starts as. */
+.template-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.template-preview { max-height: 40vh; overflow: hidden; }
+.visit .likely { margin-left: 4px; }

@@ -1,3 +1,4 @@
+import { templateById } from '../data/storeTemplates';
 import { acrossRect, aisleNumber, DEPTS, findAisle, guessDept, islandKey, sectionNumber } from './clues';
 import { formatLabel, shelfOffsets, type LabelStyle } from './labels';
 import { footprint } from './geometry';
@@ -110,17 +111,22 @@ const POS_ORDER: Record<AislePos, number> = { front: 0, middle: 1, back: 2 };
 const PART_ALONG: Record<WallPart, number> = { front: 0.15, left: 0.15, middle: 0.5, back: 0.85, right: 0.85 };
 
 /** What the answers for one store say about it. */
-export function buildModel(products: Product[], layoutId: string): StoreModel {
+/** A store template's seed, as a stand-in item (see templates.ts): shapes the map, but doesn't count as heard. */
+export const SEED_PREFIX = 'tpl:';
+
+export function buildModel(products: Product[], layoutId: string, opts: { aisleCount?: number } = {}): StoreModel {
   const aisles = new Map<string, AisleModel>();
   const depts = new Set<Dept>();
   const sections = new Map<string, SectionModel & { walls: Wall[]; alongs: number[]; temps: Temp[] }>();
   const islands = new Map<string, IslandModel>();
   const blocks = new Map<string, BlockModel>();
   let checkout = false;
+  let seeded = false;
   const aisle = (label: string) => {
     const key = label.trim().toUpperCase();
     let a = aisles.get(key);
-    if (!a) aisles.set(key, (a = { label: key, seen: true, freezer: false, sides: { L: [], R: [] }, either: [] }));
+    if (!a) aisles.set(key, (a = { label: key, seen: !seeded, freezer: false, sides: { L: [], R: [] }, either: [] }));
+    else if (!seeded) a.seen = true;
     return a;
   };
   const section = (key: string, dept?: Dept) => {
@@ -134,6 +140,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
     // (A cleared answer still shapes the map: see mapClues.)
     const c: Clue | undefined = p.clues?.[layoutId] ?? p.mapClues?.[layoutId];
     if (!c) continue;
+    seeded = p.id.startsWith(SEED_PREFIX);
     switch (c.kind) {
       case 'aisle':
       case 'freezer': {
@@ -154,11 +161,12 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
       case 'shelf': {
         const key = c.section.toUpperCase();
         let b = blocks.get(key);
-        if (!b) blocks.set(key, (b = { section: key, seen: true, max: 1, shelves: {}, seenShelves: [], count: 0 }));
+        if (!b) blocks.set(key, (b = { section: key, seen: !seeded, max: 1, shelves: {}, seenShelves: [], count: 0 }));
+        else if (!seeded) b.seen = true;
         b.count++;
         if (c.shelf) {
           b.max = Math.max(b.max, c.shelf);
-          if (!b.seenShelves.includes(c.shelf)) b.seenShelves.push(c.shelf);
+          if (!seeded && !b.seenShelves.includes(c.shelf)) b.seenShelves.push(c.shelf);
           if (p.categoryId && !(b.shelves[c.shelf] ?? []).includes(p.categoryId)) b.shelves[c.shelf] = [...(b.shelves[c.shelf] ?? []), p.categoryId];
         }
         if (c.temp) b.temp = c.temp;
@@ -197,7 +205,7 @@ export function buildModel(products: Product[], layoutId: string): StoreModel {
   }
   // Every aisle from 1 to the highest heard; letters (12A, 12B) stand in for their number.
   const seen = [...aisles.values()];
-  const max = Math.max(0, ...seen.map((a) => Math.floor(aisleNumber(a.label))).filter((n) => !Number.isNaN(n)));
+  const max = Math.max(opts.aisleCount ?? 0, ...seen.map((a) => Math.floor(aisleNumber(a.label))).filter((n) => !Number.isNaN(n)));
   const all: AisleModel[] = [];
   for (let n = 1; n <= max; n++) {
     const these = seen.filter((a) => Math.floor(aisleNumber(a.label)) === n).sort((a, b) => aisleNumber(a.label) - aisleNumber(b.label));
@@ -649,7 +657,11 @@ export function regenerate(layout: StoreLayout, model: StoreModel): StoreLayout 
   const keptAisles = (layout.aisles ?? []).filter((a) => !isGenerated(a.id) || locked.has(a.id));
   // Aisles the shopper has given a number to elsewhere (e.g. the front half of a cut aisle) aren't generated again.
   const elsewhere = (label: string) => keptAisles.some((k) => k.id !== `g-aisle-${label}` && findAisle({ ...layout, aisles: [k] }, label));
-  const parts = generateParts({ ...model, aisles: model.aisles.filter((a) => !elsewhere(a.label)) }, { ...gen, labels: layout.labels });
+  // A default store map's wall order, for the departments still on the map (one answered elsewhere drops out).
+  const tWalls = templateById(gen.template)?.gen.wallOrder;
+  const keys = new Set(model.sections.map((x) => x.key));
+  const wallOrder = gen.wallOrder ?? (tWalls && { left: tWalls.left.filter((k) => keys.has(k)), back: tWalls.back.filter((k) => keys.has(k)), right: tWalls.right.filter((k) => keys.has(k)) });
+  const parts = generateParts({ ...model, aisles: model.aisles.filter((a) => !elsewhere(a.label)) }, { ...gen, ...(wallOrder && { wallOrder }), labels: layout.labels });
   // Changed parts move with the map: by as much as the map moved them since they were changed (an aisle added
   // beside them, the walls further out), keeping the changes. One changed before this was kept (no origin) and now
   // in the way of the rebuilt map goes where the map now has it.

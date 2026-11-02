@@ -38,6 +38,8 @@ export async function newStore(page: Page, name: string) {
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill(name);
   await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('radio', { name: /Blank/ }).click();
+  await page.getByRole('button', { name: 'Create store' }).click();
 }
 
 /** The text of the toasts showing. */

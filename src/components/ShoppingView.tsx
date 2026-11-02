@@ -13,6 +13,7 @@ import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/g
 import { touchingInLine } from '../core/swap';
 import { pastEnd, type Extension } from '../core/extend';
 import type { HereOption } from '../core/here';
+import { onlyFromTemplate } from '../core/templates';
 import { ExtendCard } from './ExtendCard';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
@@ -74,6 +75,8 @@ interface Props {
     /** Builds the choice and saves the item there; returns what Undo restores and what was done. */
     place: (productId: string, o: HereOption) => { snapshot: Snapshot; note: string } | undefined;
   };
+  /** Kinds placed on the map only by the store's default map (shown as "likely"). */
+  templateKinds: ReadonlySet<string>;
   /** Shelves that seem to run further than the map shows. */
   shelves: {
     due: Extension[];
@@ -792,6 +795,14 @@ export function ShoppingView(props: Props) {
       setWhereBarFor(item);
     }
   }
+  /** Every item at a stop placed there only by the store's default map. */
+  function likelyVisit(v: { stops: Stop[] }) {
+    if (!props.templateKinds.size) return false;
+    return v.stops.every((st) => st.items.every((i) => {
+      const p = productFor(i, catalog);
+      return !p?.locations?.[layout.id] && !p?.clues?.[layout.id] && onlyFromTemplate(props.templateKinds, p?.categoryId);
+    }));
+  }
   /** No place of its own here (none saved or answered): worth a "Where was it?", even if the map has its kind. */
   function needsPlace(item: ListItem) {
     return isUnknownHere(item) || !!knownByCategory(item);
@@ -1183,11 +1194,11 @@ export function ShoppingView(props: Props) {
 
         {grouped && nextVisit && (
           <div className="card route-list">
-          <VisitCard visit={nextVisit} next drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
+          <VisitCard visit={nextVisit} next likely={likelyVisit(nextVisit)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
             <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
           )} />
         {laterVisits.map((v) => (
-          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
+          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} likely={likelyVisit(v)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
             <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
           )} />
         ))}
