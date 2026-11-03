@@ -1,4 +1,5 @@
 import type { Catalog } from './catalog';
+import { productCategoryIds } from './productCategories';
 import { homesOf, topOf } from './taxonomy';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
@@ -69,13 +70,14 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
     if (spot) return { kind: 'spot', spot, product, exact: true };
     return { kind: 'clue', clue, product };
   }
-  const cat = product.categoryId;
-  // (Testing aid) its place here was cleared: not placed until it's answered again.
-  if (product.clearedAt?.includes(layout.id) || product.mapClues?.[layout.id]) return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
+  const cats = productCategoryIds(product);
+  // Place cleared / unknown here: not placed by category until answered again.
+  if (product.clearedAt?.includes(layout.id) || product.mapClues?.[layout.id]) {
+    return { kind: 'unknown', product };
+  }
   // Something of the same kind was said to be somewhere here: this is most likely beside it.
   // (Not a table or stand: those are displays of a few things, not where the kind lives.)
   // (Only beside one in a place where the kind lives: not a melon on this week's table, or one odd item.)
-  const homes = cat ? new Set(homesOf(layout.places, cat).map((p) => p.id)) : new Set<string>();
   /** Where another item was said or saved to be here (not this week's table or stand). */
   const spotOf = (other: Product) => {
     const key = other.locations?.[layout.id] ?? (() => {
@@ -86,28 +88,30 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
     const spot = key ? resolveSpot(key, layout, catalog) : undefined;
     return spot && !layout.places.find((pl) => pl.id === spot.placeId)?.display ? spot : undefined;
   };
-  if (cat) {
+  for (const cat of cats) {
+    const homes = new Set(homesOf(layout.places, cat).map((p) => p.id));
+    const sameKind = (other: Product) => productCategoryIds(other).includes(cat);
     for (const other of catalog.products) {
-      if (other.id === product.id || other.categoryId !== cat) continue;
+      if (other.id === product.id || !sameKind(other)) continue;
       const spot = spotOf(other);
       if (spot && (!homes.size || homes.has(spot.placeId))) return { kind: 'spot', spot, product, exact: false };
     }
-  }
-  // Not a table or stand: those are offered (📍), never assumed.
-  const place = cat ? homesOf(layout.places, cat)[0] : undefined;
-  // Its own kind has no section there (yogurt in a long Dairy wall): beside what's known there of its category
-  // (the milk), not in the category's general share.
-  if (place && !place.categories.includes(cat!)) {
-    const top = topOf(cat!);
-    for (const other of catalog.products) {
-      if (other.id === product.id || !other.categoryId || topOf(other.categoryId) !== top) continue;
-      const spot = spotOf(other);
-      if (spot?.placeId === place.id) return { kind: 'spot', spot, product, exact: false };
+    // Not a table or stand: those are offered (📍), never assumed.
+    const place = homesOf(layout.places, cat)[0];
+    // Its own kind has no section there (yogurt in a long Dairy wall): beside what's known there of its category
+    // (the milk), not in the category's general share.
+    if (place && !place.categories.includes(cat)) {
+      const top = topOf(cat);
+      for (const other of catalog.products) {
+        if (other.id === product.id || !productCategoryIds(other).some((id) => topOf(id) === top)) continue;
+        const spot = spotOf(other);
+        if (spot?.placeId === place.id) return { kind: 'spot', spot, product, exact: false };
+      }
     }
+    const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat) ? cat : topOf(cat)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
+    if (spot) return { kind: 'spot', spot, product, exact: false };
   }
-  const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat!) ? cat : topOf(cat!)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
-  if (spot) return { kind: 'spot', spot, product, exact: false };
-  return cat ? { kind: 'guess', categoryId: cat, product } : { kind: 'unknown', product };
+  return cats[0] ? { kind: 'guess', categoryId: cats[0], product } : { kind: 'unknown', product };
 }
 
 /** The master-list item for a list entry. */

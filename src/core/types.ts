@@ -261,8 +261,13 @@ export interface Category {
 export interface Product {
   id: string;
   name: string;
-  /** Its subcategory when known ("produce_fruits"), else a category ("produce"). */
+  /** Its subcategory when known ("produce_fruits"), else a category ("produce"). Primary when several. */
   categoryId?: string;
+  /**
+   * Extra categories beyond `categoryId` (e.g. peanut butter under Nut Butters
+   * and also Spreads / Condiments). Order is display order after the primary.
+   */
+  extraCategoryIds?: string[];
   /** Other names it goes by ("Scallions" for Green onions). */
   aliases?: string[];
   /** How common (1 = most): orders suggestions. */
@@ -284,7 +289,10 @@ export interface Product {
    * but the item is treated as not placed (it's asked about again). A new answer takes over.
    */
   mapClues?: Record<string, Clue>;
-  /** (Testing aid; to be removed.) Stores where this item's place was cleared: not placed there, even by its kind, until answered again. */
+  /**
+   * Stores where this item's place was cleared / marked unknown: not placed
+   * there by category until a place or aisle answer is set again.
+   */
   clearedAt?: string[];
 }
 

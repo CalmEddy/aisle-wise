@@ -515,6 +515,21 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .item-editor .field { margin: 6px 0; }
 .item-editor .other-stores summary { cursor: pointer; padding: 4px 0; }
 .item-editor .editor-row { display: flex; gap: 8px; margin-top: 8px; }
+.categories-editor { display: flex; flex-direction: column; gap: 8px; }
+.cat-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 0.9rem;
+}
+.cat-chip.primary { border-color: var(--accent); background: var(--accent-soft); }
+.cat-chip .cat-chip-name { max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-chip .icon { width: 1.6rem; height: 1.6rem; font-size: 1rem; }
+.subcat-quick { display: flex; flex-direction: column; gap: 4px; }
+.subcat-chips { flex-wrap: wrap; }
+.subcat-chips .chip { font-size: 0.8rem; padding: 6px 10px; }
+.categories-editor .add-cat { align-self: flex-start; font-size: 0.9rem; }
+.cat-options .cat-sibling { font-weight: 600; }
+.location-row { flex-wrap: wrap; }
 .items-view .group.folded { padding-top: 8px; padding-bottom: 8px; margin-bottom: 6px; }
 .items-view .group.folded h3 { margin: 0; }
 
