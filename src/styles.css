@@ -974,3 +974,8 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .template-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .template-preview { max-height: 40vh; overflow: hidden; }
 .visit .likely { margin-left: 4px; }
+/* Long place names: the item's name gets the room; the line under it stays one line, cut short with "…". */
+.row label, .row .name { min-width: 0; }
+.row .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon.clear-where { width: 32px; min-width: 32px; height: 32px; font-size: 1rem; padding: 0; }
+.route-list .visit.single .goto.single-num { flex: none; }
