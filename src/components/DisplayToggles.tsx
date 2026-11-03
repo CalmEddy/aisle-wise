@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Display, ListSort } from '../display';
-import { resolveListSort } from '../display';
+import type { Display, ItemsSort, ListSort } from '../display';
+import { resolveItemsSort, resolveListSort } from '../display';
 
 /** Display settings that are on/off switches. */
 type Switch = { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display];
@@ -12,6 +12,7 @@ const LABELS: Record<Switch, string> = {
   groupList: 'Group by section',
   listCategories: 'Categories in list',
   listGroupByCategory: 'Group by category',
+  itemsGroupByCategory: 'Group by category',
   listQty: 'Quantity stepper',
   listLocation: 'Location under name',
   listColors: 'Colors in list',
@@ -29,6 +30,7 @@ const SHORT: Record<Switch, string> = {
   groupList: '☰',
   listCategories: '🏷',
   listGroupByCategory: '☰',
+  itemsGroupByCategory: '☰',
   listQty: '×',
   listLocation: '📍',
   mapColors: '🎨',
@@ -72,6 +74,36 @@ export function ListSortToggle({ display, setDisplay }: {
       aria-label={`${shown.label} (tap for ${next.label})`}
       title={`${shown.label} · tap to change`}
       onClick={() => setDisplay((d) => ({ ...d, listSort: next.id }))}
+    >
+      {shown.short}
+    </button>
+  );
+}
+
+const ITEM_SORTS: { id: ItemsSort; short: string; label: string }[] = [
+  { id: 'category', short: '🏷︎', label: 'Sort by category' },
+  { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
+];
+
+/**
+ * Cycles Grocery Items catalog order: category → A–Z.
+ * Same toggle chrome as Shop; nearest is omitted (no shopper position).
+ */
+export function ItemsSortToggle({ display, setDisplay }: {
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+}) {
+  const current = resolveItemsSort(display);
+  const i = ITEM_SORTS.findIndex((s) => s.id === current);
+  const next = ITEM_SORTS[(i + 1) % ITEM_SORTS.length]!;
+  const shown = ITEM_SORTS[i >= 0 ? i : 0]!;
+  return (
+    <button
+      type="button"
+      className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
+      aria-label={`${shown.label} (tap for ${next.label})`}
+      title={`${shown.label} · tap to change`}
+      onClick={() => setDisplay((d) => ({ ...d, itemsSort: next.id }))}
     >
       {shown.short}
     </button>
