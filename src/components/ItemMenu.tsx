@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import type { ListItem } from '../core/types';
+import type { ListItem, ShoppingList } from '../core/types';
 import { CategoryPicker } from './CategoryPicker';
 
-export function ItemMenu({ item, where, storeName, categoryId, categories, looks, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onCancel, pinned, onPin, onAmount }: {
+export function ItemMenu({ item, where, storeName, categoryId, categories, looks, lists, currentList, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onMoveTo, onCopyTo, onCancel, pinned, onPin, onAmount }: {
   item: ListItem;
   /** Changes how many, or the note. */
   onAmount: (patch: Pick<ListItem, 'qty' | 'note'>) => void;
@@ -11,12 +11,17 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
   categoryId?: string;
   categories: { id: string; name: string }[];
   looks: Map<string, { color: string; icon: string }>;
+  /** Other lists to move/copy onto (excludes the item's current list). */
+  lists: ShoppingList[];
+  currentList: string;
   onCategory: (id: string | undefined) => void;
   onChangePlace: () => void;
   /** Say where it is in plain words (aisle, department…). */
   onWhere: () => void;
   onNotAvailable: () => void;
   onRemove: () => void;
+  onMoveTo: (listId: string) => void;
+  onCopyTo: (listId: string) => void;
   onCancel: () => void;
   /** Pulsing circle on the map for this item. */
   pinned: boolean;
@@ -24,6 +29,8 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
 }) {
   const qty = item.qty ?? 1;
   const [note, setNote] = useState(item.note ?? '');
+  const [transfer, setTransfer] = useState<'move' | 'copy'>();
+  const others = lists.filter((l) => l.id !== currentList);
   const saveNote = () => {
     const clean = note.trim();
     if (clean !== (item.note ?? '')) onAmount({ note: clean || undefined });
@@ -65,6 +72,23 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
         <button className="pick" onClick={onChangePlace}>📍 Change place on the map</button>
         <button className="pick" onClick={onWhere}>🏷 Aisle / department…</button>
         <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
+        {others.length > 0 && !transfer && (
+          <>
+            <button className="pick" onClick={() => setTransfer('move')}>↗ Move to another list…</button>
+            <button className="pick" onClick={() => setTransfer('copy')}>⧉ Copy to another list…</button>
+          </>
+        )}
+        {transfer && (
+          <div className="transfer-lists" role="group" aria-label={transfer === 'move' ? 'Move to list' : 'Copy to list'}>
+            <p className="muted small">{transfer === 'move' ? 'Move to:' : 'Copy to:'}</p>
+            {others.map((l) => (
+              <button key={l.id} className="pick" onClick={() => (transfer === 'move' ? onMoveTo(l.id) : onCopyTo(l.id))}>
+                {l.name}
+              </button>
+            ))}
+            <button className="pick" onClick={() => setTransfer(undefined)}>Cancel</button>
+          </div>
+        )}
         <button className="pick danger" onClick={onRemove}>Remove from list</button>
         <div className="sheet-actions">
           <span style={{ flex: 1 }} />

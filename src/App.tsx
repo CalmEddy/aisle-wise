@@ -37,7 +37,10 @@ import {
 } from './core/share';
 import type { Clue, GeoPoint, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
-import { combineLists, defaultLists, itemsOn, listOf, removeList, updateList } from './core/lists';
+import {
+  clearList, combineLists, copyItem, copyListName, defaultLists, duplicateList, itemsOn, listOf,
+  moveItem, moveListOrder, removeList, updateList, type ClearMode,
+} from './core/lists';
 import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
@@ -69,6 +72,10 @@ export interface Snapshot {
   items: ListItem[];
   products: Product[];
   layouts?: StoreLayout[];
+  /** When set, undo restores every list's items (not just the current list). */
+  allItems?: ListItem[];
+  lists?: ShoppingList[];
+  activeList?: string;
 }
 
 /** What happened when something was picked up in build mode. */
@@ -287,8 +294,11 @@ export default function App() {
 
   function undo(snapshot: Snapshot) {
     setProducts(() => snapshot.products);
-    setItems(() => snapshot.items);
+    if (snapshot.allItems) setAllItems(() => snapshot.allItems!);
+    else setItems(() => snapshot.items);
     if (snapshot.layouts) setLayouts(() => snapshot.layouts!);
+    if (snapshot.lists) setLists(() => snapshot.lists!);
+    if (snapshot.activeList !== undefined) setActiveListId(snapshot.activeList);
   }
 
   // ---- Build mode: grow the map from where things are picked up ----
@@ -971,10 +981,21 @@ export default function App() {
     return m;
   }, [allItems]);
 
-  function createList(name: string) {
+  const listDoneCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of allItems) if (i.done) m.set(listOf(i), (m.get(listOf(i)) ?? 0) + 1);
+    return m;
+  }, [allItems]);
+
+  const listsSnapshot = (): Snapshot => ({
+    items, products, layouts, allItems, lists, activeList: listId,
+  });
+
+  /** Creates a list without switching to it. */
+  function createList(name: string): string {
     const id = `l-${newId()}`;
     setLists((prev) => [...(prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev]), { id, name }]);
-    setActiveListId(id);
+    return id;
   }
 
   function renameList(id: string, name: string) {
@@ -985,11 +1006,37 @@ export default function App() {
   }
 
   /** Deletes a list and its items (not the main list). */
-  function deleteList(id: string) {
-    if (id === MAIN_LIST) return;
+  function deleteList(id: string): Snapshot | undefined {
+    if (id === MAIN_LIST) return undefined;
+    const snapshot = listsSnapshot();
     setLists((prev) => prev.filter((l) => l.id !== id));
     setAllItems((all) => removeList(all, id));
     if (listId === id) setActiveListId(MAIN_LIST);
+    return snapshot;
+  }
+
+  function duplicateOneList(id: string): { id: string; name: string; snapshot: Snapshot } | undefined {
+    const source = lists.find((l) => l.id === id);
+    if (!source) return undefined;
+    const snapshot = listsSnapshot();
+    const name = copyListName(source.name, lists.map((l) => l.name));
+    const r = duplicateList(allItems, lists, id, name);
+    setLists(() => r.lists);
+    setAllItems(() => r.items);
+    return { id: r.id, name, snapshot };
+  }
+
+  function clearOneList(id: string, mode: ClearMode): Snapshot {
+    const snapshot = listsSnapshot();
+    setAllItems((all) => clearList(all, id, mode));
+    return snapshot;
+  }
+
+  function reorderList(id: string, dir: -1 | 1) {
+    setLists((prev) => {
+      const base = prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev];
+      return moveListOrder(base, id, dir);
+    });
   }
 
   /** Copies what's still to buy on other lists onto this one. Returns what Undo restores and the counts. */
@@ -998,6 +1045,84 @@ export default function App() {
     const r = combineLists(allItems, listId, sources, catalog);
     setAllItems(() => r.items);
     return { added: r.added, skipped: r.skipped, snapshot };
+  }
+
+  function moveItemTo(itemId: string, toList: string): { snapshot: Snapshot; moved: boolean; skipped: boolean } {
+    const snapshot = listsSnapshot();
+    const r = moveItem(allItems, itemId, toList, catalog);
+    if (r.moved) setAllItems(() => r.items);
+    return { snapshot, moved: r.moved, skipped: r.skipped };
+  }
+
+  function copyItemTo(itemId: string, toList: string): { snapshot: Snapshot; copied: boolean; skipped: boolean } {
+    const snapshot = listsSnapshot();
+    const r = copyItem(allItems, itemId, toList, catalog);
+    if (r.copied) setAllItems(() => r.items);
+    return { snapshot, copied: r.copied, skipped: r.skipped };
+  }
+
+  /**
+   * Adds names onto any list (active or not). Used when stocking a recipe list
+   * without leaving the current trip.
+   */
+  function quickAddTo(targetListId: string, names: string[], mode: 'list' | 'cart', hereKey?: string): QuickAddResult {
+    if (targetListId === listId) return quickAdd(names, mode, hereKey);
+    const snapshot: Snapshot = { items, products, allItems, lists, activeList: listId };
+    let nextProducts = products;
+    let nextAll = allItems;
+    const mine = () => itemsOn(nextAll, targetListId);
+    const results: QuickAddResult['added'] = [];
+
+    for (const raw of names) {
+      const amount = parseAmount(raw);
+      const name = amount.name;
+      if (!name) continue;
+      const extra = { ...(amount.qty && { qty: amount.qty }), ...(amount.note && { note: amount.note }) };
+      let product = new Catalog(nextProducts, categories).exact(name);
+      let saved: string | undefined;
+      let conflict: QuickAddResult['added'][number]['conflict'];
+
+      if (!product) {
+        product = { ...newProduct(name, new Catalog(nextProducts, categories)), ...(hereKey && { locations: { [layout.id]: hereKey } }) };
+        nextProducts = [...nextProducts, product];
+        saved = hereKey;
+      } else if (mode === 'cart' && hereKey) {
+        const savedKey = product.locations?.[layout.id];
+        const savedSpot = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
+        const soldHere = !product.notAt?.includes(layout.id);
+        if (!savedSpot || !soldHere) {
+          const updated: Product = {
+            ...product,
+            locations: savedSpot ? product.locations : { ...product.locations, [layout.id]: hereKey },
+            notAt: product.notAt?.filter((id) => id !== layout.id),
+          };
+          nextProducts = nextProducts.map((p) => (p.id === updated.id ? updated : p));
+          if (!savedSpot) saved = hereKey;
+          product = updated;
+        }
+        if (savedSpot && savedKey && savedSpot.placeId !== hereKey.split(':')[0]) {
+          conflict = { savedKey, hereKey };
+        }
+      }
+
+      const pid = product.id;
+      const waiting = mine().find((i) => !i.done && (i.productId === pid || productFor(i, catalog)?.id === pid));
+      let itemId = waiting?.id;
+      if (waiting && mode === 'cart') {
+        nextAll = updateList(nextAll, targetListId, (prev) => prev.map((i) => (i.id === waiting.id ? { ...i, ...extra, done: true, productId: pid } : i)));
+      } else if (waiting) {
+        if (amount.qty || amount.note) nextAll = updateList(nextAll, targetListId, (prev) => prev.map((i) => (i.id === waiting.id ? { ...i, ...extra } : i)));
+      } else {
+        itemId = newId();
+        const shown = normalize(name) === normalize(product.name) ? product.name : capitalize(name.trim());
+        nextAll = updateList(nextAll, targetListId, (prev) => [...prev, { id: itemId!, name: shown, done: mode === 'cart', productId: pid, ...extra }]);
+      }
+      results.push({ productId: pid, name: product.name, isNew: !snapshot.products.some((p) => p.id === pid), savedAt: saved, alreadyOnList: !!waiting && mode === 'list', conflict, itemId });
+    }
+
+    setProducts(() => nextProducts);
+    setAllItems(() => nextAll);
+    return { snapshot, added: results };
   }
 
   function addToList(product: Product) {
@@ -1019,17 +1144,24 @@ export default function App() {
     setSending({ title: `“${l.name}”`, summary, share });
   }
 
-  const data = () => ({ items, products, categories, layouts });
+  const data = () => ({ items: allItems, products, categories, layouts });
 
-  function importList() {
+  function importList(target: 'current' | { newName: string }) {
     if (!incoming || incoming === 'error' || incoming.kind !== 'list') return;
-    const r = applyListShare(incoming, data());
+    let targetId = listId;
+    let listLabel = lists.find((l) => l.id === listId)?.name ?? 'Shopping list';
+    if (target !== 'current') {
+      targetId = createList(target.newName.trim() || 'Shared list');
+      listLabel = target.newName.trim() || 'Shared list';
+      setActiveListId(targetId);
+    }
+    const r = applyListShare(incoming, data(), targetId);
     setCategories(() => r.categories);
     setProducts(() => r.products);
-    setItems(() => r.items);
+    setAllItems(() => r.items);
     setIncoming(null);
     setView('list');
-    setNotice(`Added ${r.added} item${r.added === 1 ? '' : 's'} to your list${r.skipped ? ` (${r.skipped} already on it)` : ''}.`);
+    setNotice(`Added ${r.added} item${r.added === 1 ? '' : 's'} to “${listLabel}”${r.skipped ? ` (${r.skipped} already on it)` : ''}.`);
   }
 
   function importStore(replaceId?: string) {
@@ -1067,7 +1199,12 @@ export default function App() {
               {layout.name} <span aria-hidden="true">▾</span>
             </button>
             {view === 'list' && (
-              <ListBar name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'} count={lists.length} onOpen={() => setListsOpen(true)} />
+              <ListBar
+                name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
+                toBuy={listCounts.get(listId) ?? 0}
+                otherPending={[...listCounts.entries()].filter(([id, n]) => id !== listId && n > 0).length}
+                onOpen={() => setListsOpen(true)}
+              />
             )}
           </div>
         </div>
@@ -1097,10 +1234,16 @@ export default function App() {
           onSeenChange={seenChange}
           onListsClose={() => setListsOpen(false)}
           lists={{
-            all: lists, current: listId, counts: listCounts, switchTo: setActiveListId,
+            all: lists, current: listId, counts: listCounts, doneCounts: listDoneCounts,
+            switchTo: setActiveListId,
             create: createList, rename: renameList, remove: deleteList, combine: combineInto,
             preview: (sources) => combineLists(allItems, listId, sources, catalog),
+            duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
           }}
+          moveItemTo={moveItemTo}
+          copyItemTo={copyItemTo}
+          quickAddTo={quickAddTo}
+          onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           layout={shownLayout}
           floor={floor}
           catalog={catalog}
@@ -1193,6 +1336,7 @@ export default function App() {
         <ImportSheet
           share={incoming}
           layouts={layouts}
+          currentListName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           onAddList={importList}
           onAddStore={importStore}
           onCancel={() => setIncoming(null)}

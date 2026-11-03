@@ -53,7 +53,7 @@ const FILTERS: { id: ItemFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'place', label: 'Needs a place' },
   { id: 'nocat', label: 'No category' },
-  { id: 'list', label: 'On my list' },
+  { id: 'list', label: 'On list' },
   { id: 'notsold', label: 'Not sold here' },
 ];
 
@@ -318,7 +318,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
         <div className="chips filters" role="group" aria-label="Show">
           {FILTERS.map((f) => (
             <button key={f.id} className={filter === f.id ? 'chip active' : 'chip'} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
-              {f.label}{f.id !== 'all' && <span className="count"> {counts.get(f.id)}</span>}
+              {f.id === 'list' ? `On “${listName}”` : f.label}{f.id !== 'all' && <span className="count"> {counts.get(f.id)}</span>}
             </button>
           ))}
         </div>

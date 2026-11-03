@@ -6,7 +6,7 @@ import { LayoutQuestionCard } from './LayoutQuestionCard';
  * Everything's in the cart: how the trip went, what to get elsewhere, any
  * "ask later" items to place, the layout question, and clearing the cart.
  */
-export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, question, onAnswer, onClear, door, extend, walls }: {
+export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, question, onAnswer, onClear, otherLists = [], onShopList, door, extend, walls }: {
   inCart: number;
   /** First to last check-off, if known. */
   minutes?: number;
@@ -18,6 +18,9 @@ export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, qu
   question?: LayoutQuestion;
   onAnswer: (option: number | undefined) => void;
   onClear: () => void;
+  /** Other lists that still have things to buy. */
+  otherLists?: { id: string; name: string; toBuy: number }[];
+  onShopList?: (id: string) => void;
   /** "Where's the door?", asked once per store. */
   door?: ReactNode;
   /** "Is this shelf longer?" */
@@ -44,6 +47,16 @@ export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, qu
       {walls && <button className="btn wide" onClick={walls}>🧱 Show where the departments are along the walls</button>}
       <button className="btn primary wide" onClick={onClear}>Clear cart · start next trip</button>
       {elsewhere.length > 0 && <p className="muted small">Things to get elsewhere stay on your list.</p>}
+      {otherLists.length > 0 && onShopList && (
+        <div className="trip-other-lists">
+          <p className="muted small">Still to buy on another list:</p>
+          {otherLists.map((l) => (
+            <button key={l.id} className="btn wide" onClick={() => onShopList(l.id)}>
+              Shop “{l.name}” · {l.toBuy} to buy
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
