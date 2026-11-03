@@ -84,8 +84,9 @@ describe('amounts and notes', () => {
 describe('list sort', () => {
   it('resolves listSort from new or legacy display settings', async () => {
     const { resolveListSort } = await import('../display');
-    expect(resolveListSort({})).toBe('route');
-    expect(resolveListSort({ groupList: false })).toBe('nearest');
+    expect(resolveListSort({})).toBe('nearest');
+    expect(resolveListSort({ groupList: true })).toBe('nearest'); // legacy route → nearest
+    expect(resolveListSort({ listSort: 'route' })).toBe('nearest');
     expect(resolveListSort({ groupList: false, listSort: 'alpha' })).toBe('alpha');
     expect(resolveListSort({ listSort: 'category' })).toBe('category');
   });

@@ -1,5 +1,5 @@
 /** How the shopping list is ordered. */
-export type ListSort = 'route' | 'nearest' | 'category' | 'alpha';
+export type ListSort = 'nearest' | 'category' | 'alpha';
 
 /** Per-phone display choices. */
 export interface Display {
@@ -9,14 +9,19 @@ export interface Display {
   /** Category icon next to each item in the list. */
   listIcons?: boolean;
   /**
-   * Group the shopping list by shelf/area (off: one list, nearest first).
-   * Prefer `listSort`; kept so older saved phones still load.
+   * Legacy: grouped-by-shelf vs flat nearest. Prefer `listSort`; kept so older
+   * saved phones still load. Both legacy values now resolve to nearest.
    */
   groupList?: boolean;
-  /** How to order the shopping list (route / nearest / category / A–Z). */
-  listSort?: ListSort;
-  /** Show items' categories and subcategories in the shopping list (headings, or beside where it is). */
+  /**
+   * How to order the shopping list (nearest / category / A–Z).
+   * Legacy saved value `"route"` is treated as nearest.
+   */
+  listSort?: ListSort | 'route';
+  /** Show items' categories and subcategories in the shopping list (beside where it is). */
   listCategories?: boolean;
+  /** Group shopping-list rows under category headings. */
+  listGroupByCategory?: boolean;
   /** Show the −/＋ quantity stepper on shopping rows (default on). */
   listQty?: boolean;
   /** Show where-it-is under each item name (aisle / place line; default on). */
@@ -45,8 +50,10 @@ export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listCo
 
 /** Resolve the list order from new `listSort` or the older `groupList` flag. */
 export function resolveListSort(d: Pick<Display, 'listSort' | 'groupList'>): ListSort {
-  if (d.listSort) return d.listSort;
-  return (d.groupList ?? true) ? 'route' : 'nearest';
+  const raw = d.listSort;
+  // "route" was removed (same results as nearest); map it and legacy groupList to nearest.
+  if (raw === 'route' || raw === undefined) return 'nearest';
+  return raw;
 }
 
 /** How to colour and label category sections on the map. Leave a function out to hide that. */

@@ -15,7 +15,7 @@ import { withHoldings } from './core/holdings';
 import { moveOnto, swapAlong } from './core/swap';
 import { endKey, extended, extensionsDue, withReach, type Extension } from './core/extend';
 import { buildHere, hereOptions, type HereOption } from './core/here';
-import { storeFromTemplate, storeModel, templateKinds } from './core/templates';
+import { storeFromTemplate, storeModel } from './core/templates';
 import { defaultDisplay, type Display, type SectionLook } from './display';
 import { demoLayout } from './core/demoLayout';
 import { Floor } from './core/floor';
@@ -671,7 +671,6 @@ export default function App() {
 
   // ---- "Where was it?" → where I'm standing ----
   /** What can be built or chosen where the shopper is standing. */
-  const tplKinds = useMemo(() => templateKinds(layout, products), [layout, products]);
   const hereChoices = useMemo(() => hereOptions(layout, position), [layout, position]);
   /** Builds the choice where the shopper stands and saves the item there. Returns what Undo restores and what was done. */
   function placeHere(productId: string, o: HereOption): { snapshot: Snapshot; note: string } | undefined {
@@ -1291,7 +1290,6 @@ export default function App() {
           undo={undo}
           shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
           here={{ options: hereChoices, place: placeHere }}
-          templateKinds={tplKinds}
           setProductLocation={setProductLocation}
           setAvailable={setAvailable}
           position={position}

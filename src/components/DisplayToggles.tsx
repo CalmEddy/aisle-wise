@@ -11,6 +11,7 @@ const LABELS: Record<Switch, string> = {
   mapIcons: 'Icons on map',
   groupList: 'Group by section',
   listCategories: 'Categories in list',
+  listGroupByCategory: 'Group by category',
   listQty: 'Quantity stepper',
   listLocation: 'Location under name',
   listColors: 'Colors in list',
@@ -27,6 +28,7 @@ const SHORT: Record<Switch, string> = {
   buildMode: '🛠 Edit map',
   groupList: '☰',
   listCategories: '🏷',
+  listGroupByCategory: '☰',
   listQty: '×',
   listLocation: '📍',
   mapColors: '🎨',
@@ -46,14 +48,13 @@ const GROUPS: { name: string; keys: Switch[] }[] = [
 ];
 
 const SORTS: { id: ListSort; short: string; label: string }[] = [
-  { id: 'route', short: '🗺︎', label: 'Sort by route' },
   { id: 'nearest', short: '◎', label: 'Sort nearest first' },
   { id: 'category', short: '🏷︎', label: 'Sort by category' },
   { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
 ];
 
 /**
- * Cycles the shopping-list order: route → nearest → category → A–Z.
+ * Cycles the shopping-list order: nearest → category → A–Z.
  * Shown on the list strip so shoppers can change sort without opening settings.
  */
 export function ListSortToggle({ display, setDisplay }: {
@@ -70,7 +71,7 @@ export function ListSortToggle({ display, setDisplay }: {
       className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
       aria-label={`${shown.label} (tap for ${next.label})`}
       title={`${shown.label} · tap to change`}
-      onClick={() => setDisplay((d) => ({ ...d, listSort: next.id, groupList: next.id === 'route' || next.id === 'nearest' ? next.id === 'route' : d.groupList }))}
+      onClick={() => setDisplay((d) => ({ ...d, listSort: next.id }))}
     >
       {shown.short}
     </button>

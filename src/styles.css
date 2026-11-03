@@ -828,6 +828,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .map.strip { max-height: 150px; height: 150px; }
 .view-menu { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .view-menu-lead { margin: 2px 0 4px; font-weight: 600; }
+.view-menu > .muted.small { overflow-wrap: anywhere; line-height: 1.35; }
 .toggle.icon-only.action[aria-pressed='false'] { filter: none; opacity: 1; }
 
 /* Store picker */
