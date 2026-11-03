@@ -17,6 +17,10 @@ export interface Display {
   listSort?: ListSort;
   /** Show items' categories and subcategories in the shopping list (headings, or beside where it is). */
   listCategories?: boolean;
+  /** Show the −/＋ quantity stepper on shopping rows (default on). */
+  listQty?: boolean;
+  /** Show where-it-is under each item name (aisle / place line; default on). */
+  listLocation?: boolean;
   /** Build the store map from where you pick things up. */
   buildMode: boolean;
   /** In build mode, what picking up on open floor makes. */

@@ -166,7 +166,7 @@ function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPa
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showLocation = true }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -198,19 +198,26 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   headingOf?: (i: ListItem) => { top?: string; sub?: string };
   /** Inline qty / name / unit / price edits (avoids opening the ⋯ menu). */
   onPatch?: (item: ListItem, patch: ItemPatch) => void;
+  /** Show the −/＋ quantity stepper (and hide ×N from the meta line while it is). */
+  showQty?: boolean;
+  /** Show the where-it-is line under the name. */
+  showLocation?: boolean;
 }) {
   const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
     <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
   );
+  const whereOf = (item: ListItem) => (showLocation ? subOf?.(item) : undefined);
   const meta = (item: ListItem) => {
-    const line = qtyUnitPriceText(item);
+    // When the stepper is visible it owns the count; meta keeps unit/price only.
+    const line = qtyUnitPriceText(item, { qty: !showQty });
     const note = item.note;
-    if (!line && !note && !subOf?.(item)) return null;
+    const where = whereOf(item);
+    if (!line && !note && !where) return null;
     return (
       <span className="name-meta">
         {line && <span className="qty">{line}</span>}
         {note && <span className="item-note">{note}</span>}
-        {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
+        {where && <span className="sub">{where}</span>}
       </span>
     );
   };
@@ -250,11 +257,11 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                   <span className="name">
                     {onPatch
                       ? <InlineName item={item} onRename={(name) => onPatch(item, { name })} />
-                      : item.name}
+                      : <span className="name-text">{item.name}</span>}
                     {meta(item)}
                   </span>
                 </label>
-                {onPatch && !item.done && <QtyStepper item={item} onPatch={(patch) => onPatch(item, patch)} />}
+                {onPatch && !item.done && showQty && <QtyStepper item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
                 {clearBtn(item)}
                 {onMenu
@@ -270,10 +277,11 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
             <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
             {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
             <span className="name">
-              {item.name}
-              {item.qty && item.qty > 1 && <span className="qty"> ×{item.qty}</span>}
+              <span className="name-text">{item.name}</span>
+              {showQty && item.qty && item.qty > 1 && <span className="qty"> ×{item.qty}</span>}
+              {!showQty && qtyUnitPriceText(item) && <span className="qty"> {qtyUnitPriceText(item)}</span>}
               {item.note && <span className="item-note">{item.note}</span>}
-              {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
+              {whereOf(item) && <span className="sub">{whereOf(item)}</span>}
             </span>
           </label>
           <span className="row-actions">

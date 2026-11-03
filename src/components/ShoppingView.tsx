@@ -707,8 +707,10 @@ export function ShoppingView(props: Props) {
   // List order: route (grouped stops), nearest, category, or A–Z.
   const listSort = resolveListSort(props.display);
   const grouped = listSort === 'route';
-  // Categories and subcategories in the list (the 🏷 switch).
+  // What each shopping row shows (⚙ view settings).
   const showCats = props.display.listCategories ?? true;
+  const showQty = props.display.listQty ?? true;
+  const showLocation = props.display.listLocation ?? true;
   /** An item's category and subcategory names. */
   const catsOf = (item: ListItem): { top?: string; sub?: string } => {
     const id = productFor(item, catalog)?.categoryId;
@@ -1033,17 +1035,12 @@ export function ShoppingView(props: Props) {
     nextWhere(item);
   }
 
-  // ---- Clearing where things are (for testing the map; to be removed) ----
-  /** Whether an item has a saved spot or an answer in this store. */
+  // ---- Clearing where things are (strip button; testing the map) ----
   /** Whether the list shows a place for it here: saved, answered, or placed by its kind. */
   const hasWhereHere = (item: ListItem) => {
     const p = productFor(item, catalog);
     return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]) || locate(item).kind === 'spot';
   };
-  function clearOneWhere(item: ListItem) {
-    const snapshot = props.where.clearWhere([item]);
-    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });
-  }
   function clearAllWhere() {
     const these = items.filter(hasWhereHere);
     if (!these.length) { setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `Nothing on the list has a place at ${layout.name}.` }); return; }
@@ -1218,13 +1215,15 @@ export function ShoppingView(props: Props) {
               <h3>Nearest first</h3>
               <span className="muted small count-pill">{nearestFirst.length} item{nearestFirst.length === 1 ? '' : 's'}</span>
             </div>
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere}
+            <ItemRows
               items={nearestFirst.map((e) => e.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
               onPatch={!building ? patchItem : undefined}
               simple={!building}
+              showQty={showQty}
+              showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               drag={building ? dragHandlers : undefined}
               dragging={drag?.item.id}
@@ -1245,13 +1244,15 @@ export function ShoppingView(props: Props) {
               <h3>{listSort === 'alpha' ? 'A–Z' : 'By category'}</h3>
               <span className="muted small count-pill">{flatSorted.length} item{flatSorted.length === 1 ? '' : 's'}</span>
             </div>
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere}
+            <ItemRows
               items={flatSorted.map((e) => e.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
               onPatch={!building ? patchItem : undefined}
               simple={!building}
+              showQty={showQty}
+              showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               pinned={pinned}
@@ -1265,11 +1266,11 @@ export function ShoppingView(props: Props) {
         {grouped && nextVisit && (
           <div className="card route-list">
           <VisitCard visit={nextVisit} next likely={likelyVisit(nextVisit)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} showQty={showQty} showLocation={showLocation} onNotHere={(i) => markAvailable(i, false)} big />
           )} />
         {laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} likely={likelyVisit(v)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
+            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} showQty={showQty} showLocation={showLocation} onNotHere={(i) => markAvailable(i, false)} />
           )} />
         ))}
           </div>
@@ -1281,13 +1282,15 @@ export function ShoppingView(props: Props) {
               {byClue.some((b) => b.clue) ? 'By aisle' : 'In typical store order'}
               <span className="muted small"> · {byClue.some((b) => !b.clue) ? 'until you say where things are' : 'not on the map yet'}</span>
             </h3>
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere}
+            <ItemRows
               items={byClue.map((b) => b.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
               onPatch={!building ? patchItem : undefined}
               simple={!building}
+              showQty={showQty}
+              showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               headingOf={showCats ? catsOf : undefined}
@@ -1391,7 +1394,7 @@ export function ShoppingView(props: Props) {
         {done.length > 0 && (
           <details className="card done">
             <summary>In the cart ({done.length})</summary>
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={done} onToggle={toggle} onRemove={removeWithUndoOne} onPatch={patchItem} iconOf={iconOf} simple />
+            <ItemRows items={done} onToggle={toggle} onRemove={removeWithUndoOne} onPatch={patchItem} iconOf={iconOf} simple showQty={showQty} showLocation={showLocation} />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
         )}
@@ -1453,7 +1456,7 @@ export function ShoppingView(props: Props) {
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
-            show={['listCategories', 'buildMode']}
+            show={['listCategories', 'listQty', 'listLocation', 'buildMode']}
             lead={(
               <>
                 {addButton}
@@ -1477,8 +1480,13 @@ export function ShoppingView(props: Props) {
           />
           {viewOpen && (
             <div className="view-menu" role="group" aria-label="View settings">
-              <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['mapColors', 'mapIcons', 'listColors', 'listIcons']} />
-              <span className="muted small">🎨 category colours · 🍎 category icons</span>
+              <p className="muted small view-menu-lead">List shows</p>
+              <DisplayToggles
+                display={props.display}
+                setDisplay={props.setDisplay}
+                show={['listCategories', 'listQty', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+              />
+              <span className="muted small">🏷 categories · × quantity · 📍 location · 🎨 colours · 🍎 icons</span>
             </div>
           )}
         </>

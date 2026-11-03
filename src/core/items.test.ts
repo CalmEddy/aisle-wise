@@ -89,4 +89,11 @@ describe('list sort', () => {
     expect(resolveListSort({ groupList: false, listSort: 'alpha' })).toBe('alpha');
     expect(resolveListSort({ listSort: 'category' })).toBe('category');
   });
+
+  it('qtyUnitPriceText can omit the ×N when a stepper is shown', async () => {
+    const { qtyUnitPriceText } = await import('./items');
+    expect(qtyUnitPriceText({ qty: 3, unit: 'bag' })).toMatch(/×3 bag/);
+    expect(qtyUnitPriceText({ qty: 3, unit: 'bag' }, { qty: false })).toBe('bag');
+    expect(qtyUnitPriceText({ qty: 3 }, { qty: false })).toBe('');
+  });
 });

@@ -98,11 +98,15 @@ export function formatPrice(price?: number): string | undefined {
  * Qty, unit and price for a row ("×2 box · $3.49").
  * Qty of 1 is omitted unless a non-each unit or price is set.
  */
-export function qtyUnitPriceText(item: Pick<ListItem, 'qty' | 'unit' | 'price'>): string {
+export function qtyUnitPriceText(
+  item: Pick<ListItem, 'qty' | 'unit' | 'price'>,
+  opts?: { /** Include ×N (default true). Off when a qty stepper is already shown. */ qty?: boolean },
+): string {
   const u = unitLabel(item.unit);
   const p = formatPrice(item.price);
-  const showQty = (item.qty && item.qty > 1) || !!u || p !== undefined;
-  const qtyBit = showQty ? `×${item.qty && item.qty > 1 ? item.qty : 1}${u ? ` ${u}` : ''}` : '';
+  const includeQty = opts?.qty !== false;
+  const needQty = includeQty && ((item.qty && item.qty > 1) || !!u || p !== undefined);
+  const qtyBit = needQty ? `×${item.qty && item.qty > 1 ? item.qty : 1}${u ? ` ${u}` : ''}` : (!includeQty && u ? u : '');
   return [qtyBit, p].filter(Boolean).join(' · ');
 }
 
