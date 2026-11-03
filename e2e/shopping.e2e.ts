@@ -21,7 +21,7 @@ test('adds items with amounts and notes, sorted into a walk through the store', 
   ok();
 });
 
-test('checks off by tapping the name, with progress and undoable removal', async ({ page }) => {
+test('checks off by the checkbox, with progress and undoable removal', async ({ page }) => {
   await addItems(page, 'apples, pasta, milk');
   await tick(page, 'Pasta');
   await expect(page.locator('.progress')).toHaveText(/1\s*\/\s*3/);
@@ -32,15 +32,45 @@ test('checks off by tapping the name, with progress and undoable removal', async
   await expect(row(page, 'Milk')).toBeVisible();
 });
 
-test('the item menu changes the amount and note, and pins it on the map', async ({ page }) => {
+test('inline qty and rename work without opening the menu', async ({ page }) => {
+  await addItems(page, 'milk');
+  await row(page, 'Milk').getByRole('button', { name: 'One more Milk' }).click();
+  await expect(row(page, 'Milk')).toContainText('×2');
+  await row(page, 'Milk').getByRole('button', { name: 'Rename Milk' }).click();
+  await row(page, 'Milk').getByLabel('Rename Milk').fill('Oat milk');
+  await row(page, 'Milk').getByLabel('Rename Milk').press('Enter');
+  await expect(row(page, 'Oat milk')).toBeVisible();
+  const items = await saved<{ name: string; qty?: number }[]>(page, 'items');
+  expect(items.find((i) => i.name === 'Oat milk')?.qty).toBe(2);
+});
+
+test('the item menu sets unit, price and note, and pins it on the map', async ({ page }) => {
   await addItems(page, 'milk');
   await row(page, 'Milk').getByRole('button', { name: /More options/ }).click();
-  await page.getByRole('button', { name: 'One more' }).click();
+  await page.getByLabel('Unit for Milk').selectOption('box');
+  await page.getByLabel('Price for Milk').fill('3.49');
   await page.getByLabel('Note for Milk').fill('skim');
   await page.getByRole('button', { name: '◎ Show on the map' }).click();
-  await expect(row(page, 'Milk')).toContainText('×2');
+  await expect(row(page, 'Milk')).toContainText(/box/i);
+  await expect(row(page, 'Milk')).toContainText(/\$3\.49/);
   await expect(row(page, 'Milk')).toContainText('skim');
   await expect(page.locator('.map-pin')).toHaveCount(1);
+  const items = await saved<{ unit?: string; price?: number; note?: string }[]>(page, 'items');
+  expect(items[0]).toMatchObject({ unit: 'box', price: 3.49, note: 'skim' });
+});
+
+test('list sort cycles through route, nearest, category and A–Z', async ({ page }) => {
+  await addItems(page, 'zucchini, apples, milk');
+  const sort = page.getByRole('button', { name: /Sort by/ });
+  await expect(page.locator('main .route-list')).toBeVisible();
+  await sort.click(); // nearest
+  await expect(page.locator('main .flat-list')).toContainText(/Nearest first/i);
+  await sort.click(); // category
+  await expect(page.locator('main .flat-list')).toContainText(/By category/i);
+  await sort.click(); // alpha
+  await expect(page.locator('main .flat-list')).toContainText(/A–Z/);
+  const names = await page.locator('main .flat-list .row .name-edit').allTextContents();
+  expect(names.map((n) => n.trim())).toEqual([...names].map((n) => n.trim()).sort((a, b) => a.localeCompare(b)));
 });
 
 test('trip done: summary, things to get elsewhere, clear the cart with undo', async ({ page }) => {

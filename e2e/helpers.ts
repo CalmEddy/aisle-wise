@@ -28,9 +28,9 @@ export async function addItems(page: Page, text: string) {
 /** A list row by item name. */
 export const row = (page: Page, name: string) => page.locator('main .row', { hasText: name }).first();
 
-/** Checks an item off by tapping its name. */
+/** Checks an item off by tapping its checkbox (name is for rename). */
 export async function tick(page: Page, name: string) {
-  await row(page, name).locator('.name').click();
+  await row(page, name).getByRole('checkbox').click();
 }
 
 /** Starts a new, empty store right here. */

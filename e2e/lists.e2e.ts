@@ -39,7 +39,7 @@ test('several lists: make, switch, combine into one (with undo), rename, delete'
 
   await openLists();
   await page.getByRole('button', { name: 'More for Taco night' }).click();
-  await page.getByRole('button', { name: 'Rename' }).click();
+  await page.getByRole('button', { name: 'Rename', exact: true }).click();
   await page.getByLabel('List name', { exact: true }).fill('Taco Tuesday');
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: 'More for Weekly staples' }).click();

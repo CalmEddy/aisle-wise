@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Display } from '../display';
+import type { Display, ListSort } from '../display';
+import { resolveListSort } from '../display';
 
 /** Display settings that are on/off switches. */
 type Switch = { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display];
@@ -39,6 +40,38 @@ const GROUPS: { name: string; keys: Switch[] }[] = [
   { name: 'Map', keys: ['mapColors', 'mapIcons'] },
   { name: 'List', keys: ['listColors', 'listIcons'] },
 ];
+
+const SORTS: { id: ListSort; short: string; label: string }[] = [
+  { id: 'route', short: '🗺︎', label: 'Sort by route' },
+  { id: 'nearest', short: '◎', label: 'Sort nearest first' },
+  { id: 'category', short: '🏷︎', label: 'Sort by category' },
+  { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
+];
+
+/**
+ * Cycles the shopping-list order: route → nearest → category → A–Z.
+ * Shown on the list strip so shoppers can change sort without opening settings.
+ */
+export function ListSortToggle({ display, setDisplay }: {
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+}) {
+  const current = resolveListSort(display);
+  const i = SORTS.findIndex((s) => s.id === current);
+  const next = SORTS[(i + 1) % SORTS.length]!;
+  const shown = SORTS[i >= 0 ? i : 0]!;
+  return (
+    <button
+      type="button"
+      className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
+      aria-label={`${shown.label} (tap for ${next.label})`}
+      title={`${shown.label} · tap to change`}
+      onClick={() => setDisplay((d) => ({ ...d, listSort: next.id, groupList: next.id === 'route' || next.id === 'nearest' ? next.id === 'route' : d.groupList }))}
+    >
+      {shown.short}
+    </button>
+  );
+}
 
 /**
  * On/off switches in one compact row: short labels (full names on hover and

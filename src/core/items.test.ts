@@ -66,4 +66,27 @@ describe('amounts and notes', () => {
     expect(withAmount('Milk', { qty: 2, note: 'skim' })).toBe('2 Milk (skim)');
     expect(parseAmount(withAmount('Ground beef', { note: '2 lb' }))).toEqual({ name: 'Ground beef', note: '2 lb' });
   });
+
+  it('formats qty, unit and price for list rows', async () => {
+    const { qtyUnitPriceText, formatPrice, parsePrice, unitLabel } = await import('./items');
+    expect(unitLabel('box')).toBe('box');
+    expect(unitLabel('each')).toBeUndefined();
+    expect(formatPrice(3.5)).toMatch(/\$3\.50/);
+    expect(parsePrice('$3.49')).toBe(3.49);
+    expect(parsePrice('')).toBeUndefined();
+    expect(qtyUnitPriceText({ qty: 2, unit: 'box', price: 3.49 })).toMatch(/×2 box/);
+    expect(qtyUnitPriceText({ qty: 2, unit: 'box', price: 3.49 })).toMatch(/\$3\.49/);
+    expect(qtyUnitPriceText({})).toBe('');
+    expect(qtyUnitPriceText({ unit: 'bag', price: 1 })).toMatch(/×1 bag/);
+  });
+});
+
+describe('list sort', () => {
+  it('resolves listSort from new or legacy display settings', async () => {
+    const { resolveListSort } = await import('../display');
+    expect(resolveListSort({})).toBe('route');
+    expect(resolveListSort({ groupList: false })).toBe('nearest');
+    expect(resolveListSort({ groupList: false, listSort: 'alpha' })).toBe('alpha');
+    expect(resolveListSort({ listSort: 'category' })).toBe('category');
+  });
 });

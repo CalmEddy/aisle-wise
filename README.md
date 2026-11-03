@@ -35,13 +35,15 @@ re-orders it as you move.
 5. **Stops** – items on the same shelf or in the same area share one card,
    listed in walking order with where each one is ("near the top"). Items on
    the same square count as one spot (tomato soup and vegetable soup side by
-   side are picked up together). Turn **Group by section** off for one list,
-   nearest first, that re-sorts as you move. The map shows a dot for each
+   side are picked up together). Tap the **sort** control on the list strip to
+   cycle **route → nearest → category → A–Z**. The map shows a dot for each
    item; tap 📍 on an item to pinpoint it with a red pulsing circle.
-   Tap **⋯** on an item to change its **category**, change its place, or mark
-   it **not available at this store**. Each item shows its category icon
+   On each row you can change **qty** and **rename** inline; tap **⋯** for
+   **unit** (each, box, bag, pack…), **price**, note, category, place, or
+   **not available at this store**. Each item shows its category icon
    (switch off with **Icons in list**). Items not available here, and items with no location yet,
-   are listed at the bottom under "Not on the route".
+   are listed at the bottom under "Not on the route". The add panel docks at
+   the bottom so the list stays visible as you add.
 
 ## Build mode: map a store as you shop
 
