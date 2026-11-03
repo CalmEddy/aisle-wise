@@ -13,7 +13,6 @@ import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/g
 import { touchingInLine } from '../core/swap';
 import { pastEnd, type Extension } from '../core/extend';
 import type { HereOption } from '../core/here';
-import { onlyFromTemplate } from '../core/templates';
 import { ExtendCard } from './ExtendCard';
 import { TemplatePicker } from './TemplatePicker';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
@@ -37,7 +36,7 @@ import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
-import { type Drag, VisitCard, ItemRows, type ItemPatch } from './ItemRows';
+import { type Drag, ItemRows, type ItemPatch } from './ItemRows';
 import { type Toast, ToastBar } from './ToastBar';
 import { ItemMenu } from './ItemMenu';
 import { type BuildNote, BuildPanel, BuildBanner } from './BuildPanel';
@@ -83,8 +82,6 @@ interface Props {
     /** Builds the choice and saves the item there; returns what Undo restores and what was done. */
     place: (productId: string, o: HereOption) => { snapshot: Snapshot; note: string } | undefined;
   };
-  /** Kinds placed on the map only by the store's default map (shown as "likely"). */
-  templateKinds: ReadonlySet<string>;
   /** Shelves that seem to run further than the map shows. */
   shelves: {
     due: Extension[];
@@ -704,13 +701,15 @@ export function ShoppingView(props: Props) {
     });
   }
 
-  // List order: route (grouped stops), nearest, category, or A–Z.
+  // List order: nearest, category, or A–Z (route order was removed — same results as nearest).
   const listSort = resolveListSort(props.display);
-  const grouped = listSort === 'route';
   // What each shopping row shows (⚙ view settings).
   const showCats = props.display.listCategories ?? true;
+  const groupByCategory = props.display.listGroupByCategory ?? false;
   const showQty = props.display.listQty ?? true;
   const showLocation = props.display.listLocation ?? true;
+  /** Section headings under categories (sort-by-category, or the group toggle). */
+  const showCatHeads = groupByCategory || listSort === 'category';
   /** An item's category and subcategory names. */
   const catsOf = (item: ListItem): { top?: string; sub?: string } => {
     const id = productFor(item, catalog)?.categoryId;
@@ -719,19 +718,26 @@ export function ShoppingView(props: Props) {
     const top = catalog.categoryById.get(catalog.topOf(c.id));
     return top && top.id !== c.id ? { top: top.name, sub: c.name } : { top: c.name };
   };
-  /** The second line, with the subcategory added when the switch is on. */
+  /** The second line; when grouped by category, skip appending the category (it's a heading). */
   const withCat = (line: string | undefined, item: ListItem) => {
-    if (!showCats) return line;
+    if (!showCats || showCatHeads) return line;
     const c = catsOf(item);
     const cat = c.sub ?? c.top;
     return [line, cat].filter(Boolean).join(' · ') || undefined;
   };
   const nearestFirst = useMemo(() => {
     if (listSort !== 'nearest') return [];
-    return route
-      .flatMap((st, order) => st.items.map((item) => ({ item, stop: st, order, d: floor.distance(position, st.point) })))
-      .sort((a, b) => a.d - b.d || a.order - b.order);
-  }, [listSort, route, floor, position]);
+    const rows = route
+      .flatMap((st, order) => st.items.map((item) => {
+        const id = productFor(item, catalog)?.categoryId;
+        return { item, stop: st, order, d: floor.distance(position, st.point), catOrder: id ? orderOf(id) : 10_000 };
+      }));
+    rows.sort((a, b) => {
+      if (groupByCategory && a.catOrder !== b.catOrder) return a.catOrder - b.catOrder;
+      return a.d - b.d || a.order - b.order;
+    });
+    return rows;
+  }, [listSort, route, floor, position, catalog, groupByCategory]);
 
   /** Flat waiting items for category / A–Z sorts (on-route, by-clue, and unplaced). */
   const flatSorted = useMemo(() => {
@@ -745,19 +751,22 @@ export function ShoppingView(props: Props) {
     }
     for (const b of byClue) {
       const id = b.categoryId ?? productFor(b.item, catalog)?.categoryId;
-      const line = b.clue ? describeClue(b.clue) : id ? (showCats ? noShelfText(id, catalog) : `${noShelfText(id, catalog)} · usually ${typicalWhere(id, catalog)}`) : undefined;
+      const line = b.clue ? describeClue(b.clue) : id ? (showCats && !showCatHeads ? `${noShelfText(id, catalog)} · usually ${typicalWhere(id, catalog)}` : noShelfText(id, catalog)) : undefined;
       rows.push({ item: b.item, sub: withCat(line, b.item), catOrder: id ? orderOf(id) : 10_000, name: b.item.name });
     }
     for (const item of unplaced) {
       const id = productFor(item, catalog)?.categoryId;
       rows.push({ item, sub: withCat('No location yet', item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
     }
-    rows.sort((a, b) => listSort === 'alpha'
-      ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.catOrder - b.catOrder
-      : a.catOrder - b.catOrder || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    rows.sort((a, b) => {
+      // Group toggle (or sort-by-category): keep categories together in walking order.
+      if (showCatHeads && a.catOrder !== b.catOrder) return a.catOrder - b.catOrder;
+      if (listSort === 'alpha') return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.catOrder - b.catOrder;
+      return a.catOrder - b.catOrder || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
     return rows.map(({ item, sub }) => ({ item, sub }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listSort, route, byClue, unplaced, catalog, showCats]);
+  }, [listSort, route, byClue, unplaced, catalog, showCats, showCatHeads]);
 
   const patchItem = (item: ListItem, patch: ItemPatch) => {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
@@ -841,14 +850,6 @@ export function ShoppingView(props: Props) {
       if (whereBarFor && whereBarFor.id !== item.id) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
       setWhereBarFor(item);
     }
-  }
-  /** Every item at a stop placed there only by the store's default map. */
-  function likelyVisit(v: { stops: Stop[] }) {
-    if (!props.templateKinds.size) return false;
-    return v.stops.every((st) => st.items.every((i) => {
-      const p = productFor(i, catalog);
-      return !p?.locations?.[layout.id] && !p?.clues?.[layout.id] && onlyFromTemplate(props.templateKinds, p?.categoryId);
-    }));
   }
   /** No place of its own here (none saved or answered): worth a "Where was it?", even if the map has its kind. */
   function needsPlace(item: ListItem) {
@@ -1119,7 +1120,6 @@ export function ShoppingView(props: Props) {
   });
 
   const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
-  const [nextVisit, ...laterVisits] = visits;
   // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
   const mapStrip = !building && !props.display.mapFull;
   const [viewOpen, setViewOpen] = useState(false);
@@ -1230,10 +1230,11 @@ export function ShoppingView(props: Props) {
               iconOf={iconOf}
               pinned={pinned}
               onPin={togglePin}
+              headingOf={showCatHeads ? catsOf : undefined}
               subOf={(item) => withCat(nearestFirst.find((e) => e.item.id === item.id)?.stop.label, item)}
               tintOf={(item) => { const e = nearestFirst.find((x) => x.item.id === item.id); return e && sectionColor(e.stop); }}
               dropOf={(item) => nearestFirst.find((e) => e.item.id === item.id)?.stop.key}
-              firstIsNearest
+              firstIsNearest={!showCatHeads}
             />
           </section>
         )}
@@ -1257,33 +1258,23 @@ export function ShoppingView(props: Props) {
               iconOf={iconOf}
               pinned={pinned}
               onPin={togglePin}
-              headingOf={listSort === 'category' || showCats ? catsOf : undefined}
+              headingOf={showCatHeads ? catsOf : undefined}
               subOf={(item) => flatSorted.find((e) => e.item.id === item.id)?.sub}
             />
           </section>
         )}
 
-        {grouped && nextVisit && (
-          <div className="card route-list">
-          <VisitCard visit={nextVisit} next likely={likelyVisit(nextVisit)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} showQty={showQty} showLocation={showLocation} onNotHere={(i) => markAvailable(i, false)} big />
-          )} />
-        {laterVisits.map((v) => (
-          <VisitCard key={`${v.number}-${v.placeId}`} visit={v} likely={likelyVisit(v)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} showQty={showQty} showLocation={showLocation} onNotHere={(i) => markAvailable(i, false)} />
-          )} />
-        ))}
-          </div>
-        )}
-
-        {(listSort === 'route' || listSort === 'nearest') && byClue.length > 0 && (
+        {listSort === 'nearest' && byClue.length > 0 && (
           <section className="card by-clue">
             <h3>
               {byClue.some((b) => b.clue) ? 'By aisle' : 'In typical store order'}
               <span className="muted small"> · {byClue.some((b) => !b.clue) ? 'until you say where things are' : 'not on the map yet'}</span>
             </h3>
             <ItemRows
-              items={byClue.map((b) => b.item)}
+              items={(showCatHeads
+                ? [...byClue].sort((a, b) => orderOf(a.categoryId ?? productFor(a.item, catalog)?.categoryId ?? '') - orderOf(b.categoryId ?? productFor(b.item, catalog)?.categoryId ?? '') || a.rank - b.rank)
+                : byClue
+              ).map((b) => b.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
@@ -1293,13 +1284,13 @@ export function ShoppingView(props: Props) {
               showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
-              headingOf={showCats ? catsOf : undefined}
+              headingOf={showCatHeads ? catsOf : undefined}
               subOf={(item) => {
                 const b = byClue.find((x) => x.item.id === item.id);
                 if (!b) return undefined;
                 if (b.clue) return describeClue(b.clue);
                 // With category headings shown, the line doesn't repeat the category.
-                return showCats
+                return showCatHeads || showCats
                   ? noShelfText(b.categoryId!, catalog)
                   : `${noShelfText(b.categoryId!, catalog)} · usually ${typicalWhere(b.categoryId!, catalog)}`;
               }}
@@ -1307,10 +1298,10 @@ export function ShoppingView(props: Props) {
           </section>
         )}
 
-        {(((listSort === 'route' || listSort === 'nearest') && unplaced.length > 0) || notSold.length > 0) && (
+        {((listSort === 'nearest' && unplaced.length > 0) || notSold.length > 0) && (
           <section className="card off-route">
             <h3>Not on the route</h3>
-            {(listSort === 'route' || listSort === 'nearest') && unplaced.length > 0 && (
+            {listSort === 'nearest' && unplaced.length > 0 && (
               <>
                 <h4 className="off-head">
                   No location yet
@@ -1484,9 +1475,10 @@ export function ShoppingView(props: Props) {
               <DisplayToggles
                 display={props.display}
                 setDisplay={props.setDisplay}
-                show={['listCategories', 'listQty', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                show={['listGroupByCategory', 'listCategories', 'listQty', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory']}
               />
-              <span className="muted small">🏷 categories · × quantity · 📍 location · 🎨 colours · 🍎 icons</span>
+              <span className="muted small">☰ group by category · 🏷 categories · × quantity · 📍 location · 🎨 colours · 🍎 icons</span>
             </div>
           )}
         </>
