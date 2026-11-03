@@ -45,7 +45,8 @@ export function combineLists(items: ListItem[], target: string, sources: string[
       }
       copies.push(withListId({
         id: newId(), name: i.name, done: false,
-        ...(i.productId && { productId: i.productId }), ...(i.qty && { qty: i.qty }), ...(i.note && { note: i.note }),
+        ...(i.productId && { productId: i.productId }), ...(i.qty && { qty: i.qty }), ...(i.unit && { unit: i.unit }),
+        ...(i.price !== undefined && { price: i.price }), ...(i.note && { note: i.note }),
       }, target));
     }
   }
@@ -90,7 +91,8 @@ export function copyItem(items: ListItem[], itemId: string, toList: string, cata
   if (waiting.some((w) => sameThing(w, item, catalog))) return { items, copied: false, skipped: true };
   const copy = withListId({
     id: newId(), name: item.name, done: false,
-    ...(item.productId && { productId: item.productId }), ...(item.qty && { qty: item.qty }), ...(item.note && { note: item.note }),
+    ...(item.productId && { productId: item.productId }), ...(item.qty && { qty: item.qty }), ...(item.unit && { unit: item.unit }),
+    ...(item.price !== undefined && { price: item.price }), ...(item.note && { note: item.note }),
   }, toList);
   return { items: [...items, copy], copied: true, skipped: false };
 }
@@ -108,7 +110,8 @@ export function duplicateList(
   const id = `l-${newId()}`;
   const copies = itemsOn(items, sourceId).filter((i) => !i.done).map((i) => withListId({
     id: newId(), name: i.name, done: false,
-    ...(i.productId && { productId: i.productId }), ...(i.qty && { qty: i.qty }), ...(i.note && { note: i.note }),
+    ...(i.productId && { productId: i.productId }), ...(i.qty && { qty: i.qty }), ...(i.unit && { unit: i.unit }),
+    ...(i.price !== undefined && { price: i.price }), ...(i.note && { note: i.note }),
   }, id));
   const idx = lists.findIndex((l) => l.id === sourceId);
   const next = [...lists];

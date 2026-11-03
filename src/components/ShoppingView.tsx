@@ -19,8 +19,8 @@ import { TemplatePicker } from './TemplatePicker';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, ShelfReach, Stop, StoreLayout, Temp, Wall } from '../core/types';
-import type { Display, SectionLook } from '../display';
-import { DisplayToggles } from './DisplayToggles';
+import { resolveListSort, type Display, type SectionLook } from '../display';
+import { DisplayToggles, ListSortToggle } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
 import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
 import { nextAisleLabel, walkwayAt } from '../core/aisles';
@@ -32,12 +32,12 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { WhereBar, type MapSpot } from './WhereBar';
-import { homesOf, nearbyKinds, stocking, topOf } from '../core/taxonomy';
+import { homesOf, nearbyKinds, orderOf, stocking, topOf } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
-import { type Drag, VisitCard, ItemRows } from './ItemRows';
+import { type Drag, VisitCard, ItemRows, type ItemPatch } from './ItemRows';
 import { type Toast, ToastBar } from './ToastBar';
 import { ItemMenu } from './ItemMenu';
 import { type BuildNote, BuildPanel, BuildBanner } from './BuildPanel';
@@ -704,8 +704,9 @@ export function ShoppingView(props: Props) {
     });
   }
 
-  // Without grouping: every item on the route, nearest first (by walking distance from you).
-  const grouped = props.display.groupList ?? true;
+  // List order: route (grouped stops), nearest, category, or A–Z.
+  const listSort = resolveListSort(props.display);
+  const grouped = listSort === 'route';
   // Categories and subcategories in the list (the 🏷 switch).
   const showCats = props.display.listCategories ?? true;
   /** An item's category and subcategory names. */
@@ -724,11 +725,42 @@ export function ShoppingView(props: Props) {
     return [line, cat].filter(Boolean).join(' · ') || undefined;
   };
   const nearestFirst = useMemo(() => {
-    if (grouped) return [];
+    if (listSort !== 'nearest') return [];
     return route
       .flatMap((st, order) => st.items.map((item) => ({ item, stop: st, order, d: floor.distance(position, st.point) })))
       .sort((a, b) => a.d - b.d || a.order - b.order);
-  }, [grouped, route, floor, position]);
+  }, [listSort, route, floor, position]);
+
+  /** Flat waiting items for category / A–Z sorts (on-route, by-clue, and unplaced). */
+  const flatSorted = useMemo(() => {
+    if (listSort !== 'category' && listSort !== 'alpha') return [] as { item: ListItem; sub?: string }[];
+    const rows: { item: ListItem; sub?: string; catOrder: number; name: string }[] = [];
+    for (const st of route) {
+      for (const item of st.items) {
+        const id = productFor(item, catalog)?.categoryId;
+        rows.push({ item, sub: withCat(st.label, item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
+      }
+    }
+    for (const b of byClue) {
+      const id = b.categoryId ?? productFor(b.item, catalog)?.categoryId;
+      const line = b.clue ? describeClue(b.clue) : id ? `usually ${showCats ? typicalWhere(id) : typicalWhere(id, catalog)}` : undefined;
+      rows.push({ item: b.item, sub: withCat(line, b.item), catOrder: id ? orderOf(id) : 10_000, name: b.item.name });
+    }
+    for (const item of unplaced) {
+      const id = productFor(item, catalog)?.categoryId;
+      rows.push({ item, sub: withCat('No location yet', item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
+    }
+    rows.sort((a, b) => listSort === 'alpha'
+      ? a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.catOrder - b.catOrder
+      : a.catOrder - b.catOrder || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    return rows.map(({ item, sub }) => ({ item, sub }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listSort, route, byClue, unplaced, catalog, showCats]);
+
+  const patchItem = (item: ListItem, patch: ItemPatch) => {
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
+    setMenuFor((m) => (m && m.id === item.id ? { ...m, ...patch } : m));
+  };
 
   const onList = useMemo(
     () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
@@ -1179,7 +1211,7 @@ export function ShoppingView(props: Props) {
           </div>
         )}
 
-        {!grouped && nearestFirst.length > 0 && (
+        {listSort === 'nearest' && nearestFirst.length > 0 && (
           <section className="card flat-list">
             <div className="stop-head">
               <h3>Nearest first</h3>
@@ -1190,6 +1222,7 @@ export function ShoppingView(props: Props) {
               onToggle={toggle}
               onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
+              onPatch={!building ? patchItem : undefined}
               simple={!building}
               onNotHere={(i) => markAvailable(i, false)}
               drag={building ? dragHandlers : undefined}
@@ -1205,20 +1238,43 @@ export function ShoppingView(props: Props) {
           </section>
         )}
 
+        {(listSort === 'category' || listSort === 'alpha') && flatSorted.length > 0 && (
+          <section className="card flat-list">
+            <div className="stop-head">
+              <h3>{listSort === 'alpha' ? 'A–Z' : 'By category'}</h3>
+              <span className="muted small count-pill">{flatSorted.length} item{flatSorted.length === 1 ? '' : 's'}</span>
+            </div>
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere}
+              items={flatSorted.map((e) => e.item)}
+              onToggle={toggle}
+              onRemove={removeWithUndoOne}
+              onMenu={setMenuFor}
+              onPatch={!building ? patchItem : undefined}
+              simple={!building}
+              onNotHere={(i) => markAvailable(i, false)}
+              iconOf={iconOf}
+              pinned={pinned}
+              onPin={togglePin}
+              headingOf={listSort === 'category' || showCats ? catsOf : undefined}
+              subOf={(item) => flatSorted.find((e) => e.item.id === item.id)?.sub}
+            />
+          </section>
+        )}
+
         {grouped && nextVisit && (
           <div className="card route-list">
           <VisitCard visit={nextVisit} next likely={likelyVisit(nextVisit)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} big />
           )} />
         {laterVisits.map((v) => (
           <VisitCard key={`${v.number}-${v.placeId}`} visit={v} likely={likelyVisit(v)} drag={drag} onGoTo={(st) => setPosition(st.point)} colorOf={sectionColor} sectionName={(st) => catalog.categoryById.get(st.key.split(':')[1] ?? '')?.name} rows={(st, sub) => (
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={st.items} onToggle={toggle} onRemove={removeWithUndoOne} onMenu={setMenuFor} onPatch={!building ? patchItem : undefined} drag={building ? dragHandlers : undefined} dragging={drag?.item.id} iconOf={iconOf} pinned={pinned} onPin={togglePin} subOf={(i) => withCat(sub?.(i), i)} simple={!building} onNotHere={(i) => markAvailable(i, false)} />
           )} />
         ))}
           </div>
         )}
 
-        {byClue.length > 0 && (
+        {(listSort === 'route' || listSort === 'nearest') && byClue.length > 0 && (
           <section className="card by-clue">
             <h3>
               {byClue.some((b) => b.clue) ? 'By aisle' : 'In typical store order'}
@@ -1229,6 +1285,7 @@ export function ShoppingView(props: Props) {
               onToggle={toggle}
               onRemove={removeWithUndoOne}
               onMenu={setMenuFor}
+              onPatch={!building ? patchItem : undefined}
               simple={!building}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
@@ -1244,10 +1301,10 @@ export function ShoppingView(props: Props) {
           </section>
         )}
 
-        {(unplaced.length > 0 || notSold.length > 0) && (
+        {(((listSort === 'route' || listSort === 'nearest') && unplaced.length > 0) || notSold.length > 0) && (
           <section className="card off-route">
             <h3>Not on the route</h3>
-            {unplaced.length > 0 && (
+            {(listSort === 'route' || listSort === 'nearest') && unplaced.length > 0 && (
               <>
                 <h4 className="off-head">
                   No location yet
@@ -1331,7 +1388,7 @@ export function ShoppingView(props: Props) {
         {done.length > 0 && (
           <details className="card done">
             <summary>In the cart ({done.length})</summary>
-            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={done} onToggle={toggle} onRemove={removeWithUndoOne} iconOf={iconOf} simple />
+            <ItemRows onClearWhere={clearOneWhere} clearable={hasWhereHere} items={done} onToggle={toggle} onRemove={removeWithUndoOne} onPatch={patchItem} iconOf={iconOf} simple />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
         )}
@@ -1393,8 +1450,13 @@ export function ShoppingView(props: Props) {
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
-            show={['groupList', 'listCategories', 'buildMode']}
-            lead={addButton}
+            show={['listCategories', 'buildMode']}
+            lead={(
+              <>
+                {addButton}
+                <ListSortToggle display={props.display} setDisplay={props.setDisplay} />
+              </>
+            )}
             extra={(
               <>
                 {!building && (

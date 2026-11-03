@@ -188,6 +188,34 @@ export interface AisleLabel {
   h: number;
 }
 
+/** How an item is sold / counted (qty is how many of this). */
+export type ItemUnit =
+  | 'each'
+  | 'box'
+  | 'bag'
+  | 'pack'
+  | 'bottle'
+  | 'can'
+  | 'jar'
+  | 'bunch'
+  | 'lb'
+  | 'oz'
+  | 'dozen';
+
+export const ITEM_UNITS: { id: ItemUnit; label: string }[] = [
+  { id: 'each', label: 'Each' },
+  { id: 'box', label: 'Box' },
+  { id: 'bag', label: 'Bag' },
+  { id: 'pack', label: 'Pack' },
+  { id: 'bottle', label: 'Bottle' },
+  { id: 'can', label: 'Can' },
+  { id: 'jar', label: 'Jar' },
+  { id: 'bunch', label: 'Bunch' },
+  { id: 'lb', label: 'lb' },
+  { id: 'oz', label: 'oz' },
+  { id: 'dozen', label: 'Dozen' },
+];
+
 export interface ListItem {
   id: string;
   name: string;
@@ -198,6 +226,10 @@ export interface ListItem {
   listId?: string;
   /** How many (missing means one). */
   qty?: number;
+  /** Pack / measure unit for qty (missing means each / single). */
+  unit?: ItemUnit;
+  /** Price for one unit (currency amount). */
+  price?: number;
   /** A note for whoever shops ("the big tub", "2 lb"). */
   note?: string;
 }

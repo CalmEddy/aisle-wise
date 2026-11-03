@@ -1,7 +1,8 @@
 import { normalize, type Catalog } from './catalog';
 import { guessCategory } from './guess';
 import { locateProduct } from './locate';
-import type { Product, StoreLayout } from './types';
+import type { ItemUnit, ListItem, Product, StoreLayout } from './types';
+import { ITEM_UNITS } from './types';
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -79,6 +80,38 @@ export function withAmount(name: string, a: { qty?: number; note?: string }): st
 /** An amount and note for showing next to a name ("×2 · the big tub"). */
 export function amountText(a: { qty?: number; note?: string }): string {
   return [a.qty && a.qty > 1 ? `×${a.qty}` : '', a.note ?? ''].filter(Boolean).join(' · ');
+}
+
+/** Short label for a pack unit ("box", "each"). */
+export function unitLabel(unit?: ItemUnit): string | undefined {
+  if (!unit || unit === 'each') return undefined;
+  return ITEM_UNITS.find((u) => u.id === unit)?.label.toLowerCase() ?? unit;
+}
+
+/** Format a stored price for the list ("$3.49"). */
+export function formatPrice(price?: number): string | undefined {
+  if (price === undefined || !Number.isFinite(price) || price < 0) return undefined;
+  return price.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
+}
+
+/**
+ * Qty, unit and price for a row ("×2 box · $3.49").
+ * Qty of 1 is omitted unless a non-each unit or price is set.
+ */
+export function qtyUnitPriceText(item: Pick<ListItem, 'qty' | 'unit' | 'price'>): string {
+  const u = unitLabel(item.unit);
+  const p = formatPrice(item.price);
+  const showQty = (item.qty && item.qty > 1) || !!u || p !== undefined;
+  const qtyBit = showQty ? `×${item.qty && item.qty > 1 ? item.qty : 1}${u ? ` ${u}` : ''}` : '';
+  return [qtyBit, p].filter(Boolean).join(' · ');
+}
+
+/** Parse a typed price ("3.49", "$3.49", "3,49") into a number, or undefined if cleared/invalid. */
+export function parsePrice(raw: string): number | undefined {
+  const t = raw.trim().replace(/[^0-9.,]/g, '').replace(',', '.');
+  if (!t) return undefined;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : undefined;
 }
 
 /** Quick views of the master list. */

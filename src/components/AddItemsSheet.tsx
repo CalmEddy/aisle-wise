@@ -7,9 +7,9 @@ import { amountText, parseAmount, withAmount } from '../core/items';
 import type { Product } from '../core/types';
 
 /**
- * The add window: search (commas for several), or browse by category, and
- * put things on the list or straight in the cart. Stays open for more; what
- * was added shows at the bottom with Undo.
+ * Compact add composer: search (commas for several), or browse by category.
+ * Docks at the bottom so the shopping list stays visible and updates as you add.
+ * Stays open for more; Undo last undoes the most recent add.
  */
 export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose }: {
   listName: string;
@@ -30,7 +30,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   const again = buyAgain.filter((p) => !onList.has(p.id)).slice(0, 16);
   const [text, setText] = useState('');
   const [browse, setBrowse] = useState<string>();
-  const [added, setAdded] = useState<{ id: number; names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }[]>([]);
+  const [lastAdd, setLastAdd] = useState<{ names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }>();
   const last = text.split(',').pop() ?? '';
   const typed = last.trim();
   // "2 milk", "milk x2", "flour (the big bag)": search for the name, keep the amount and note.
@@ -53,7 +53,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
     const clean = names.map((n) => n.trim()).filter(Boolean);
     if (!clean.length) return;
     const r = onAdd(clean, mode);
-    if (r) setAdded((prev) => [{ id: Date.now(), names: clean, mode, snapshot: r.snapshot }, ...prev]);
+    if (r) setLastAdd({ names: clean, mode, snapshot: r.snapshot });
   }
 
   /** Adds `name` plus anything typed before the last comma, then clears the box. */
@@ -82,7 +82,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   };
 
   return (
-    <div className="sheet-backdrop" onClick={onClose}>
+    <div className="sheet-backdrop add-backdrop" onClick={onClose}>
       <div className="sheet add-sheet" role="dialog" aria-label={`Add to ${listName}`} onClick={(e) => e.stopPropagation()}>
         <div className="add-sheet-head">
           <h2>Add to “{listName}”</h2>
@@ -101,7 +101,11 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           <button type="submit" disabled={!typed}>+ List</button>
         </form>
         <p className="muted small add-sheet-hint">
-          {typed ? <>Enter adds to the list · 🛒 puts it straight in your cart{hereLabel ? <> (at {hereLabel})</> : null}. “2 milk” or “flour (big bag)” adds an amount or note.</> : again.length > 0 && browse === undefined ? null : <>Or browse by category:</>}
+          {typed
+            ? <>Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
+            : again.length > 0 && browse === undefined
+              ? null
+              : <>Browse by category, or type above. The list updates behind this panel.</>}
         </p>
 
         {typed ? (
@@ -124,7 +128,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
             {again.length > 0 && browse === undefined && (
               <section className="buy-again" aria-label="Buy again">
                 <h3 className="muted small">Buy again · tap to add</h3>
-                <div className="chips">
+                <div className="chips again-scroll">
                   {again.map((p) => (
                     <button key={p.id} className="chip again" onClick={() => add([p.name], 'list')}>
                       <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
@@ -146,19 +150,15 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           </>
         )}
 
-        {added.length > 0 && (
+        {lastAdd && (
           <div className="added-strip" aria-label="Added just now">
-            <span className="muted small">Added:</span>
-            {added.map((a) => (
-              <span key={a.id} className="added-chip">
-                {a.mode === 'cart' ? '🛒 ' : ''}{a.names.join(', ')}
-                <button className="link" onClick={() => {
-                  onUndo(a.snapshot);
-                  // Later adds were made on top of this one; undoing restores what was there before it.
-                  setAdded((prev) => prev.filter((x) => x.id < a.id));
-                }} aria-label={`Undo adding ${a.names.join(', ')}`}>Undo</button>
-              </span>
-            ))}
+            <span className="muted small">
+              Added {lastAdd.mode === 'cart' ? '🛒 ' : ''}{lastAdd.names.join(', ')}
+            </span>
+            <button className="link" onClick={() => {
+              onUndo(lastAdd.snapshot);
+              setLastAdd(undefined);
+            }} aria-label={`Undo adding ${lastAdd.names.join(', ')}`}>Undo</button>
           </div>
         )}
       </div>

@@ -1,5 +1,6 @@
-import { Fragment } from 'react';
-import type { ListItem, Stop } from '../core/types';
+import { Fragment, useEffect, useRef, useState } from 'react';
+import type { ItemUnit, ListItem, Stop } from '../core/types';
+import { qtyUnitPriceText } from '../core/items';
 import { SwipeRow } from './SwipeRow';
 import { capitalize } from './whereText';
 
@@ -96,7 +97,76 @@ export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionNam
 
 export type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf }: {
+export type ItemPatch = Partial<Pick<ListItem, 'qty' | 'note' | 'name' | 'unit' | 'price'>>;
+
+function InlineName({ item, onRename }: { item: ListItem; onRename: (name: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(item.name);
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => { setText(item.name); }, [item.name]);
+  useEffect(() => { if (editing) ref.current?.select(); }, [editing]);
+  const commit = () => {
+    const clean = text.trim().replace(/\s+/g, ' ');
+    setEditing(false);
+    if (clean && clean !== item.name) onRename(clean);
+    else setText(item.name);
+  };
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        className="inline-name"
+        value={text}
+        aria-label={`Rename ${item.name}`}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') { setText(item.name); setEditing(false); }
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="name-edit"
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
+      aria-label={`Rename ${item.name}`}
+    >
+      {item.name}
+    </button>
+  );
+}
+
+function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPatch) => void }) {
+  const qty = item.qty ?? 1;
+  return (
+    <div className="qty-stepper inline" role="group" aria-label={`How many ${item.name}`}>
+      <button
+        type="button"
+        className="icon"
+        disabled={qty <= 1 && !item.unit && item.price === undefined}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onPatch({ qty: qty - 1 > 1 ? qty - 1 : undefined });
+        }}
+        aria-label={`One fewer ${item.name}`}
+      >−</button>
+      <span className="qty-stepper-value" aria-live="polite">{qty}</span>
+      <button
+        type="button"
+        className="icon"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPatch({ qty: qty + 1 }); }}
+        aria-label={`One more ${item.name}`}
+      >＋</button>
+    </div>
+  );
+}
+
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -116,8 +186,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   firstIsNearest?: boolean;
   big?: boolean;
   /**
-   * Shopping rows: just the checkbox, icon, name and ⋯. Swipe right to check
-   * off, left for Not here / Remove. (📍 and × move into the ⋯ menu.)
+   * Shopping rows: checkbox, icon, editable name, qty stepper, ⋯.
+   * Swipe right to check off, left for Not here / Remove.
    */
   simple?: boolean;
   onNotHere?: (i: ListItem) => void;
@@ -126,10 +196,24 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   clearable?: (i: ListItem) => boolean;
   /** Headings over the rows: a category, and a subcategory under it (shown where they change). */
   headingOf?: (i: ListItem) => { top?: string; sub?: string };
+  /** Inline qty / name / unit / price edits (avoids opening the ⋯ menu). */
+  onPatch?: (item: ListItem, patch: ItemPatch) => void;
 }) {
   const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
     <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
   );
+  const meta = (item: ListItem) => {
+    const line = qtyUnitPriceText(item);
+    const note = item.note;
+    if (!line && !note && !subOf?.(item)) return null;
+    return (
+      <span className="name-meta">
+        {line && <span className="qty">{line}</span>}
+        {note && <span className="item-note">{note}</span>}
+        {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
+      </span>
+    );
+  };
   return (
     <ul className={big ? 'items big' : 'items'}>
       {items.map((item, index) => {
@@ -161,15 +245,16 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
             >
               <div className="row-inner">
                 <label>
-                  <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
+                  <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} aria-label={`${item.done ? 'Uncheck' : 'Check off'} ${item.name}`} />
                   {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
                   <span className="name">
-                    {item.name}
-                    {item.qty && item.qty > 1 && <span className="qty"> ×{item.qty}</span>}
-                    {item.note && <span className="item-note">{item.note}</span>}
-                    {subOf?.(item) && <span className="sub">{subOf(item)}</span>}
+                    {onPatch
+                      ? <InlineName item={item} onRename={(name) => onPatch(item, { name })} />
+                      : item.name}
+                    {meta(item)}
                   </span>
                 </label>
+                {onPatch && !item.done && <QtyStepper item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
                 {clearBtn(item)}
                 {onMenu
@@ -215,3 +300,6 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
     </ul>
   );
 }
+
+/** Re-export for callers that edit unit from the menu. */
+export type { ItemUnit };

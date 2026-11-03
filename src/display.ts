@@ -1,3 +1,6 @@
+/** How the shopping list is ordered. */
+export type ListSort = 'route' | 'nearest' | 'category' | 'alpha';
+
 /** Per-phone display choices. */
 export interface Display {
   mapColors: boolean;
@@ -5,8 +8,13 @@ export interface Display {
   listColors: boolean;
   /** Category icon next to each item in the list. */
   listIcons?: boolean;
-  /** Group the shopping list by shelf/area (off: one list, nearest first). */
+  /**
+   * Group the shopping list by shelf/area (off: one list, nearest first).
+   * Prefer `listSort`; kept so older saved phones still load.
+   */
   groupList?: boolean;
+  /** How to order the shopping list (route / nearest / category / A–Z). */
+  listSort?: ListSort;
   /** Show items' categories and subcategories in the shopping list (headings, or beside where it is). */
   listCategories?: boolean;
   /** Build the store map from where you pick things up. */
@@ -30,6 +38,12 @@ export interface Display {
 }
 
 export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listColors: true, listIcons: true, buildMode: false };
+
+/** Resolve the list order from new `listSort` or the older `groupList` flag. */
+export function resolveListSort(d: Pick<Display, 'listSort' | 'groupList'>): ListSort {
+  if (d.listSort) return d.listSort;
+  return (d.groupList ?? true) ? 'route' : 'nearest';
+}
 
 /** How to colour and label category sections on the map. Leave a function out to hide that. */
 export interface SectionLook {
