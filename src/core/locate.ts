@@ -1,6 +1,5 @@
 import type { Catalog } from './catalog';
 import { productCategoryIds } from './productCategories';
-import { homesOf } from './taxonomy';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
 import { clueRank, resolveClue, typicalRank } from './clues';
@@ -52,7 +51,10 @@ export type Location =
   | { kind: 'not-sold'; product: Product }
   /** The shopper said where it is ("aisle 7"), but the map has nothing to put it on yet. */
   | { kind: 'clue'; clue: Clue; product: Product }
-  /** Nothing known for this store: where its category usually is in a supermarket. */
+  /**
+   * Nothing known for this store: where its top-level category usually is in a supermarket.
+   * `categoryId` is always the live top (so Nut Butters → Condiments after a reparent).
+   */
   | { kind: 'guess'; categoryId: string; product: Product }
   | { kind: 'unknown'; product?: Product };
 
@@ -89,29 +91,35 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
     return spot && !layout.places.find((pl) => pl.id === spot.placeId)?.display ? spot : undefined;
   };
   for (const cat of cats) {
-    const homes = new Set(homesOf(layout.places, cat).map((p) => p.id));
+    // Live parent (catalog.homesOf): Nut Butters reparented under Condiments finds the Condiments shelf.
+    const top = catalog.topOf(cat);
+    const homes = catalog.homesOf(layout.places, cat);
+    const homeIds = new Set(homes.map((p) => p.id));
     const sameKind = (other: Product) => productCategoryIds(other).includes(cat);
     for (const other of catalog.products) {
       if (other.id === product.id || !sameKind(other)) continue;
       const spot = spotOf(other);
-      if (spot && (!homes.size || homes.has(spot.placeId))) return { kind: 'spot', spot, product, exact: false };
+      if (spot && (!homeIds.size || homeIds.has(spot.placeId))) return { kind: 'spot', spot, product, exact: false };
     }
     // Not a table or stand: those are offered (📍), never assumed.
-    const place = homesOf(layout.places, cat)[0];
+    const place = homes[0];
     // Its own kind has no section there (yogurt in a long Dairy wall): beside what's known there of its category
     // (the milk), not in the category's general share.
     if (place && !place.categories.includes(cat)) {
-      const top = catalog.topOf(cat);
       for (const other of catalog.products) {
         if (other.id === product.id || !productCategoryIds(other).some((id) => catalog.topOf(id) === top)) continue;
         const spot = spotOf(other);
         if (spot?.placeId === place.id) return { kind: 'spot', spot, product, exact: false };
       }
     }
-    const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat) ? cat : catalog.topOf(cat)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
+    // Pin to the top-level section when the place stocks it (locations ↔ tops).
+    const section = place?.categories.includes(top) ? top : place?.categories.includes(cat) ? cat : top;
+    const spot = place && (resolveSpot(`${place.id}:${section}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
     if (spot) return { kind: 'spot', spot, product, exact: false };
   }
-  return cats[0] ? { kind: 'guess', categoryId: cats[0], product } : { kind: 'unknown', product };
+  // No shelf for this top yet: guess by the live top so the UI can say which department is missing.
+  const topGuess = cats[0] ? catalog.topOf(cats[0]) : undefined;
+  return topGuess ? { kind: 'guess', categoryId: topGuess, product } : { kind: 'unknown', product };
 }
 
 /** The master-list item for a list entry. */

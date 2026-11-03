@@ -772,6 +772,12 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .aisle-label.guess text { opacity: 0.4; }
 .gen-field p { margin: 2px 0 6px; }
 
+/* Places with no category: dashed rim + ? so they don't look like a department shelf */
+.place.uncategorized .place-bg { fill-opacity: 0.45; stroke: var(--muted); stroke-width: 0.1; stroke-dasharray: 0.28 0.22; }
+.place.uncategorized .uncat-frame { fill: none; stroke: var(--muted); stroke-width: 0.08; stroke-dasharray: 0.22 0.18; pointer-events: none; }
+.place.uncategorized .uncat-badge { fill: var(--muted); font-weight: 700; pointer-events: none; opacity: 0.85; }
+.place-label.uncategorized { opacity: 0.55; font-style: italic; }
+
 /* A stop with one item: one line (number, item, where it is underneath) */
 .route-list .visit.single { display: flex; align-items: center; gap: 4px; padding: 0 10px 0 8px; }
 .route-list .visit.single .single-num { flex: none; width: 40px; display: grid; place-items: center; }

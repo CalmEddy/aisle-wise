@@ -32,7 +32,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { WhereBar, type MapSpot } from './WhereBar';
-import { homesOf, nearbyKinds, orderOf, stocking } from '../core/taxonomy';
+import { orderOf } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
@@ -41,7 +41,7 @@ import { type Drag, VisitCard, ItemRows, type ItemPatch } from './ItemRows';
 import { type Toast, ToastBar } from './ToastBar';
 import { ItemMenu } from './ItemMenu';
 import { type BuildNote, BuildPanel, BuildBanner } from './BuildPanel';
-import { typicalWhere, whereText } from './whereText';
+import { noShelfText, typicalWhere, whereText } from './whereText';
 import { AisleEditor } from './AisleEditor';
 import { WhereList } from './WhereList';
 import { PlacementCard } from './PlacementCard';
@@ -743,7 +743,7 @@ export function ShoppingView(props: Props) {
     }
     for (const b of byClue) {
       const id = b.categoryId ?? productFor(b.item, catalog)?.categoryId;
-      const line = b.clue ? describeClue(b.clue) : id ? `usually ${showCats ? typicalWhere(id) : typicalWhere(id, catalog)}` : undefined;
+      const line = b.clue ? describeClue(b.clue) : id ? (showCats ? noShelfText(id, catalog) : `${noShelfText(id, catalog)} · usually ${typicalWhere(id, catalog)}`) : undefined;
       rows.push({ item: b.item, sub: withCat(line, b.item), catOrder: id ? orderOf(id) : 10_000, name: b.item.name });
     }
     for (const item of unplaced) {
@@ -896,7 +896,8 @@ export function ShoppingView(props: Props) {
    * aisle (said to be in that aisle, side not given), or the halves of a shelf split by a walkway.
    */
   function homeOfKind(cat: string): string | undefined {
-    const at = homesOf(layout.places, cat);
+    // Live parent: a subcategory (Nut Butters → Condiments) finds its department shelf.
+    const at = catalog.homesOf(layout.places, cat);
     const group = (id: string) => id.replace(/~\d+$/, '').replace(/^(g-shelf-.+)-[LR]$/, '$1');
     const groups = [...new Set(at.map((pl) => group(pl.id)))];
     if (groups.length !== 1 || !at.length) return undefined;
@@ -977,12 +978,12 @@ export function ShoppingView(props: Props) {
   function mapSpotsFor(item: ListItem): MapSpot[] {
     const cat = productFor(item, catalog)?.categoryId;
     if (!cat) return [];
+    const top = catalog.topOf(cat);
     const shelves = layout.places.filter((p) => !p.id.startsWith('g-open-') && !p.display);
-    // Its kind; else (offered, not assumed) other kinds from its category: oatmeal → the cereal aisle;
-    // else a table or stand drawn by hand that has its kind this week.
-    const own = stocking(shelves, cat);
-    const near = own.length ? own : nearbyKinds(shelves, cat);
-    const at = near.length ? near : stocking(layout.places, cat).filter((p) => !p.id.startsWith('g-'));
+    // Its kind (live parent → top shelf); else nearby kinds from the same top; else a display.
+    const own = catalog.stocking(shelves, cat);
+    const near = own.length ? own : catalog.nearbyKinds(shelves, cat);
+    const at = near.length ? near : catalog.stocking(layout.places, cat).filter((p) => !p.id.startsWith('g-'));
     const out: MapSpot[] = [];
     const add = (s: MapSpot) => { if (!out.some((o) => o.key === s.key)) out.push(s); };
     for (const p of at) {
@@ -1006,7 +1007,7 @@ export function ShoppingView(props: Props) {
       } else if (front) {
         add({ key: `f${front[1]}`, label: `${p.label} (front, ${front[1]} of the door)`, clue: { kind: 'wall', wall: 'front', part: front[1] as 'left' | 'right' } });
       } else if (!p.id.startsWith('g-')) {
-        add({ key: `p${p.id}`, label: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'), spot: `${p.id}:${cat}` });
+        add({ key: `p${p.id}`, label: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'), spot: `${p.id}:${top}` });
       }
     }
     return out;
@@ -1295,7 +1296,9 @@ export function ShoppingView(props: Props) {
                 if (!b) return undefined;
                 if (b.clue) return describeClue(b.clue);
                 // With category headings shown, the line doesn't repeat the category.
-                return `usually ${showCats ? typicalWhere(b.categoryId!) : typicalWhere(b.categoryId!, catalog)}`;
+                return showCats
+                  ? noShelfText(b.categoryId!, catalog)
+                  : `${noShelfText(b.categoryId!, catalog)} · usually ${typicalWhere(b.categoryId!, catalog)}`;
               }}
             />
           </section>
@@ -1847,8 +1850,11 @@ export function ShoppingView(props: Props) {
         <ItemMenu
           item={menuFor}
           where={(() => {
-            const loc = locate(menuFor);
-            return loc.kind === 'spot' ? loc.spot.label : loc.kind === 'clue' ? describeClue(loc.clue) : loc.kind === 'guess' ? `Usually ${typicalWhere(loc.categoryId, catalog)}` : loc.kind === 'not-sold' ? `Not available at ${layout.name}` : 'No location yet';
+            const p = productFor(menuFor, catalog);
+            if (!p) return 'No location yet';
+            const loc = locateProduct(p, layout, catalog);
+            if (loc.kind === 'not-sold') return `Not available at ${layout.name}`;
+            return whereText(p, layout, catalog);
           })()}
           storeName={layout.name}
           categoryId={productFor(menuFor, catalog)?.categoryId}
