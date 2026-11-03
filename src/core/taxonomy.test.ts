@@ -3,7 +3,7 @@ import { Catalog } from './catalog';
 import { defaultCategories, defaultProducts } from './categories';
 import { guessDept } from './clues';
 import { hasOldCategories, migrateCategories } from './recategorize';
-import { orderOf, parentOf, SEED_CATEGORIES, stocking, stocks, topOf } from './taxonomy';
+import { liveParent, liveTop, orderOf, parentOf, SEED_CATEGORIES, stocking, stocks, topOf } from './taxonomy';
 import type { Category, Product, StoreLayout } from './types';
 
 describe('the grocery taxonomy', () => {
@@ -13,6 +13,16 @@ describe('the grocery taxonomy', () => {
     expect(SEED_CATEGORIES.flatMap((c) => c.subs)).toHaveLength(105);
     expect(parentOf('produce_fruits')).toBe('produce');
     expect(topOf('produce')).toBe('produce');
+    // Live parent honours edits on the household's category list (seed is only a fallback).
+    const byId = new Map([
+      ['breakfast_spreads', { parent: 'condiments_sauces' }],
+      ['condiments_sauces', {}],
+      ['breakfast_cereal', {}],
+    ]);
+    expect(liveParent(byId, 'breakfast_spreads')).toBe('condiments_sauces');
+    expect(liveTop(byId, 'breakfast_spreads')).toBe('condiments_sauces');
+    expect(liveParent(byId, 'breakfast_cereal')).toBeUndefined();
+    expect(liveTop(byId, 'produce_fruits')).toBe('produce'); // unknown id → seed
     expect(orderOf('produce_fruits')).toBeLessThan(orderOf('pet_cat'));
     expect(defaultCategories).toHaveLength(127);
   });

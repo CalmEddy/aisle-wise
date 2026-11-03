@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { inWalkingOrder, topOf } from '../core/taxonomy';
+import { inWalkingOrder } from '../core/taxonomy';
 import { guessCategory } from '../core/guess';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
@@ -41,11 +41,11 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   const guess = isNew ? guessCategory(query, catalog)?.categoryId : undefined;
   // Browsing: the categories (not subcategories) that have items, in walking order; the most common items first.
   const categories = useMemo(
-    () => inWalkingOrder(catalog.categories.filter((c) => !c.parent && catalog.products.some((p) => p.categoryId && topOf(p.categoryId) === c.id))),
+    () => inWalkingOrder(catalog.tops().filter((c) => catalog.products.some((p) => p.categoryId && catalog.topOf(p.categoryId) === c.id))),
     [catalog],
   );
   const browsing = browse !== undefined
-    ? [...catalog.products].filter((p) => p.categoryId && topOf(p.categoryId) === browse)
+    ? [...catalog.products].filter((p) => p.categoryId && catalog.topOf(p.categoryId) === browse)
       .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999) || a.name.localeCompare(b.name))
     : [];
 

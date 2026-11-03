@@ -1,6 +1,6 @@
 import type { Catalog } from './catalog';
 import { productCategoryIds } from './productCategories';
-import { homesOf, topOf } from './taxonomy';
+import { homesOf } from './taxonomy';
 import { categorySpot, describeExact, exactMark, exactPoint, parseExactKey, spotPoint } from './geometry';
 import type { Clue, ListItem, Product, Spot, Stop, StoreLayout } from './types';
 import { clueRank, resolveClue, typicalRank } from './clues';
@@ -101,14 +101,14 @@ export function locateProduct(product: Product, layout: StoreLayout, catalog: Ca
     // Its own kind has no section there (yogurt in a long Dairy wall): beside what's known there of its category
     // (the milk), not in the category's general share.
     if (place && !place.categories.includes(cat)) {
-      const top = topOf(cat);
+      const top = catalog.topOf(cat);
       for (const other of catalog.products) {
-        if (other.id === product.id || !productCategoryIds(other).some((id) => topOf(id) === top)) continue;
+        if (other.id === product.id || !productCategoryIds(other).some((id) => catalog.topOf(id) === top)) continue;
         const spot = spotOf(other);
         if (spot?.placeId === place.id) return { kind: 'spot', spot, product, exact: false };
       }
     }
-    const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat) ? cat : topOf(cat)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
+    const spot = place && (resolveSpot(`${place.id}:${place.categories.includes(cat) ? cat : catalog.topOf(cat)}`, layout, catalog) ?? resolveSpot(place.id, layout, catalog));
     if (spot) return { kind: 'spot', spot, product, exact: false };
   }
   return cats[0] ? { kind: 'guess', categoryId: cats[0], product } : { kind: 'unknown', product };

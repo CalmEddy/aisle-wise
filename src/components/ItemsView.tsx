@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { inWalkingOrder, orderOf, parentOf, topOf } from '../core/taxonomy';
+import { inWalkingOrder, orderOf } from '../core/taxonomy';
 import type { Snapshot } from '../App';
 import { itemMatches, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
@@ -10,7 +10,7 @@ import { addCategory, productCategoryIds, removeCategory, withCategories } from 
 import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
-import { CategoryPicker, byName } from './CategoryPicker';
+import { CategoryPicker } from './CategoryPicker';
 import { SwipeRow } from './SwipeRow';
 import { WherePanel } from './WherePanel';
 import { aislesUsed, describeClue } from '../core/clues';
@@ -65,7 +65,7 @@ interface ItemsToast {
   openId?: string;
 }
 
-function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onList, snapshot, undo, listName }: Props) {
+function ProductList({ catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, snapshot, undo, listName }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ItemFilter>('all');
   const [alsoList, setAlsoList] = useState(false);
@@ -80,6 +80,8 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCategory, setBulkCategory] = useState(false);
+  /** Subcategory heading being edited (from a tap on the grey sub-head). */
+  const [editSubId, setEditSubId] = useState<string>();
 
   useEffect(() => {
     if (!toast) return;
@@ -101,7 +103,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
   }, [catalog, layout, onList]);
 
   /** An item's category group (the category its subcategory is in), or '' for none. */
-  const groupOf = (p: Product) => (p.categoryId && catalog.categoryById.has(p.categoryId) ? topOf(p.categoryId) : '');
+  const groupOf = (p: Product) => (p.categoryId && catalog.categoryById.has(p.categoryId) ? catalog.topOf(p.categoryId) : '');
   const groups = useMemo(() => {
     const shown = (searching ? catalog.suggest(q, 500) : catalog.products)
       .filter((p) => itemMatches(p, filter, layout, catalog, onList));
@@ -112,7 +114,7 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
       const key = groupOf(p);
       byCat.set(key, [...(byCat.get(key) ?? []), p]);
     }
-    return [...inWalkingOrder(catalog.categories.filter((c) => !c.parent)).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
+    return [...inWalkingOrder(catalog.tops()).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
       .map((c) => ({ ...c, products: byCat.get(c.id) ?? [] }))
       .filter((g) => g.products.length);
   }, [catalog, q, searching, filter, layout, onList]);
@@ -382,12 +384,24 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
             {open && (
               <ul className="items">
                 {g.products.map((p, i) => {
-                  // A subheading where the subcategory changes.
+                  // A subheading where the subcategory changes — tap to rename or move it.
                   const sub = p.categoryId && p.categoryId !== g.id ? catalog.categoryById.get(p.categoryId) : undefined;
                   const prevSub = i > 0 ? g.products[i - 1].categoryId : undefined;
                   return (
                     <Fragment key={p.id}>
-                      {sub && sub.id !== prevSub && <li className="sub-head muted small" aria-hidden="true">{sub.name}</li>}
+                      {sub && sub.id !== prevSub && (
+                        <li className="sub-head">
+                          <button
+                            type="button"
+                            className="sub-head-btn"
+                            onClick={() => setEditSubId(sub.id)}
+                            aria-label={`Edit subcategory ${sub.name}`}
+                          >
+                            <span className="sub-head-name">{sub.name}</span>
+                            <span className="muted small sub-head-hint">Edit</span>
+                          </button>
+                        </li>
+                      )}
                       {row(p)}
                     </Fragment>
                   );
@@ -455,6 +469,31 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
         </div>
       )}
 
+      {editSubId && catalog.categoryById.get(editSubId) && (
+        <SubcategoryEditor
+          category={catalog.categoryById.get(editSubId)!}
+          catalog={catalog}
+          iconOf={(id) => lookOf(id)?.icon}
+          itemCount={catalog.products.filter((p) => p.categoryId === editSubId || p.extraCategoryIds?.includes(editSubId)).length}
+          onSave={(patch, text) => {
+            const snap = snapshot();
+            setCategories((prev) => prev.map((c) => {
+              if (c.id !== editSubId) return c;
+              const next = { ...c };
+              if (patch.name !== undefined) next.name = patch.name;
+              if ('parent' in patch) {
+                if (patch.parent) next.parent = patch.parent;
+                else delete next.parent;
+              }
+              return next;
+            }));
+            setToast({ text, snapshot: snap });
+            setEditSubId(undefined);
+          }}
+          onClose={() => setEditSubId(undefined)}
+        />
+      )}
+
       {toast && (
         <div className="toast" role="status">
           <span className="toast-text">{toast.text}</span>
@@ -465,6 +504,94 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
           <button className="icon" onClick={() => setToast(null)} aria-label="Dismiss">×</button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Rename a subcategory or move it under a different top category (or promote
+ * it). Opened by tapping a grey subcategory heading in the items list.
+ */
+function SubcategoryEditor({ category, catalog, iconOf, itemCount, onSave, onClose }: {
+  category: Category;
+  catalog: Catalog;
+  iconOf: (id: string) => string | undefined;
+  itemCount: number;
+  onSave: (patch: Partial<Category>, text: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(category.name);
+  const parentId = catalog.parentOf(category.id);
+  const [under, setUnder] = useState<string | undefined>(parentId);
+  const tops = useMemo(() => inWalkingOrder(catalog.tops().filter((c) => c.id !== category.id)), [catalog, category.id]);
+  const commit = (nextParent: string | undefined) => {
+    const trimmed = name.trim() || category.name;
+    const parentChanged = nextParent !== parentId;
+    const nameChanged = trimmed !== category.name;
+    if (!parentChanged && !nameChanged) { onClose(); return; }
+    const patch: Partial<Category> = { parent: nextParent };
+    if (nameChanged) patch.name = trimmed;
+    const parentName = nextParent ? catalog.categoryById.get(nextParent)?.name : undefined;
+    const text = parentChanged
+      ? (nextParent
+        ? `“${trimmed}” moved under ${parentName}.`
+        : `“${trimmed}” is now a top-level category.`)
+      : `Renamed to “${trimmed}”.`;
+    onSave(patch, text);
+  };
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet subcat-sheet" role="dialog" aria-label={`Edit ${category.name}`} onClick={(e) => e.stopPropagation()}>
+        <h2>Subcategory</h2>
+        <p className="muted small">{itemCount} item{itemCount === 1 ? '' : 's'} · change where it sits in the store order</p>
+        <label className="field">
+          <span>Name</span>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Subcategory name"
+            autoFocus
+          />
+        </label>
+        <div className="field">
+          <span>Under</span>
+          <div className="parent-chips" role="group" aria-label="Parent category">
+            {tops.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={under === t.id ? 'chip active' : 'chip'}
+                aria-pressed={under === t.id}
+                onClick={() => setUnder(t.id)}
+              >
+                <span aria-hidden="true">{iconOf(t.id) ?? '·'}</span> {t.name}
+              </button>
+            ))}
+          </div>
+          <CategoryPicker
+            value={under}
+            categories={catalog.categories}
+            topsOnly
+            exclude={[category.id]}
+            onPick={(id) => { if (id) setUnder(id); }}
+            iconOf={iconOf}
+            label="Search parent category"
+            placeholder="Or search a parent category…"
+          />
+        </div>
+        <button
+          type="button"
+          className="pick"
+          onClick={() => { setUnder(undefined); commit(undefined); }}
+        >
+          Make its own top-level category
+        </button>
+        <div className="sheet-actions">
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn primary" onClick={() => commit(under)}>Save</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -482,17 +609,17 @@ function CategoriesEditor({ product, catalog, iconOf, onChange }: {
   const [adding, setAdding] = useState(false);
   const ids = productCategoryIds(product);
   const primary = ids[0];
-  const primaryCat = primary ? catalog.categoryById.get(primary) : undefined;
-  const parentId = primary ? (primaryCat?.parent ?? parentOf(primary)) : undefined;
+  const parentId = primary ? catalog.parentOf(primary) : undefined;
   const siblings = useMemo(() => {
     if (!parentId) return [] as Category[];
-    return inWalkingOrder(catalog.categories.filter((c) => (c.parent ?? parentOf(c.id)) === parentId));
-  }, [catalog.categories, parentId]);
+    return inWalkingOrder(catalog.categories.filter((c) => catalog.parentOf(c.id) === parentId));
+  }, [catalog, parentId]);
   const parentName = parentId ? catalog.categoryById.get(parentId)?.name : undefined;
   const labelOf = (id: string) => {
     const c = catalog.categoryById.get(id);
     if (!c) return id;
-    const top = catalog.categoryById.get(topOf(c.id));
+    const topId = catalog.topOf(c.id);
+    const top = catalog.categoryById.get(topId);
     return top && top.id !== c.id ? `${c.name} · ${top.name}` : c.name;
   };
 
@@ -789,6 +916,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
 
 function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props) {
   const [name, setName] = useState('');
+  const [editSubId, setEditSubId] = useState<string>();
   const counts = useMemo(() => {
     const m = new Map<string, number>();
     for (const p of catalog.products) if (p.categoryId) m.set(p.categoryId, (m.get(p.categoryId) ?? 0) + 1);
@@ -797,31 +925,42 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
 
   const [iconFor, setIconFor] = useState<string | null>(null);
   const update = (id: string, patch: Partial<Category>) =>
-    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+    setCategories((prev) => prev.map((c) => {
+      if (c.id !== id) return c;
+      const next = { ...c, ...patch };
+      if ('parent' in patch && !patch.parent) delete next.parent;
+      return next;
+    }));
   const rename = (id: string, value: string) => update(id, { name: value });
 
-  // Shown A–Z. Re-sorted when a rename is finished, so rows don't jump while typing.
-  const [sortTick, setSortTick] = useState(0);
-  const order = useMemo(
-    () => byName(catalog.categories).map((c) => c.id),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [catalog.categories.length, sortTick],
-  );
-  const shownCategories = order
-    .map((id) => ({ c: catalog.categories.find((x) => x.id === id), i: catalog.categories.findIndex((x) => x.id === id) }))
-    .filter((r): r is { c: Category; i: number } => !!r.c);
+  const tree = useMemo(() => {
+    const tops = inWalkingOrder(catalog.tops());
+    return tops.map((top, i) => ({
+      top,
+      i,
+      subs: inWalkingOrder(catalog.categories.filter((c) => catalog.parentOf(c.id) === top.id)),
+    }));
+  }, [catalog]);
 
   function remove(cat: Category) {
     const n = counts.get(cat.id) ?? 0;
-    const msg = n
-      ? `Delete “${cat.name}”? Its ${n} item${n === 1 ? '' : 's'} will have no category, and it will be removed from every store layout.`
+    const kids = catalog.categories.filter((c) => catalog.parentOf(c.id) === cat.id);
+    const msg = n || kids.length
+      ? `Delete “${cat.name}”?${n ? ` Its ${n} item${n === 1 ? '' : 's'} will have no category.` : ''}${kids.length ? ` ${kids.length} subcategor${kids.length === 1 ? 'y becomes' : 'ies become'} top-level.` : ''} It will be removed from every store layout.`
       : `Delete “${cat.name}”? It will be removed from every store layout.`;
     if (!confirm(msg)) return;
-    setCategories((prev) => prev.filter((c) => c.id !== cat.id));
+    setCategories((prev) => prev
+      .filter((c) => c.id !== cat.id)
+      .map((c) => {
+        if (c.parent !== cat.id) return c;
+        const n = { ...c };
+        delete n.parent;
+        return n;
+      }));
     setProducts((prev) => prev.map((p) => (p.categoryId === cat.id ? { ...p, categoryId: undefined } : p)));
     setLayouts((prev) => prev.map((l) => ({
       ...l,
-      places: l.places.map((p) => ({ ...p, categories: p.categories.filter((c) => c !== cat.id) })),
+      places: l.places.map((p) => ({ ...p, categories: p.categories.filter((id) => id !== cat.id) })),
     })));
   }
 
@@ -829,13 +968,54 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
     const trimmed = name.trim();
     if (!trimmed) return;
     setCategories((prev) => {
-      // Next colour not already used, so new categories stand out.
       const used = new Set(prev.map((c, i) => categoryLook(c, i).color));
       const color = PALETTE.find((c) => !used.has(c)) ?? PALETTE[prev.length % PALETTE.length];
       return [...prev, { id: `c-${newId()}`, name: trimmed, color, icon: '🛒' }];
     });
     setName('');
   }
+
+  const row = (c: Category, i: number, nested: boolean) => {
+    const look = categoryLook(c, i);
+    const parentId = catalog.parentOf(c.id);
+    return (
+      <li key={c.id} className={`cat-item${nested ? ' cat-sub-item' : ''}`}>
+        <div className="row">
+          <label className="swatch" style={{ background: look.color }} title="Change colour">
+            <input type="color" value={look.color} onChange={(e) => update(c.id, { color: e.target.value })} aria-label={`Colour for ${c.name}`} />
+          </label>
+          <button className="icon-pick" onClick={() => setIconFor(iconFor === c.id ? null : c.id)} aria-label={`Icon for ${c.name}`} aria-expanded={iconFor === c.id}>
+            {look.icon}
+          </button>
+          <input value={c.name} onChange={(e) => rename(c.id, e.target.value)} aria-label={nested ? 'Subcategory name' : 'Category name'} />
+          <span className="muted small count">{counts.get(c.id) ?? 0}</span>
+          {nested && (
+            <button type="button" className="link cat-move" onClick={() => setEditSubId(c.id)} aria-label={`Move ${c.name}`}>
+              {parentId ? catalog.categoryById.get(parentId)?.name ?? 'Move' : 'Move'}
+            </button>
+          )}
+          <button className="icon" onClick={() => remove(c)} aria-label={`Delete ${c.name}`}>×</button>
+        </div>
+        {iconFor === c.id && (
+          <div className="icon-grid" role="listbox" aria-label={`Choose an icon for ${c.name}`}>
+            {ICON_CHOICES.map((icon) => (
+              <button key={icon} role="option" aria-selected={icon === look.icon} className={icon === look.icon ? 'active' : ''}
+                onClick={() => { update(c.id, { icon }); setIconFor(null); }}>{icon}</button>
+            ))}
+            <input
+              className="icon-own"
+              placeholder="Or type any emoji"
+              aria-label="Type an emoji"
+              onChange={(e) => {
+                const own = [...e.target.value.trim()].slice(0, 2).join('');
+                if (own) update(c.id, { icon: own });
+              }}
+            />
+          </div>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="categories-view">
@@ -844,46 +1024,29 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
         <button type="submit" disabled={!name.trim()}>Add</button>
       </form>
       <p className="muted small">
-        Tap a colour or icon to change it. Rename categories here; they’re listed A–Z.
-        To set where a category is in a store, open <b>Store layout</b> and tap an aisle or area.
+        Categories are grouped with their subcategories. Tap <b>Move</b> (or a subcategory heading on the Items tab) to put a subcategory under a different section.
       </p>
       <ul className="card cat-list">
-        {shownCategories.map(({ c, i }) => {
-          const look = categoryLook(c, i);
-          return (
-          <li key={c.id} className="cat-item">
-           <div className="row">
-            <label className="swatch" style={{ background: look.color }} title="Change colour">
-              <input type="color" value={look.color} onChange={(e) => update(c.id, { color: e.target.value })} aria-label={`Colour for ${c.name}`} />
-            </label>
-            <button className="icon-pick" onClick={() => setIconFor(iconFor === c.id ? null : c.id)} aria-label={`Icon for ${c.name}`} aria-expanded={iconFor === c.id}>
-              {look.icon}
-            </button>
-            <input value={c.name} onChange={(e) => rename(c.id, e.target.value)} onBlur={() => setSortTick((t) => t + 1)} aria-label={`Category name`} />
-            <span className="muted small count">{counts.get(c.id) ?? 0}</span>
-            <button className="icon" onClick={() => remove(c)} aria-label={`Delete ${c.name}`}>×</button>
-           </div>
-           {iconFor === c.id && (
-             <div className="icon-grid" role="listbox" aria-label={`Choose an icon for ${c.name}`}>
-               {ICON_CHOICES.map((icon) => (
-                 <button key={icon} role="option" aria-selected={icon === look.icon} className={icon === look.icon ? 'active' : ''}
-                   onClick={() => { update(c.id, { icon }); setIconFor(null); }}>{icon}</button>
-               ))}
-               <input
-                 className="icon-own"
-                 placeholder="Or type any emoji"
-                 aria-label="Type an emoji"
-                 onChange={(e) => {
-                   const own = [...e.target.value.trim()].slice(0, 2).join('');
-                   if (own) update(c.id, { icon: own });
-                 }}
-               />
-             </div>
-           )}
-          </li>
-          );
-        })}
+        {tree.map(({ top, i, subs }) => (
+          <Fragment key={top.id}>
+            {row(top, i, false)}
+            {subs.map((s, si) => row(s, i * 20 + si + 1, true))}
+          </Fragment>
+        ))}
       </ul>
+      {editSubId && catalog.categoryById.get(editSubId) && (
+        <SubcategoryEditor
+          category={catalog.categoryById.get(editSubId)!}
+          catalog={catalog}
+          iconOf={(id) => categoryLook(catalog.categoryById.get(id), 0).icon}
+          itemCount={counts.get(editSubId) ?? 0}
+          onSave={(patch) => {
+            update(editSubId, patch);
+            setEditSubId(undefined);
+          }}
+          onClose={() => setEditSubId(undefined)}
+        />
+      )}
     </div>
   );
 }

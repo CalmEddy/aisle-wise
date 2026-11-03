@@ -15,14 +15,35 @@ for (const c of SEED_CATEGORIES) {
   c.subs.forEach(([id], i) => { PARENT.set(id, c.id); ORDER.set(id, c.order * 100 + i + 1); });
 }
 
-/** The category a subcategory is in (undefined for a category, or one the shopper made). */
+/** The category a subcategory is in (undefined for a category, or one the shopper made). Seed default only. */
 export const parentOf = (id: string): string | undefined => PARENT.get(id);
 
-/** The category an id belongs to: itself if it's a category. */
+/** The category an id belongs to: itself if it's a category. Seed default only. */
 export const topOf = (id: string): string => PARENT.get(id) ?? id;
 
-/** Whether an id is a subcategory of the taxonomy. */
+/** Whether an id is a subcategory of the taxonomy. Seed default only. */
 export const isSub = (id: string): boolean => PARENT.has(id);
+
+/**
+ * Live parent from the household's category list. When the category is saved
+ * there, `parent` is authoritative (missing = top-level) — so moving a
+ * subcategory under another parent (or promoting it) sticks. Unknown ids fall
+ * back to the seed taxonomy.
+ */
+export function liveParent(byId: ReadonlyMap<string, { parent?: string }>, id: string): string | undefined {
+  if (byId.has(id)) return byId.get(id)!.parent;
+  return PARENT.get(id);
+}
+
+/** Live top category: follow `liveParent`, else the id itself. */
+export function liveTop(byId: ReadonlyMap<string, { parent?: string }>, id: string): string {
+  return liveParent(byId, id) ?? id;
+}
+
+/** Whether this id is currently a subcategory in the live list (or seed if unknown). */
+export function liveIsSub(byId: ReadonlyMap<string, { parent?: string }>, id: string): boolean {
+  return liveParent(byId, id) !== undefined;
+}
 
 /** Walking order (categories in store order, subcategories within them); shopper-made ones come last. */
 export const orderOf = (id: string): number => ORDER.get(id) ?? 10_000;
