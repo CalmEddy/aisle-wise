@@ -1,6 +1,9 @@
 /** How the shopping list is ordered. */
 export type ListSort = 'nearest' | 'category' | 'alpha';
 
+/** How the Grocery Items catalog is ordered (no nearest — items have no shopper position). */
+export type ItemsSort = 'category' | 'alpha';
+
 /** Per-phone display choices. */
 export interface Display {
   mapColors: boolean;
@@ -18,10 +21,18 @@ export interface Display {
    * Legacy saved value `"route"` is treated as nearest.
    */
   listSort?: ListSort | 'route';
+  /** How to order the Grocery Items catalog (category / A–Z). Default category. */
+  itemsSort?: ItemsSort;
   /** Show items' categories and subcategories in the shopping list (beside where it is). */
   listCategories?: boolean;
   /** Group shopping-list rows under category headings. */
   listGroupByCategory?: boolean;
+  /**
+   * Group Grocery Items under category headings. Defaults on (catalog has always
+   * been sectioned); once set, shares the preference with the Shop list toggle
+   * via the same control language.
+   */
+  itemsGroupByCategory?: boolean;
   /** Show the −/＋ quantity stepper on shopping rows (default on). */
   listQty?: boolean;
   /** Show where-it-is under each item name (aisle / place line; default on). */
@@ -54,6 +65,16 @@ export function resolveListSort(d: Pick<Display, 'listSort' | 'groupList'>): Lis
   // "route" was removed (same results as nearest); map it and legacy groupList to nearest.
   if (raw === 'route' || raw === undefined) return 'nearest';
   return raw;
+}
+
+/** Resolve Grocery Items catalog order (default: by category). */
+export function resolveItemsSort(d: Pick<Display, 'itemsSort'>): ItemsSort {
+  return d.itemsSort === 'alpha' ? 'alpha' : 'category';
+}
+
+/** Whether the Items catalog shows category section headings (default on). */
+export function resolveItemsGroupByCategory(d: Pick<Display, 'itemsGroupByCategory'>): boolean {
+  return d.itemsGroupByCategory ?? true;
 }
 
 /** How to colour and label category sections on the map. Leave a function out to hide that. */

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { inWalkingOrder, orderOf } from '../core/taxonomy';
-import type { Snapshot } from '../App';
+import type { QuickAddResult, Snapshot } from '../App';
 import { itemMatches, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
 import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
@@ -8,9 +8,13 @@ import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import { addCategory, productCategoryIds, removeCategory, withCategories } from '../core/productCategories';
 import type { Category, Product, StoreLayout } from '../core/types';
+import { resolveItemsGroupByCategory, resolveItemsSort, type Display } from '../display';
 import { autoWhereText, whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker } from './CategoryPicker';
+import { DisplayToggles, ItemsSortToggle } from './DisplayToggles';
+import { ListsSheet, type ListsApi } from './ListsSheet';
+import { AddItemsSheet } from './AddItemsSheet';
 import { SwipeRow } from './SwipeRow';
 import { WherePanel } from './WherePanel';
 import { aislesUsed, describeClue } from '../core/clues';
@@ -24,21 +28,75 @@ interface Props {
   setCategories: (fn: (prev: Category[]) => Category[]) => void;
   setLayouts: (fn: (prev: StoreLayout[]) => StoreLayout[]) => void;
   onAddToList: (product: Product) => void;
-  /** Ids of products already on the shopping list. */
+  /** Ids of products already on the active shopping list. */
   onList: Set<string>;
-  /** Name of the list being shopped (where adds go). */
+  /** Name of the list being stocked (where adds go). */
   listName: string;
   /** What Undo would put back right now, and putting it back. */
   snapshot: () => Snapshot;
   undo: (s: Snapshot) => void;
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+  listsOpen: boolean;
+  onListsClose: () => void;
+  lists: ListsApi;
+  /** Product ids still to buy on a given list (for AddItemsSheet targeting). */
+  onListIds: (listId: string) => Set<string>;
+  /** Add names onto any list without forcing a switch. */
+  quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart') => QuickAddResult;
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
 export function ItemsView(props: Props) {
   const [tab, setTab] = useState<'items' | 'categories'>('items');
+  /** Stock a (possibly non-active) list from ListsSheet without switching the trip. */
+  const [addingFor, setAddingFor] = useState<string>();
+  const [listToast, setListToast] = useState<{ text: string; snapshot: Snapshot } | null>(null);
+
+  useEffect(() => {
+    if (!listToast) return;
+    const t = setTimeout(() => setListToast(null), 7000);
+    return () => clearTimeout(t);
+  }, [listToast]);
+
+  const lookOf = useMemo(() => {
+    const m = new Map(props.catalog.categories.map((c, i) => [c.id, categoryLook(c, i)]));
+    return (id?: string) => (id ? m.get(id) : undefined);
+  }, [props.catalog.categories]);
+
   return (
     <>
+      {props.listsOpen && (
+        <ListsSheet
+          lists={props.lists}
+          onClose={props.onListsClose}
+          onCombined={(note, snap) => setListToast({ text: note, snapshot: snap })}
+          onRemoved={(note, snap) => setListToast({ text: note, snapshot: snap })}
+          onCleared={(note, snap) => setListToast({ text: note, snapshot: snap })}
+          onDuplicated={(note, snap) => setListToast({ text: note, snapshot: snap })}
+          onAddItems={(id) => { props.onListsClose(); setAddingFor(id); }}
+        />
+      )}
+      {addingFor && (
+        <AddItemsSheet
+          listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? props.listName}
+          catalog={props.catalog}
+          onList={props.onListIds(addingFor)}
+          whereText={(p) => whereText(p, props.layout, props.catalog)}
+          iconOf={(id) => lookOf(id)?.icon}
+          onAdd={(names, mode) => props.quickAddTo(addingFor, names, mode)}
+          onUndo={props.undo}
+          onClose={() => setAddingFor(undefined)}
+        />
+      )}
+      {listToast && (
+        <div className="toast" role="status">
+          <span className="toast-text">{listToast.text}</span>
+          <button className="toast-btn" onClick={() => { props.undo(listToast.snapshot); setListToast(null); }}>Undo</button>
+          <button className="icon" onClick={() => setListToast(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
       <div className="segmented" role="tablist">
         <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Grocery items</button>
         <button className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}>Categories</button>
@@ -66,7 +124,10 @@ interface ItemsToast {
   openId?: string;
 }
 
-function ProductList({ catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, snapshot, undo, listName }: Props) {
+function ProductList({
+  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, snapshot, undo, listName,
+  display, setDisplay,
+}: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ItemFilter>('all');
   const [alsoList, setAlsoList] = useState(false);
@@ -95,6 +156,9 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
     return (id?: string) => (id ? m.get(id) : undefined);
   }, [catalog.categories]);
 
+  const itemsSort = resolveItemsSort(display);
+  const groupByCategory = resolveItemsGroupByCategory(display);
+
   const q = query.trim();
   const searching = q.length > 0 && !q.includes(',');
   const counts = useMemo(() => {
@@ -105,23 +169,37 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
 
   /** An item's category group (the category its subcategory is in), or '' for none. */
   const groupOf = (p: Product) => (p.categoryId && catalog.categoryById.has(p.categoryId) ? catalog.topOf(p.categoryId) : '');
-  const groups = useMemo(() => {
+
+  const filtered = useMemo(() => {
     const shown = (searching ? catalog.suggest(q, 500) : catalog.products)
       .filter((p) => itemMatches(p, filter, layout, catalog, onList));
-    // Within a category: by subcategory (walking order), then name.
-    const sorted = [...shown].sort((a, b) => orderOf(a.categoryId ?? '') - orderOf(b.categoryId ?? '') || a.name.localeCompare(b.name));
+    const byName = (a: Product, b: Product) => a.name.localeCompare(b.name);
+    const byCategoryThenName = (a: Product, b: Product) =>
+      orderOf(a.categoryId ?? '') - orderOf(b.categoryId ?? '') || byName(a, b);
+    return [...shown].sort(itemsSort === 'alpha' ? byName : byCategoryThenName);
+  }, [catalog, q, searching, filter, layout, onList, itemsSort]);
+
+  const groups = useMemo(() => {
+    if (!groupByCategory) return [];
     const byCat = new Map<string, Product[]>();
-    for (const p of sorted) {
+    for (const p of filtered) {
       const key = groupOf(p);
       byCat.set(key, [...(byCat.get(key) ?? []), p]);
     }
+    const byName = (a: Product, b: Product) => a.name.localeCompare(b.name);
+    // Alpha sort: keep A–Z within each section; category sort already ordered by walking order.
     return [...inWalkingOrder(catalog.tops()).map((c) => ({ id: c.id, name: c.name })), { id: '', name: 'No category' }]
-      .map((c) => ({ ...c, products: byCat.get(c.id) ?? [] }))
+      .map((c) => ({
+        ...c,
+        products: itemsSort === 'alpha'
+          ? [...(byCat.get(c.id) ?? [])].sort(byName)
+          : (byCat.get(c.id) ?? []),
+      }))
       .filter((g) => g.products.length);
-  }, [catalog, q, searching, filter, layout, onList]);
+  }, [catalog, filtered, groupByCategory, itemsSort]);
 
-  // Searching or filtering shows everything; otherwise categories fold up into an index.
-  const allOpen = searching || filter !== 'all';
+  // Searching, filtering, or flat mode shows everything; otherwise categories fold up into an index.
+  const allOpen = searching || filter !== 'all' || !groupByCategory;
   const isOpen = (id: string) => allOpen || openGroups.has(id);
   const recentProducts = recent.map((id) => catalog.productById.get(id)).filter((p): p is Product => !!p);
 
@@ -151,16 +229,19 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
   }
   const remove = (p: Product) => removeMany([p]);
 
-  /** Puts items on the shopping list (skipping ones already there), with Undo. */
+  /** Puts items on the active shopping list (skipping ones already there), with Undo. */
   function addManyToList(list: Product[]) {
     const fresh = list.filter((p) => !onList.has(p.id));
     if (!fresh.length) {
-      setToast({ text: `${list.length === 1 ? `${list[0].name} is` : 'They’re all'} already on your list.`, snapshot: snapshot() });
+      setToast({
+        text: `${list.length === 1 ? `${list[0].name} is` : 'They’re all'} already on “${listName}”.`,
+        snapshot: snapshot(),
+      });
       return;
     }
     const snap = snapshot();
     for (const p of fresh) onAddToList(p);
-    setToast({ text: `Added ${nameList(fresh)} to your list.`, snapshot: snap });
+    setToast({ text: `Added ${nameList(fresh)} to “${listName}”.`, snapshot: snap });
   }
 
   /** Marks items (not) sold at the current store. */
@@ -172,7 +253,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
   }
   const notSoldHere = (p: Product) => !!p.notAt?.includes(layout.id);
 
-  const shown = groups.flatMap((g) => g.products);
+  const shown = groupByCategory ? groups.flatMap((g) => g.products) : filtered;
   const chosen = catalog.products.filter((p) => selected.has(p.id));
   const toggleSelect = (id: string) => setSelected((prev) => {
     const next = new Set(prev);
@@ -236,7 +317,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
     const parts = [
       created.length ? (one1 ? `Added ${one1.name} · ${catName ? `${catName} (guessed)` : 'no category'}.` : `Added ${names(created)}.`) : '',
       existing.length ? `${names(existing)} ${existing.length === 1 ? 'was' : 'were'} already in your items.` : '',
-      alsoList ? 'On your list now.' : '',
+      alsoList ? `On “${listName}” now.` : '',
     ].filter(Boolean);
     setToast({ text: parts.join(' '), snapshot: snap, openId: one1?.id });
   }
@@ -249,7 +330,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
       <SwipeRow
         disabled={selecting || open}
         onSwipeRight={onList.has(p.id) ? undefined : () => addManyToList([p])}
-        rightLabel={<>＋ Add to list</>}
+        rightLabel={<>＋ Add to “{listName}”</>}
         leftActions={(close) => (
           <>
             <button className="swipe-btn sold" onClick={() => { close(); setSoldHere([p], notSoldHere(p)); }}>
@@ -269,9 +350,9 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
         </button>
         <button
           className="icon add-icon"
-          onClick={() => onAddToList(p)}
+          onClick={() => addManyToList([p])}
           disabled={onList.has(p.id)}
-          aria-label={onList.has(p.id) ? `${p.name} is on your list` : `Add ${p.name} to list`}
+          aria-label={onList.has(p.id) ? `${p.name} is on “${listName}”` : `Add ${p.name} to “${listName}”`}
         >
           {onList.has(p.id) ? '✓' : '+'}
         </button>
@@ -310,7 +391,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
         <div className="items-sub">
           <label className="also-list">
             <input type="checkbox" checked={alsoList} onChange={(e) => setAlsoList(e.target.checked)} />
-            <span>Also add to “{listName}”</span>
+            <span>Add to “{listName}”</span>
           </label>
           <span className="muted small hint">
             {q.includes(',') ? 'Enter adds each name.' : q ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`) : selecting ? 'Tap items to select.' : 'Swipe an item for shortcuts.'}
@@ -319,6 +400,13 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
             {selecting ? 'Done' : '☑ Select'}
           </button>
         </div>
+        <DisplayToggles
+          display={display}
+          setDisplay={setDisplay}
+          show={['itemsGroupByCategory']}
+          offByDefault={['buildMode', 'buildArea', 'buildDouble']}
+          lead={<ItemsSortToggle display={display} setDisplay={setDisplay} />}
+        />
         <div className="chips filters" role="group" aria-label="Show">
           {FILTERS.map((f) => (
             <button key={f.id} className={filter === f.id ? 'chip active' : 'chip'} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
@@ -326,7 +414,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
             </button>
           ))}
         </div>
-        {groups.length > 1 && (
+        {groupByCategory && groups.length > 1 && (
           <div className="chips jump" role="navigation" aria-label="Jump to category">
             {groups.map((g) => (
               <button key={g.id || 'none'} className="chip" onClick={() => {
@@ -351,7 +439,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
         </section>
       )}
 
-      {!allOpen && groups.length > 0 && (
+      {groupByCategory && !allOpen && groups.length > 0 && (
         <div className="fold-all">
           <button className="link" onClick={() => setOpenGroups(openGroups.size ? new Set() : new Set(groups.map((g) => g.id)))}>
             {openGroups.size ? 'Fold all' : 'Show all items'}
@@ -359,7 +447,15 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
         </div>
       )}
 
-      {groups.map((g) => {
+      {!groupByCategory && filtered.length > 0 && (
+        <section className="card group" aria-label="Grocery items">
+          <ul className="items">
+            {filtered.map((p) => row(p))}
+          </ul>
+        </section>
+      )}
+
+      {groupByCategory && groups.map((g) => {
         const look = lookOf(g.id);
         const open = isOpen(g.id);
         return (
@@ -413,7 +509,7 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
         );
       })}
 
-      {groups.length === 0 && (
+      {filtered.length === 0 && (
         <div className="empty">
           {q ? (
             <>
@@ -436,7 +532,14 @@ function ProductList({ catalog, layouts, layout, setProducts, setCategories, onA
           </div>
           <div className="bulk-actions">
             <button className="btn" disabled={!chosen.length} onClick={() => setBulkCategory(true)}>Category…</button>
-            <button className="btn" disabled={!chosen.length} onClick={() => addManyToList(chosen)}>＋ List</button>
+            <button
+              className="btn"
+              disabled={!chosen.length}
+              onClick={() => addManyToList(chosen)}
+              aria-label={`Add selected to “${listName}”`}
+            >
+              ＋ “{listName}”
+            </button>
             <button className="btn" disabled={!chosen.length} onClick={() => setSoldHere(chosen, chosen.every(notSoldHere))}>
               {chosen.length && chosen.every(notSoldHere) ? 'Sold here' : 'Not sold here'}
             </button>

@@ -91,6 +91,16 @@ describe('list sort', () => {
     expect(resolveListSort({ listSort: 'category' })).toBe('category');
   });
 
+  it('resolves Items catalog sort and group defaults', async () => {
+    const { resolveItemsSort, resolveItemsGroupByCategory } = await import('../display');
+    expect(resolveItemsSort({})).toBe('category');
+    expect(resolveItemsSort({ itemsSort: 'alpha' })).toBe('alpha');
+    expect(resolveItemsSort({ itemsSort: 'category' })).toBe('category');
+    expect(resolveItemsGroupByCategory({})).toBe(true);
+    expect(resolveItemsGroupByCategory({ itemsGroupByCategory: false })).toBe(false);
+    expect(resolveItemsGroupByCategory({ itemsGroupByCategory: true })).toBe(true);
+  });
+
   it('qtyUnitPriceText can omit the ×N when a stepper is shown', async () => {
     const { qtyUnitPriceText } = await import('./items');
     expect(qtyUnitPriceText({ qty: 3, unit: 'bag' })).toMatch(/×3 bag/);

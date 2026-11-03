@@ -1210,7 +1210,7 @@ export default function App() {
             <button className="store-pick" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
               {layout.name} <span aria-hidden="true">▾</span>
             </button>
-            {view === 'list' && (
+            {(view === 'list' || view === 'items') && (
               <ListBar
                 name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
                 toBuy={listCounts.get(listId) ?? 0}
@@ -1314,6 +1314,19 @@ export default function App() {
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
           undo={undo}
+          display={display}
+          setDisplay={setDisplay}
+          listsOpen={listsOpen}
+          onListsClose={() => setListsOpen(false)}
+          lists={{
+            all: lists, current: listId, counts: listCounts, doneCounts: listDoneCounts,
+            switchTo: setActiveListId,
+            create: createList, rename: renameList, remove: deleteList, combine: combineInto,
+            preview: (sources) => combineLists(allItems, listId, sources, catalog),
+            duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
+          }}
+          onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+          quickAddTo={quickAddTo}
         />
       )}
       {introOpen && (
