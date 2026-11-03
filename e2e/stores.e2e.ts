@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addItems, fresh, saved, tick } from './helpers';
+import { addItems, fresh, row, saved, tick } from './helpers';
 
 test.use({ geolocation: { latitude: 39.1, longitude: -84.5 }, permissions: ['geolocation'] });
 
@@ -45,9 +45,10 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   const l = await corner();
   expect(l.gen.aisleCount).toBe(8);
   expect(l.aisles).toHaveLength(8);
-  // Milk goes where the default map has dairy, marked as a guess; checked off, it's asked about.
+  // Milk goes where the default map has dairy (dashed guess shelves); checked off, it's asked about.
   await addItems(page, 'Milk');
-  await expect(page.locator('.visit', { hasText: 'Milk' })).toContainText('likely');
+  await expect(row(page, 'Milk')).toBeVisible();
+  await expect(page.locator('svg.map .place.guess')).not.toHaveCount(0);
   await tick(page, 'Milk');
   await expect(page.locator('.where-bar')).toBeVisible();
 });

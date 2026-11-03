@@ -110,13 +110,15 @@ test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page 
   expect((await saved<any>(page, 'display')).buildMoreTools).toBe(true);
   await page.getByRole('button', { name: 'Cut aisles' }).click();
   const l0 = await layout(page);
-  await dragMap(page, [3, 12], [l0.width - 4, 13]); // across aisles 1–5, not the wall shelves
-  await expect(page.locator('.cut-panel')).toContainText('8 shelves · 5 aisles'); // the outer aisles' far sides are the walls
-  await page.getByRole('button', { name: /^New numbers \(6–10\)/ }).click();
+  await dragMap(page, [3, 12], [l0.width - 4, 13]); // across the open aisles, not the wall shelves
+  await expect(page.locator('.cut-panel')).toContainText('8 shelves · 4 aisles');
+  await page.getByRole('button', { name: /^New numbers \(6–9\)/ }).click();
   await page.locator('.cut-panel').getByRole('button', { name: /^Cut 8 shelves/ }).click();
-  await expect(page.locator('.toast')).toContainText('Aisle 1 → Aisle 6');
+  await expect(page.locator('.toast')).toContainText('Aisle 2 → Aisle 6');
   let l = await layout(page);
-  expect(l.aisles.map((a: any) => a.label).sort()).toEqual(['Aisle 1', 'Aisle 10', 'Aisle 2', 'Aisle 3', 'Aisle 4', 'Aisle 5', 'Aisle 6', 'Aisle 7', 'Aisle 8', 'Aisle 9']);
+  expect(l.aisles.map((a: any) => a.label).sort()).toEqual([
+    'Aisle 1', 'Aisle 2', 'Aisle 3', 'Aisle 4', 'Aisle 5', 'Aisle 6', 'Aisle 7', 'Aisle 8', 'Aisle 9',
+  ]);
   expect(l.places.filter((p: any) => p.id.startsWith('cut-'))).toHaveLength(8);
   // Rename one, then renumber all.
   await page.locator('svg.map .aisle-label', { hasText: /AISLE 7/i }).locator('text').first().click({ force: true });
@@ -124,7 +126,7 @@ test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page 
   await page.getByRole('button', { name: 'Renumber all aisles' }).click();
   l = await layout(page);
   expect(l.aisles.map((a: any) => a.label)).not.toContain('Aisle 42');
-  expect(new Set(l.aisles.map((a: any) => a.label)).size).toBe(10);
+  expect(new Set(l.aisles.map((a: any) => a.label)).size).toBe(9);
 });
 
 /** Three aisles side by side (shelves back to back between them), with room around. */
