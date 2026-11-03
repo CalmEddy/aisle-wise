@@ -1,7 +1,8 @@
 import { Catalog, normalize } from './catalog';
 import { newCategoryId, OLD_NAMES, OLD_TO_NEW, seedItemNamed } from './recategorize';
 import { aislesToShelves } from './migrate';
-import type { Category, ListItem, Product, StoreLayout, Clue } from './types';
+import { listOf, withListId } from './lists';
+import { MAIN_LIST, type Category, type ListItem, type Product, type StoreLayout, type Clue } from './types';
 
 /**
  * Sharing without a server: everything needed is packed into the link
@@ -146,8 +147,12 @@ function productForShared(item: SharedItem, products: Product[], cats: Category[
   return created;
 }
 
-/** Adds shared list items to the local list, skipping ones already on it. */
-export function applyListShare(share: ListShare, data: Data): Data & { added: number; skipped: number } {
+/**
+ * Adds shared list items onto `targetListId` (defaults to the main list),
+ * skipping ones already waiting on that list. Pass every list's items in
+ * `data.items` so other lists are left alone.
+ */
+export function applyListShare(share: ListShare, data: Data, targetListId = MAIN_LIST): Data & { added: number; skipped: number } {
   const categories = [...data.categories];
   const products = [...data.products];
   const items = [...data.items];
@@ -156,17 +161,17 @@ export function applyListShare(share: ListShare, data: Data): Data & { added: nu
   let skipped = 0;
   for (const shared of share.items) {
     const product = productForShared(shared, products, categories);
-    const onList = items.some((i) => !i.done && (i.productId === product.id || (catalog.exact(i.name)?.id ?? '') === product.id
+    const onList = items.some((i) => listOf(i) === targetListId && !i.done && (i.productId === product.id || (catalog.exact(i.name)?.id ?? '') === product.id
       || normalize(i.name) === normalize(product.name)));
     if (onList) {
       skipped++;
       continue;
     }
-    items.push({
+    items.push(withListId({
       id: newId(), name: product.name, done: false, productId: product.id,
       ...(typeof shared.qty === 'number' && shared.qty > 1 && { qty: Math.min(99, Math.round(shared.qty)) }),
       ...(typeof shared.note === 'string' && shared.note && { note: shared.note.slice(0, 200) }),
-    });
+    }, targetListId));
     added++;
   }
   return { ...data, items, products, categories, added, skipped };

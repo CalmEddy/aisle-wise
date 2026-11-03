@@ -57,13 +57,18 @@ export function ShareSheet({ title, summary, share, onClose }: {
 }
 
 /** Shown when the app is opened from a share link. */
-export function ImportSheet({ share, layouts, onAddList, onAddStore, onCancel }: {
+export function ImportSheet({ share, layouts, currentListName, onAddList, onAddStore, onCancel }: {
   share: Share | 'error';
   layouts: StoreLayout[];
-  onAddList: () => void;
+  /** Name of the list currently being shopped (for “add to current”). */
+  currentListName: string;
+  onAddList: (target: 'current' | { newName: string }) => void;
   onAddStore: (replaceId?: string) => void;
   onCancel: () => void;
 }) {
+  const [asNew, setAsNew] = useState(false);
+  const [newName, setNewName] = useState('Shared list');
+
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
       <div className="sheet" role="dialog" aria-label="Shared with you" onClick={(e) => e.stopPropagation()}>
@@ -76,16 +81,34 @@ export function ImportSheet({ share, layouts, onAddList, onAddStore, onCancel }:
         ) : share.kind === 'list' ? (
           <>
             <h2>A shopping list was shared with you</h2>
-            <p className="muted small">{share.items.length} item{share.items.length === 1 ? '' : 's'}. Items already on your list are skipped.</p>
+            <p className="muted small">{share.items.length} item{share.items.length === 1 ? '' : 's'}. Items already on the chosen list are skipped.</p>
             <ul className="preview">
               {share.items.slice(0, 12).map((i) => <li key={i.name}>{i.name}</li>)}
               {share.items.length > 12 && <li className="muted">and {share.items.length - 12} more</li>}
             </ul>
-            <div className="sheet-actions">
-              <button className="btn" onClick={onCancel}>Not now</button>
-              <span style={{ flex: 1 }} />
-              <button className="btn primary" onClick={onAddList} disabled={!share.items.length}>Add to my list</button>
-            </div>
+            {asNew ? (
+              <form className="add-row" onSubmit={(e) => {
+                e.preventDefault();
+                onAddList({ newName: newName.trim() || 'Shared list' });
+              }}>
+                <input value={newName} onChange={(e) => setNewName(e.target.value)} aria-label="New list name" autoFocus />
+                <button type="submit" className="btn primary" disabled={!share.items.length}>Create list</button>
+              </form>
+            ) : (
+              <div className="sheet-actions wrap">
+                <button className="btn" onClick={onCancel}>Not now</button>
+                <span style={{ flex: 1 }} />
+                <button className="btn" onClick={() => setAsNew(true)} disabled={!share.items.length}>New list…</button>
+                <button className="btn primary" onClick={() => onAddList('current')} disabled={!share.items.length}>
+                  Add to “{currentListName}”
+                </button>
+              </div>
+            )}
+            {asNew && (
+              <div className="sheet-actions">
+                <button className="btn" onClick={() => setAsNew(false)}>Back</button>
+              </div>
+            )}
           </>
         ) : (
           <StoreImport share={share} layouts={layouts} onAddStore={onAddStore} onCancel={onCancel} />

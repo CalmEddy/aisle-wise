@@ -116,36 +116,53 @@ Open the **Store layout** tab to build your own stores:
 - Keep several stores, and pick the one you're shopping in from the list
   header. Copying a store also copies where its items are.
 
+## Several lists
+
+Tap the list name under the store (📝) to manage lists:
+
+- Keep a main **Shopping list** for today's trip, plus reusable lists
+  (weekly staples, a recipe, a party). Creating a list doesn't yank you
+  off the trip you're on — choose **Shop this list** or **Add items** when
+  you're ready.
+- **Add from other lists** copies what's still to buy onto the list you're
+  shopping; the sources stay intact for next time.
+- **⋯** on a list: rename, duplicate, reorder, clear checked/to-buy, or
+  delete (with Undo). On an item: **Move to…** / **Copy to…** another list.
+- Which list you're shopping stays per phone; the lists and their items
+  sync with the household.
+
 ## Sharing
 
 - **Share a list** – tap **Share** at the top of the Shop tab.
-- **Share a store** – in **Store layout**, pick the store and tap **Share**.
-  The layout, its categories, where items are in that store and which items
-  it doesn't carry all come along.
+- **Share a store** – in **Edit map** / store settings, pick the store and
+  tap **Share**. The layout, its categories, where items are in that store
+  and which items it doesn't carry all come along.
 
 Send the link any way you like (the phone's share menu, text, email). When
-someone opens it, Aisle Wise shows what was shared and lets them add it. A
-store they already have can be updated in place. Shared lists skip items
-already on their list, and new items join their master list.
+someone opens it, Aisle Wise shows what was shared and lets them add it —
+onto their current list, or as a **new named list**. A store they already
+have can be updated in place. Shared lists skip items already on the
+chosen list, and new grocery names join their master catalog.
 
 The shared data is packed into the link itself, after `#`, so it is never
 uploaded anywhere. Links are copies: later changes aren't synced, so share
-again to send updates (`src/core/share.ts`). For a list that stays in sync,
+again to send updates (`src/core/share.ts`). For lists that stay in sync,
 use a household.
 
 ## Households (live sharing)
 
 Tap the **Share with household** button under the store name. Create an
 account (email + password) or sign in, right in the app, then create a
-household or join one with an invite code or link. Everyone in a household shares one shopping
-list, grocery items, categories and stores, and changes appear on everyone's
-phone as you shop. Where you're standing and which store you're in stay
-per phone. It keeps working offline and catches up when the signal returns.
+household or join one with an invite code or link. Everyone in a household
+shares shopping lists, grocery items, categories and stores, and changes
+appear on everyone's phone as you shop. Where you're standing, which store
+you're in, and which list you're shopping stay per phone. It keeps working
+offline and catches up when the signal returns.
 
 How it works: the shared data is split into small documents stored in
-Supabase (`docs` table), one per list item, grocery item and store, plus
-one for the category list. Each phone sends what changed and receives
-other phones' changes live; the last change to a document wins
+Supabase (`docs` table), one per list item, grocery item, named list and
+store, plus one for the category list. Each phone sends what changed and
+receives other phones' changes live; the last change to a document wins
 (`src/sync/engine.ts`). Database rules only let members of a household read
 or change its data (`supabase/migrations/`).
 

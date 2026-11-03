@@ -556,21 +556,34 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 
 /* Several lists */
 .list-bar {
-  display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 60%; padding: 2px 8px; margin: 0;
+  display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 70%; padding: 2px 8px; margin: 0;
   border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 0.82rem; font-weight: 600;
 }
 .list-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-bar-count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.list-bar-others { color: var(--accent); font-weight: 600; font-size: 0.75rem; }
 .list-bar-more { color: var(--accent); font-size: 0.8rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .lists-sheet .lists { list-style: none; padding: 0; margin: 0 0 10px; }
-.lists-sheet .lists li { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
-.lists-sheet .list-pick { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 4px; background: none; border: 0; text-align: left; color: var(--text); }
-.lists-sheet .list-pick .name { flex: 1; font-weight: 600; }
+.lists-sheet .lists li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
+.lists-sheet .list-pick { flex: 1; display: flex; align-items: center; gap: 10px; padding: 12px 4px; background: none; border: 0; text-align: left; color: var(--text); min-width: 0; }
+.lists-sheet .list-pick .name { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lists-sheet li.current .radio { color: var(--accent); }
-.lists-sheet .rename-list { display: flex; gap: 6px; flex: 1; padding: 6px 0; }
+.lists-sheet .rename-list { display: flex; gap: 6px; flex: 1; padding: 6px 0; flex-wrap: wrap; }
 .lists-sheet .rename-list input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 16px; }
+.lists-sheet .lists-section { margin-bottom: 12px; }
+.lists-sheet .lists-section h3 { margin: 0 0 4px; font-size: 0.85rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 .lists-sheet .combine { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
-.lists-sheet .combine h3 { margin: 0 0 4px; font-size: 1rem; }
+.lists-sheet .combine h3 { margin: 0 0 4px; font-size: 1rem; text-transform: none; letter-spacing: 0; color: var(--text); }
 .lists-sheet .combine .check { padding: 6px 0; }
+.lists-sheet .list-row-menu { flex: 1 0 100%; display: flex; flex-direction: column; gap: 0; padding: 0 0 8px 28px; }
+.lists-sheet .list-created { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 0 10px 28px; }
+.lists-sheet .list-confirm { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 4px; }
+.lists-sheet .list-confirm p { margin: 0; }
+.lists-sheet .list-warn { margin: 0 0 8px; }
+.lists-sheet .btn.danger { color: var(--danger); border-color: var(--danger); }
+.trip-other-lists { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.transfer-lists { display: flex; flex-direction: column; gap: 0; margin: 4px 0; padding: 4px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .off-head { display: flex; align-items: baseline; gap: 10px; }
 .off-head .link { padding: 0; font-size: 0.85rem; margin-left: auto; }
 

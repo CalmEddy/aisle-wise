@@ -62,6 +62,13 @@ interface Props {
   /** The lists sheet (opened from the list picker in the header). */
   listsOpen: boolean;
   onListsClose: () => void;
+  /** Move / copy a single item onto another list. */
+  moveItemTo: (itemId: string, toList: string) => { snapshot: Snapshot; moved: boolean; skipped: boolean };
+  copyItemTo: (itemId: string, toList: string) => { snapshot: Snapshot; copied: boolean; skipped: boolean };
+  /** Add onto any list (active or a recipe/staples list). */
+  quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart', hereKey?: string) => QuickAddResult;
+  /** Product ids already waiting (unchecked) on a given list. */
+  onListIds: (listId: string) => Set<string>;
   /** Show the how-it-works hint (toggled by ⓘ in the header). */
   /** Things bought before, most likely wanted again first. */
   usuals: Usual[];
@@ -620,8 +627,10 @@ export function ShoppingView(props: Props) {
     });
   }
 
-  // The add window (opened with + on the toggle strip).
-  const [adding, setAdding] = useState(false);
+  // The add window (opened with + on the toggle strip). When set to a list id
+  // other than the one being shopped, items go onto that list instead.
+  const [addingFor, setAddingFor] = useState<string>();
+  const adding = addingFor !== undefined;
 
   // The banner fades after a while, unless it's asking a question or a window is open over it
   // (place picker, lists, add items): then its Undo is still there when you come back.
@@ -747,13 +756,14 @@ export function ShoppingView(props: Props) {
 
   /** Adds from the add window. Things put in the cart may ask where they are, so those show a toast. */
   function addNames(names: string[], mode: 'list' | 'cart'): QuickAddResult | undefined {
-    if (building && mode === 'cart') {
+    const targetList = addingFor ?? props.lists.current;
+    if (building && mode === 'cart' && targetList === props.lists.current) {
       // Build mode: into the cart where you're standing (one at a time: the map builds around it).
       const outcome = props.build.pickUpHere(names[names.length - 1]);
       setNote(outcome);
       return { snapshot: outcome.snapshot, added: [] };
     }
-    const result = props.quickAdd(names, mode, hereKey);
+    const result = props.quickAddTo(targetList, names, mode, targetList === props.lists.current ? hereKey : undefined);
     if (mode === 'cart') {
       setToast({ ...result, mode });
       // Put straight in the cart with no place here: "Where was it?" (the rest wait for later).
@@ -1084,7 +1094,7 @@ export function ShoppingView(props: Props) {
   const mapStrip = !building && !props.display.mapFull;
   const [viewOpen, setViewOpen] = useState(false);
   const addButton = (
-    <button type="button" className="toggle add-toggle" onClick={() => setAdding(true)} aria-label="Add items" title="Add items">＋</button>
+    <button type="button" className="toggle add-toggle" onClick={() => setAddingFor(props.lists.current)} aria-label="Add items" title="Add items">＋</button>
   );
 
   const toolInfo = TOOLS.find((t) => t.id === tool)!;
@@ -1164,7 +1174,7 @@ export function ShoppingView(props: Props) {
             <p className="muted">
               Add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
-            <button className="btn primary" onClick={() => setAdding(true)}>＋ Add items</button>
+            <button className="btn primary" onClick={() => setAddingFor(props.lists.current)}>＋ Add items</button>
             <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
           </div>
         )}
@@ -1299,6 +1309,10 @@ export function ShoppingView(props: Props) {
             question={props.where.question}
             onAnswer={(o) => props.where.answer(props.where.question!, o)}
             onClear={newTrip}
+            otherLists={props.lists.all
+              .filter((l) => l.id !== props.lists.current && (props.lists.counts.get(l.id) ?? 0) > 0)
+              .map((l) => ({ id: l.id, name: l.name, toBuy: props.lists.counts.get(l.id) ?? 0 }))}
+            onShopList={(id) => props.lists.switchTo(id)}
             door={props.where.door && (
               <DoorCard layout={layout} guess={props.where.door.guess}
                 onPick={(f) => {
@@ -1331,6 +1345,10 @@ export function ShoppingView(props: Props) {
           lists={props.lists}
           onClose={props.onListsClose}
           onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+          onRemoved={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+          onCleared={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+          onDuplicated={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
+          onAddItems={(id) => { props.onListsClose(); setAddingFor(id); }}
         />
       )}
       {whereFor && (
@@ -1353,16 +1371,16 @@ export function ShoppingView(props: Props) {
       )}
       {adding && (
         <AddItemsSheet
-          listName={props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
+          listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? 'Shopping list'}
           catalog={catalog}
-          onList={onList}
-          hereLabel={hereLabel}
+          onList={addingFor ? props.onListIds(addingFor) : onList}
+          hereLabel={addingFor === props.lists.current ? hereLabel : undefined}
           whereText={(p) => whereText(p, layout, catalog)}
           iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
           onAdd={addNames}
           buyAgain={buyAgain}
           onUndo={props.undo}
-          onClose={() => setAdding(false)}
+          onClose={() => setAddingFor(undefined)}
         />
       )}
 
@@ -1774,6 +1792,8 @@ export function ShoppingView(props: Props) {
           categoryId={productFor(menuFor, catalog)?.categoryId}
           categories={catalog.categories}
           looks={props.looks}
+          lists={props.lists.all}
+          currentList={props.lists.current}
           onCategory={(id) => props.setItemCategory(menuFor, id)}
           onChangePlace={() => {
             setPicking({ productId: productFor(menuFor, catalog)?.id, item: menuFor, name: menuFor.name });
@@ -1799,6 +1819,24 @@ export function ShoppingView(props: Props) {
           onRemove={() => {
             removeWithUndoOne(menuFor);
             setMenuFor(null);
+          }}
+          onMoveTo={(to) => {
+            const name = props.lists.all.find((l) => l.id === to)?.name ?? 'list';
+            const r = props.moveItemTo(menuFor.id, to);
+            setMenuFor(null);
+            setToast({
+              snapshot: r.snapshot, added: [], mode: 'list',
+              note: r.moved ? `Moved ${menuFor.name} to “${name}”.` : r.skipped ? `${menuFor.name} is already on “${name}”.` : 'Couldn’t move that.',
+            });
+          }}
+          onCopyTo={(to) => {
+            const name = props.lists.all.find((l) => l.id === to)?.name ?? 'list';
+            const r = props.copyItemTo(menuFor.id, to);
+            setMenuFor(null);
+            setToast({
+              snapshot: r.snapshot, added: [], mode: 'list',
+              note: r.copied ? `Copied ${menuFor.name} to “${name}”.` : r.skipped ? `${menuFor.name} is already on “${name}”.` : 'Couldn’t copy that.',
+            });
           }}
           onCancel={() => setMenuFor(null)}
         />

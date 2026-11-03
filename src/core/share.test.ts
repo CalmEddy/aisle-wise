@@ -40,6 +40,12 @@ describe('sharing a list', () => {
     const kombucha = result.products.find((p) => p.name === 'Kombucha')!;
     expect(kombucha.categoryId).toBe('beverages_tea'); // a starter item here: its own category, not the sender's
     expect(result.items[result.items.length - 1]).toMatchObject({ name: 'Kombucha', productId: kombucha.id });
+
+    // Onto a named list: tag copies and only skip duplicates on that list.
+    const onto = applyListShare(share, { ...fresh(), items: [{ id: 'x', name: 'Milk', done: false }] }, 'party');
+    expect(onto.added).toBe(2);
+    expect(onto.skipped).toBe(0);
+    expect(onto.items.filter((i) => i.listId === 'party')).toHaveLength(2);
   });
 });
 

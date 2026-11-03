@@ -19,7 +19,7 @@ export function IntroSheet({ onStart, onAtStore, onClose }: {
           <li><span className="intro-icon" aria-hidden="true">🏬</span><div><b>Pick your store.</b> Add a new one where you’re standing and it’s picked by itself next time.</div></li>
           <li><span className="intro-icon" aria-hidden="true">✓</span><div><b>Tick things off as you go.</b> Say where something was in one tap (aisle, wall, fridge…) and the store’s map builds itself. Next time your list comes in walking order.</div></li>
         </ol>
-        <p className="muted small intro-tips">Tips: swipe a row right for “got it”, left for “not here” or remove. ⋯ on a row sets the amount, a note, or where it is. 🛠 Edit map lets you draw the store yourself.</p>
+        <p className="muted small intro-tips">Tips: swipe a row right for “got it”, left for “not here” or remove. ⋯ on a row sets the amount, a note, or where it is. Tap the list name under the store to keep reusable lists (staples, a recipe) and <b>Add from other lists</b> when you shop. 🛠 Edit map lets you draw the store yourself.</p>
         <div className="intro-actions">
           <button className="btn primary wide" onClick={onStart}>Start my list</button>
           <button className="btn wide" onClick={onAtStore}>I’m at a store now</button>
