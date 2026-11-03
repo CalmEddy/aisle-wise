@@ -1,4 +1,5 @@
 import type { Category, Product } from './types';
+import { liveParent, liveTop } from './taxonomy';
 
 /** Lowercases, strips punctuation and numbers, and singularises each word. */
 export function normalize(name: string): string {
@@ -97,5 +98,20 @@ export class Catalog {
       .sort((a, b) => a.score - b.score || (a.p.rank ?? 9999) - (b.p.rank ?? 9999) || a.p.name.length - b.p.name.length || a.p.name.localeCompare(b.p.name))
       .slice(0, limit)
       .map((s) => s.p);
+  }
+
+  /** Parent category id, honouring edits on this household's category list. */
+  parentOf(id: string): string | undefined {
+    return liveParent(this.categoryById, id);
+  }
+
+  /** Top-level category id for grouping (itself when already a top). */
+  topOf(id: string): string {
+    return liveTop(this.categoryById, id);
+  }
+
+  /** Top-level categories only (no parent), in walking order helpers' preferred order. */
+  tops(): Category[] {
+    return this.categories.filter((c) => !this.parentOf(c.id));
   }
 }

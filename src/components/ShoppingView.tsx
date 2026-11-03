@@ -32,7 +32,7 @@ import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './Stor
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { WhereBar, type MapSpot } from './WhereBar';
-import { homesOf, nearbyKinds, orderOf, stocking, topOf } from '../core/taxonomy';
+import { homesOf, nearbyKinds, orderOf, stocking } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
@@ -714,7 +714,7 @@ export function ShoppingView(props: Props) {
     const id = productFor(item, catalog)?.categoryId;
     const c = id ? catalog.categoryById.get(id) : undefined;
     if (!c) return {};
-    const top = catalog.categoryById.get(topOf(c.id));
+    const top = catalog.categoryById.get(catalog.topOf(c.id));
     return top && top.id !== c.id ? { top: top.name, sub: c.name } : { top: c.name };
   };
   /** The second line, with the subcategory added when the switch is on. */

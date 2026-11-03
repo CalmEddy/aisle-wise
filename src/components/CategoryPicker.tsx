@@ -15,7 +15,7 @@ export function byName<T extends { name: string }>(list: readonly T[]): T[] {
  * When a subcategory is already chosen, opening the list puts that category's
  * siblings first so switching subcategory is one tap.
  */
-export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick, autoFocus, exclude }: {
+export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick, autoFocus, exclude, topsOnly }: {
   /** Chosen category id; undefined for none. */
   value?: string;
   categories: readonly Category[];
@@ -34,6 +34,8 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
   autoFocus?: boolean;
   /** Category ids to hide (already assigned as extras). */
   exclude?: ReadonlySet<string> | readonly string[];
+  /** Only list top-level categories (for choosing a subcategory's parent). */
+  topsOnly?: boolean;
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,11 +45,14 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
   const excluded = useMemo(() => new Set(exclude ?? []), [exclude]);
 
   const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
-  const parentOfCat = (c: Category) => c.parent ?? parentOf(c.id);
+  /** Prefer the saved parent on the category (so reparenting sticks). */
+  const parentOfCat = (c: Category) => (byId.has(c.id) ? c.parent : parentOf(c.id));
   const options = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const sorted = inWalkingOrder(categories).filter((c) => !excluded.has(c.id));
+    let sorted = inWalkingOrder(categories).filter((c) => !excluded.has(c.id));
+    if (topsOnly) sorted = sorted.filter((c) => !parentOfCat(c));
     if (!q) {
+      if (topsOnly) return sorted;
       // Prefer sibling subcategories of the current choice for quick switches.
       const focusParent = current ? parentOfCat(current) : undefined;
       if (focusParent && byId.has(focusParent)) {
