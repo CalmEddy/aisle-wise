@@ -583,15 +583,28 @@ export default function App() {
     noAskStores: on ? (d.noAskStores ?? []).filter((id) => id !== layout.id) : [...(d.noAskStores ?? []).filter((id) => id !== layout.id), layout.id],
   }));
 
-  /** Changes a list item's category (on its master-list item, creating one if needed). */
+  /** Changes a list item's primary category (on its master-list item, creating one if needed). Keeps any extra categories. */
   function setItemCategory(item: ListItem, categoryId: string | undefined) {
     const product = productFor(item, catalog);
     if (product) {
-      setProducts((prev) => prev.map((p) => (p.id === product.id ? { ...p, categoryId } : p)));
+      setProducts((prev) => prev.map((p) => {
+        if (p.id !== product.id) return p;
+        if (!categoryId) {
+          const next = { ...p };
+          delete next.categoryId;
+          delete next.extraCategoryIds;
+          return next;
+        }
+        const next: Product = { ...p, categoryId };
+        const extras = (p.extraCategoryIds ?? []).filter((id) => id !== categoryId);
+        if (extras.length) next.extraCategoryIds = extras;
+        else delete next.extraCategoryIds;
+        return next;
+      }));
       if (item.productId !== product.id) setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: product.id } : i)));
       return;
     }
-    const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), categoryId };
+    const created: Product = { id: `p-${newId()}`, name: capitalize(item.name.trim()), ...(categoryId && { categoryId }) };
     setProducts((prev) => [...prev, created]);
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
   }

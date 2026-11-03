@@ -11,8 +11,11 @@ export function byName<T extends { name: string }>(list: readonly T[]): T[] {
  * Type to search, tap to choose. Shows the categories in walking order, each
  * with its subcategories under it (either can be chosen); typing narrows the
  * list (subcategories show their category), and Enter picks the first match.
+ *
+ * When a subcategory is already chosen, opening the list puts that category's
+ * siblings first so switching subcategory is one tap.
  */
-export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick, autoFocus }: {
+export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, placeholder, label, note, clearOnPick, autoFocus, exclude }: {
   /** Chosen category id; undefined for none. */
   value?: string;
   categories: readonly Category[];
@@ -29,19 +32,31 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
   clearOnPick?: boolean;
   /** Focus (and open) straight away. */
   autoFocus?: boolean;
+  /** Category ids to hide (already assigned as extras). */
+  exclude?: ReadonlySet<string> | readonly string[];
 }) {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const current = categories.find((c) => c.id === value);
+  const excluded = useMemo(() => new Set(exclude ?? []), [exclude]);
 
   const byId = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const parentOfCat = (c: Category) => c.parent ?? parentOf(c.id);
   const options = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const sorted = inWalkingOrder(categories);
+    const sorted = inWalkingOrder(categories).filter((c) => !excluded.has(c.id));
     if (!q) {
+      // Prefer sibling subcategories of the current choice for quick switches.
+      const focusParent = current ? parentOfCat(current) : undefined;
+      if (focusParent && byId.has(focusParent)) {
+        const siblings = sorted.filter((c) => parentOfCat(c) === focusParent);
+        const parent = byId.get(focusParent)!;
+        const restTops = sorted.filter((c) => (!parentOfCat(c) || !byId.has(parentOfCat(c)!)) && c.id !== focusParent);
+        const rest = restTops.flatMap((t) => [t, ...sorted.filter((c) => parentOfCat(c) === t.id)]);
+        return [parent, ...siblings, ...rest];
+      }
       // Each category, then its subcategories.
       const tops = sorted.filter((c) => !parentOfCat(c) || !byId.has(parentOfCat(c)!));
       return tops.flatMap((t) => [t, ...sorted.filter((c) => parentOfCat(c) === t.id)]);
@@ -51,14 +66,15 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
     const starts = sorted.filter((c) => c.name.toLowerCase().startsWith(q));
     const contains = sorted.filter((c) => !starts.includes(c) && hay(c).includes(q));
     return [...starts, ...contains];
-  }, [categories, query, byId]);
+  }, [categories, query, byId, current, excluded]);
   const showNone = !!noneLabel && !query.trim();
 
   function choose(id: string | undefined) {
     onPick(id);
     setQuery('');
     setOpen(false);
-    inputRef.current?.blur();
+    if (clearOnPick) inputRef.current?.blur();
+    else inputRef.current?.blur();
   }
 
   const currentParent = current && byId.get(parentOfCat(current) ?? '');
@@ -104,9 +120,11 @@ export function CategoryPicker({ value, categories, onPick, iconOf, noneLabel, p
             const extra = note?.(c.id);
             const parent = parentOfCat(c) && byId.get(parentOfCat(c)!);
             const searching = !!query.trim();
+            const focusParent = current ? parentOfCat(current) : undefined;
+            const sibling = !searching && !!focusParent && parentOfCat(c) === focusParent;
             return (
               <li key={c.id} role="option" aria-selected={c.id === value}
-                className={[c.id === value && 'active', parent ? 'cat-sub' : 'cat-top'].filter(Boolean).join(' ')}
+                className={[c.id === value && 'active', parent ? 'cat-sub' : 'cat-top', sibling && 'cat-sibling'].filter(Boolean).join(' ')}
                 onPointerDown={(e) => e.preventDefault()} onClick={() => choose(c.id)}>
                 {iconOf && !parent && <span aria-hidden="true" className="cat-option-icon">{iconOf(c.id)}</span>}
                 {c.name}

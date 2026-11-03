@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { inWalkingOrder, orderOf, topOf } from '../core/taxonomy';
+import { inWalkingOrder, orderOf, parentOf, topOf } from '../core/taxonomy';
 import type { Snapshot } from '../App';
 import { itemMatches, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
 import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
 import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
+import { addCategory, productCategoryIds, removeCategory, withCategories } from '../core/productCategories';
 import type { Category, Product, StoreLayout } from '../core/types';
 import { whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
@@ -469,6 +470,113 @@ function ProductList({ catalog, layouts, layout, setProducts, onAddToList, onLis
 }
 
 /**
+ * Primary + extra categories, with one-tap sibling chips to switch subcategory
+ * and an “Add another” picker for a second category (e.g. peanut butter).
+ */
+function CategoriesEditor({ product, catalog, iconOf, onChange }: {
+  product: Product;
+  catalog: Catalog;
+  iconOf: (categoryId: string) => string | undefined;
+  onChange: (fn: (p: Product) => Product, text: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const ids = productCategoryIds(product);
+  const primary = ids[0];
+  const primaryCat = primary ? catalog.categoryById.get(primary) : undefined;
+  const parentId = primary ? (primaryCat?.parent ?? parentOf(primary)) : undefined;
+  const siblings = useMemo(() => {
+    if (!parentId) return [] as Category[];
+    return inWalkingOrder(catalog.categories.filter((c) => (c.parent ?? parentOf(c.id)) === parentId));
+  }, [catalog.categories, parentId]);
+  const parentName = parentId ? catalog.categoryById.get(parentId)?.name : undefined;
+  const labelOf = (id: string) => {
+    const c = catalog.categoryById.get(id);
+    if (!c) return id;
+    const top = catalog.categoryById.get(topOf(c.id));
+    return top && top.id !== c.id ? `${c.name} · ${top.name}` : c.name;
+  };
+
+  return (
+    <div className="field categories-editor">
+      <span>Categories</span>
+      {ids.length === 0 ? (
+        <CategoryPicker
+          categories={catalog.categories}
+          onPick={(categoryId) => onChange((p) => withCategories(p, categoryId ? [categoryId] : []),
+            `${product.name} → ${categoryId ? catalog.categoryById.get(categoryId)?.name : 'no category'}.`)}
+          iconOf={iconOf}
+          noneLabel="No category"
+          label="Category"
+        />
+      ) : (
+        <>
+          <ul className="cat-chips" aria-label="Assigned categories">
+            {ids.map((id, i) => (
+              <li key={id} className={`cat-chip${i === 0 ? ' primary' : ''}`}>
+                <span aria-hidden="true">{iconOf(id) ?? '·'}</span>
+                <span className="cat-chip-name">{labelOf(id)}{i === 0 ? '' : ''}</span>
+                {i === 0 && ids.length > 1 && <span className="muted small">Primary</span>}
+                <button
+                  type="button"
+                  className="icon"
+                  aria-label={`Remove ${catalog.categoryById.get(id)?.name ?? id}`}
+                  onClick={() => onChange((p) => removeCategory(p, id),
+                    `${product.name}: removed ${catalog.categoryById.get(id)?.name ?? 'category'}.`)}
+                >×</button>
+              </li>
+            ))}
+          </ul>
+          {siblings.length > 1 && (
+            <div className="subcat-quick" role="group" aria-label={`Switch subcategory${parentName ? ` in ${parentName}` : ''}`}>
+              <span className="muted small">{parentName ? `${parentName} · tap to switch` : 'Subcategory'}</span>
+              <div className="chips subcat-chips">
+                {siblings.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={c.id === primary ? 'chip active' : 'chip'}
+                    aria-pressed={c.id === primary}
+                    onClick={() => {
+                      if (c.id === primary) return;
+                      onChange((p) => withCategories(p, [c.id, ...productCategoryIds(p).slice(1)]),
+                        `${product.name} → ${c.name}.`);
+                    }}
+                  >
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {adding ? (
+            <CategoryPicker
+              categories={catalog.categories}
+              exclude={ids}
+              onPick={(categoryId) => {
+                setAdding(false);
+                if (!categoryId) return;
+                onChange((p) => addCategory(p, categoryId),
+                  `${product.name}: also ${catalog.categoryById.get(categoryId)?.name}.`);
+              }}
+              iconOf={iconOf}
+              noneLabel="Cancel"
+              label="Add another category"
+              placeholder="Add another category…"
+              clearOnPick
+              autoFocus
+            />
+          ) : (
+            <button type="button" className="link add-cat" onClick={() => setAdding(true)}>
+              ＋ Add another category
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
  * An item opened in place: every change saves straight away (with Undo).
  * Name, category, and for each store whether it's sold there and where.
  */
@@ -507,17 +615,45 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
     const locations = { ...p.locations };
     if (key) locations[l.id] = key;
     else delete locations[l.id];
-    return { ...p, locations };
+    // Choosing a place (or restoring Automatic) undoes "unknown here".
+    const next: Product = { ...p, locations };
+    const clearedAt = (p.clearedAt ?? []).filter((id) => id !== l.id);
+    if (clearedAt.length) next.clearedAt = clearedAt;
+    else delete next.clearedAt;
+    if (p.mapClues?.[l.id]) {
+      const { [l.id]: _m, ...mapClues } = p.mapClues;
+      void _m;
+      if (Object.keys(mapClues).length) next.mapClues = mapClues;
+      else delete next.mapClues;
+    }
+    return next;
   }, key ? `${product.name}: ${resolveSpot(key, l, catalog)?.label ?? 'place saved'}.` : `${product.name}: automatic place.`);
+
+  /** Clears saved place + aisle answer so the item is unknown here (not Automatic). */
+  const clearLocation = (l: StoreLayout) => onChange((p) => {
+    const { [l.id]: _loc, ...locations } = p.locations ?? {};
+    const { [l.id]: answer, ...clues } = p.clues ?? {};
+    void _loc;
+    const next: Product = {
+      ...p,
+      locations,
+      clues,
+      clearedAt: [...new Set([...(p.clearedAt ?? []), l.id])],
+    };
+    if (answer) next.mapClues = { ...p.mapClues, [l.id]: answer };
+    return next;
+  }, `${product.name}: location cleared at ${l.name}.`);
 
   const storeRow = (l: StoreLayout) => {
     const sold = !product.notAt?.includes(l.id);
-    // What "automatic" resolves to: the place stocking this item's category.
-    const auto = locateProduct({ ...product, locations: {}, notAt: [] }, l, catalog);
+    const unknown = !!product.clearedAt?.includes(l.id) || !!product.mapClues?.[l.id];
+    // What "automatic" resolves to: the place stocking this item's category (ignoring a clear).
+    const auto = locateProduct({ ...product, locations: {}, notAt: [], clearedAt: undefined, mapClues: undefined }, l, catalog);
     const autoText = auto.kind === 'spot' ? auto.spot.label : auto.kind === 'clue' ? describeClue(auto.clue) : 'nowhere yet – pick a place';
     const clue = product.clues?.[l.id];
     const key = product.locations?.[l.id];
     const exactSpot = key && parseExactKey(key) ? resolveSpot(key, l, catalog) : undefined;
+    const selectValue = unknown ? '__unknown__' : (key ?? '');
     return (
       <div className="store-row" key={l.id}>
         <label className="check">
@@ -526,8 +662,17 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
         </label>
         {sold && (
           <div className="location-row">
-            <select value={key ?? ''} onChange={(e) => setLocation(l, e.target.value)} aria-label={`Location at ${l.name}`}>
+            <select
+              value={selectValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === '__unknown__') clearLocation(l);
+                else setLocation(l, v);
+              }}
+              aria-label={`Location at ${l.name}`}
+            >
               <option value="">Automatic: {autoText}</option>
+              <option value="__unknown__">Unknown — no place yet</option>
               {exactSpot && <option value={key}>📍 {exactSpot.label}</option>}
               {l.places.map((pl) => (
                 <optgroup key={pl.id} label={pl.label || 'Unnamed'}>
@@ -541,6 +686,11 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
               ))}
             </select>
             <button type="button" className="btn" onClick={() => setMapFor(l)}>📍 Map</button>
+            {!unknown && (
+              <button type="button" className="btn" onClick={() => clearLocation(l)} aria-label={`Clear location of ${product.name} at ${l.name}`}>
+                Clear
+              </button>
+            )}
           </div>
         )}
         {sold && (
@@ -569,18 +719,12 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitName(); } }} aria-label="Item name" />
         {duplicate && <span className="error">“{duplicate.name}” is already in the list.</span>}
       </label>
-      <div className="field">
-        <span>Category</span>
-        <CategoryPicker
-          value={product.categoryId}
-          categories={catalog.categories}
-          onPick={(categoryId) => onChange((p) => ({ ...p, categoryId }),
-            `${product.name} → ${categoryId ? catalog.categoryById.get(categoryId)?.name : 'no category'}.`)}
-          iconOf={iconOf}
-          noneLabel="No category"
-          label="Category"
-        />
-      </div>
+      <CategoriesEditor
+        product={product}
+        catalog={catalog}
+        iconOf={iconOf}
+        onChange={onChange}
+      />
       {storeRow(layout)}
       {others.length > 0 && (
         <details className="other-stores">
@@ -598,7 +742,17 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
           current={product.clues?.[whereAt.id]}
           onSave={(c) => {
             const at = whereAt;
-            onChange((p) => ({ ...p, clues: { ...p.clues, [at.id]: c } }), `${product.name}: ${describeClue(c)} at ${at.name}.`);
+            onChange((p) => {
+              const clearedAt = (p.clearedAt ?? []).filter((id) => id !== at.id);
+              const { [at.id]: _m, ...mapClues } = p.mapClues ?? {};
+              void _m;
+              return {
+                ...p,
+                clues: { ...p.clues, [at.id]: c },
+                clearedAt: clearedAt.length ? clearedAt : undefined,
+                mapClues,
+              };
+            }, `${product.name}: ${describeClue(c)} at ${at.name}.`);
             setWhereAt(null);
           }}
           onSkip={() => setWhereAt(null)}

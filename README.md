@@ -43,7 +43,10 @@ re-orders it as you move.
    **not available at this store**. Each item shows its category icon
    (switch off with **Icons in list**). Items not available here, and items with no location yet,
    are listed at the bottom under "Not on the route". The add panel docks at
-   the bottom so the list stays visible as you add.
+   the bottom so the list stays visible as you add. On the **Items** tab, an
+   item can have **several categories**; sibling subcategory chips switch
+   quickly, and **Clear** on the location row marks the place **unknown**
+   (instead of falling back to Automatic).
 
 ## Build mode: map a store as you shop
 

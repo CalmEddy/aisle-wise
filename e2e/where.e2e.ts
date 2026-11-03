@@ -285,8 +285,9 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   await expect.poll(answered).toEqual([]);
   await page.waitForTimeout(300);
   expect(await places()).toBe(before);
-  // Cleared items are asked about again.
-  await page.locator('.items .row', { hasText: 'Cereal' }).getByRole('checkbox').uncheck({ force: true });
+  // Cleared items are asked about again (put back on the list, then check off).
+  await page.locator('details.done').getByRole('checkbox', { name: /Uncheck Cereal/ }).click({ force: true });
+  await expect(row(page, 'Cereal').getByRole('checkbox')).not.toBeChecked();
   await tick(page, 'Cereal');
   await expect(page.locator('.where-bar')).toContainText('Where was Cereal?');
   ok();

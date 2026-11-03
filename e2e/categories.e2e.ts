@@ -31,8 +31,10 @@ test('brands get a category; the list shows categories and subcategories, and ðŸ
   await picker.click();
   const options = page.getByRole('listbox', { name: 'Category of Cheerios' }).getByRole('option');
   await expect(options.nth(0)).toHaveText(/No category/);
-  await expect(options.nth(1)).toHaveText(/Produce/);
-  await expect(options.nth(2)).toHaveText('Fruits');
+  // Current subcategory's parent and siblings come first for a quick switch.
+  await expect(options.nth(1)).toHaveText(/Breakfast & Cereal/);
+  await expect(options.nth(2)).toHaveText('Cold Cereal & Granola');
+  await expect(options.filter({ hasText: 'Produce' }).first()).toBeVisible();
   await picker.fill('soup');
   await expect(options.first()).toContainText('Soup & Broth');
   await expect(options.first()).toContainText('Canned & Jarred Goods');
