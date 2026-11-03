@@ -45,8 +45,8 @@ export function whereText(product: Product, layout: StoreLayout, catalog: Catalo
   if (loc.kind === 'not-sold') return 'Not available here';
   if (loc.kind === 'clue') return describeClue(loc.clue);
   if (loc.kind === 'guess') {
-    // Efficient: name the missing top shelf, then the usual supermarket hint.
-    return `${noShelfText(loc.categoryId, catalog)} · usually ${typicalWhere(loc.categoryId, catalog)}`;
+    // Efficient: name the missing top shelf (Automatic / editor expand on the rest).
+    return noShelfText(loc.categoryId, catalog);
   }
   const top = product.categoryId ? catalog.topOf(product.categoryId) : undefined;
   return (top && catalog.categoryById.get(top)?.name) ?? 'No location yet';

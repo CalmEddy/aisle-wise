@@ -224,7 +224,11 @@ button { cursor: pointer; }
   flex: 1; display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
   background: none; border: 0; padding: 10px 0; text-align: left; min-width: 0;
 }
-.product-row .where { margin: 0; text-align: right; }
+.product-row > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.product-row .where {
+  margin: 0; text-align: right; flex: 0 1 auto; max-width: 55%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .product-row .where.set { color: var(--accent); }
 .add-icon { color: var(--accent); font-weight: 700; }
 .add-icon:disabled { color: var(--muted); }
