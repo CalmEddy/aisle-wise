@@ -11,6 +11,8 @@ const LABELS: Record<Switch, string> = {
   mapIcons: 'Icons on map',
   groupList: 'Group by section',
   listCategories: 'Categories in list',
+  listQty: 'Quantity stepper',
+  listLocation: 'Location under name',
   listColors: 'Colors in list',
   listIcons: 'Icons in list',
   buildMode: 'Build mode',
@@ -25,6 +27,8 @@ const SHORT: Record<Switch, string> = {
   buildMode: '🛠 Edit map',
   groupList: '☰',
   listCategories: '🏷',
+  listQty: '×',
+  listLocation: '📍',
   mapColors: '🎨',
   mapIcons: '🍎',
   listColors: '🎨',
@@ -35,10 +39,10 @@ const SHORT: Record<Switch, string> = {
   buildMoreTools: '⋯',
 };
 
-/** Switches shown together under a heading ("Map 🎨 🍎"). */
+/** Switches shown together under a heading ("List 🎨 🍎"). Field toggles (🏷 × 📍) stay individual. */
 const GROUPS: { name: string; keys: Switch[] }[] = [
-  { name: 'Map', keys: ['mapColors', 'mapIcons'] },
   { name: 'List', keys: ['listColors', 'listIcons'] },
+  { name: 'Map', keys: ['mapColors', 'mapIcons'] },
 ];
 
 const SORTS: { id: ListSort; short: string; label: string }[] = [

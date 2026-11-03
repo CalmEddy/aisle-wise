@@ -116,8 +116,21 @@ button { cursor: pointer; }
 .row label { flex: 1; display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
 .row input[type='checkbox'] { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
 .items.big .name { font-size: 1.1rem; }
-.row .name { flex: 1; overflow-wrap: anywhere; }
+/* Never letter-stack names on narrow rows. */
+.row .name { flex: 1 1 0; min-width: 0; overflow: hidden; }
+.row label > input[type='checkbox'],
+.row label > .item-icon { flex: none; }
+/* Buttons don't support -webkit-box well — ellipsis instead of letter-wrap. */
+.row .name-edit {
+  display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Static names may wrap to two lines at word boundaries. */
+.row .name-text {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  max-width: 100%; overflow: hidden; overflow-wrap: break-word; word-break: normal; white-space: normal;
+}
 .row.checked .name { text-decoration: line-through; color: var(--muted); }
+.row.checked .name-text, .row.checked .name-edit { text-decoration: line-through; color: var(--muted); }
 .row.dragging { opacity: 0.35; }
 .row select { max-width: 45%; padding: 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
 .handle {
@@ -798,8 +811,15 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .items .row .swipe { flex: 1; min-width: 0; border-radius: 8px; }
 .items .row .swipe-top { background: var(--row-bg, var(--surface)); }
 .items .row:has(> .swipe) { display: block; padding: 0; }
-.row-inner { display: flex; align-items: center; gap: 8px; min-height: 48px; }
-.row-inner > label { flex: 1; min-width: 0; }
+.row-inner { display: flex; align-items: center; gap: 4px; min-height: 48px; min-width: 0; }
+.row-inner > label { flex: 1 1 0; min-width: 0; overflow: hidden; gap: 8px; }
+.row-inner > .qty-stepper,
+.row-inner > .icon,
+.row-inner > .pinned-dot { flex: none; }
+/* Compact stepper so the name keeps room on phone-width lists. */
+.row-inner .qty-stepper.inline .icon { width: 1.55rem; height: 1.55rem; font-size: 0.9rem; }
+.row-inner .qty-stepper.inline .qty-stepper-value { min-width: 0.9rem; font-size: 0.85rem; padding: 0 1px; }
+.row-inner > .icon { width: 2rem; height: 2rem; font-size: 1.2rem; }
 .pinned-dot { font-size: 0.9rem; flex: none; }
 .route-list .spot-detail { margin: 6px 0 0 6px; position: relative; z-index: 1; }
 .route-list .spot.tinted { padding-top: 2px; }
@@ -807,6 +827,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 /* Map strip while shopping, and the view-settings menu */
 .map.strip { max-height: 150px; height: 150px; }
 .view-menu { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.view-menu-lead { margin: 2px 0 4px; font-weight: 600; }
 .toggle.icon-only.action[aria-pressed='false'] { filter: none; opacity: 1; }
 
 /* Store picker */
@@ -850,10 +871,10 @@ main { padding-bottom: 110px; }
 /* ---- Amounts and notes on list items ---- */
 .row .qty { font-weight: 700; color: var(--accent); white-space: nowrap; }
 .row .item-note { display: block; font-size: 0.8rem; color: var(--muted); font-style: italic; }
-.row .name-meta { display: block; }
+.row .name-meta { display: block; min-width: 0; overflow: hidden; }
 .row .name-edit {
-  display: inline; padding: 0; margin: 0; border: 0; background: none; color: inherit;
-  font: inherit; text-align: left; cursor: text; overflow-wrap: anywhere;
+  padding: 0; margin: 0; border: 0; background: none; color: inherit;
+  font: inherit; text-align: left; cursor: text; width: 100%;
 }
 .row.checked .name-edit { text-decoration: line-through; color: var(--muted); }
 .row .inline-name {
