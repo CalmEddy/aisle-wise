@@ -1036,12 +1036,16 @@ export function ShoppingView(props: Props) {
     nextWhere(item);
   }
 
-  // ---- Clearing where things are (strip button; testing the map) ----
+  // ---- Clearing where things are (strip + per-row ⊘; testing the map) ----
   /** Whether the list shows a place for it here: saved, answered, or placed by its kind. */
   const hasWhereHere = (item: ListItem) => {
     const p = productFor(item, catalog);
     return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]) || locate(item).kind === 'spot';
   };
+  function clearOneWhere(item: ListItem) {
+    const snapshot = props.where.clearWhere([item]);
+    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });
+  }
   function clearAllWhere() {
     const these = items.filter(hasWhereHere);
     if (!these.length) { setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `Nothing on the list has a place at ${layout.name}.` }); return; }
@@ -1216,6 +1220,8 @@ export function ShoppingView(props: Props) {
               <span className="muted small count-pill">{nearestFirst.length} item{nearestFirst.length === 1 ? '' : 's'}</span>
             </div>
             <ItemRows
+              onClearWhere={clearOneWhere}
+              clearable={hasWhereHere}
               items={nearestFirst.map((e) => e.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
@@ -1246,6 +1252,8 @@ export function ShoppingView(props: Props) {
               <span className="muted small count-pill">{flatSorted.length} item{flatSorted.length === 1 ? '' : 's'}</span>
             </div>
             <ItemRows
+              onClearWhere={clearOneWhere}
+              clearable={hasWhereHere}
               items={flatSorted.map((e) => e.item)}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
@@ -1271,6 +1279,8 @@ export function ShoppingView(props: Props) {
               <span className="muted small"> · {byClue.some((b) => !b.clue) ? 'until you say where things are' : 'not on the map yet'}</span>
             </h3>
             <ItemRows
+              onClearWhere={clearOneWhere}
+              clearable={hasWhereHere}
               items={(showCatHeads
                 ? [...byClue].sort((a, b) => orderOf(a.categoryId ?? productFor(a.item, catalog)?.categoryId ?? '') - orderOf(b.categoryId ?? productFor(b.item, catalog)?.categoryId ?? '') || a.rank - b.rank)
                 : byClue
@@ -1385,7 +1395,18 @@ export function ShoppingView(props: Props) {
         {done.length > 0 && (
           <details className="card done">
             <summary>In the cart ({done.length})</summary>
-            <ItemRows items={done} onToggle={toggle} onRemove={removeWithUndoOne} onPatch={patchItem} iconOf={iconOf} simple showQty={showQty} showLocation={showLocation} />
+            <ItemRows
+              onClearWhere={clearOneWhere}
+              clearable={hasWhereHere}
+              items={done}
+              onToggle={toggle}
+              onRemove={removeWithUndoOne}
+              onPatch={patchItem}
+              iconOf={iconOf}
+              simple
+              showQty={showQty}
+              showLocation={showLocation}
+            />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
         )}

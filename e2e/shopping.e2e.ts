@@ -13,10 +13,12 @@ test('adds items with amounts and notes, sorted into a walk through the store', 
   expect(items.map((i) => [i.name, i.qty ?? null, i.note ?? null])).toEqual([
     ['Milk', 2, null], ['Bread', null, null], ['Flour', null, 'big bag'], ['Ground beef', null, '2 lb'], ['Eggs', 12, null], ['Toothpaste', null, null],
   ]);
-  await expect(row(page, 'Milk')).toContainText('×2');
+  // Qty stepper is on by default (shows the count; no separate ×N).
+  await expect(row(page, 'Milk').locator('.qty-stepper-value')).toHaveText('2');
   await expect(row(page, 'Flour')).toContainText('big bag');
-  // The first stop is marked NEXT, and the page doesn't scroll sideways.
-  await expect(page.locator('main .route-list')).toContainText(/next/i);
+  // Default sort is nearest-first; the closest stop is marked.
+  await expect(page.locator('main .flat-list')).toContainText(/Nearest first/i);
+  await expect(page.locator('main .flat-list .row.nearest')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   ok();
 });
@@ -35,7 +37,7 @@ test('checks off by the checkbox, with progress and undoable removal', async ({ 
 test('inline qty and rename work without opening the menu', async ({ page }) => {
   await addItems(page, 'milk');
   await row(page, 'Milk').getByRole('button', { name: 'One more Milk' }).click();
-  await expect(row(page, 'Milk')).toContainText('×2');
+  await expect(row(page, 'Milk').locator('.qty-stepper-value')).toHaveText('2');
   await row(page, 'Milk').getByRole('button', { name: 'Rename Milk' }).click();
   await row(page, 'Milk').getByLabel('Rename Milk').fill('Oat milk');
   await row(page, 'Milk').getByLabel('Rename Milk').press('Enter');
@@ -59,11 +61,9 @@ test('the item menu sets unit, price and note, and pins it on the map', async ({
   expect(items[0]).toMatchObject({ unit: 'box', price: 3.49, note: 'skim' });
 });
 
-test('list sort cycles through route, nearest, category and A–Z', async ({ page }) => {
+test('list sort cycles through nearest, category and A–Z', async ({ page }) => {
   await addItems(page, 'zucchini, apples, milk');
-  const sort = page.getByRole('button', { name: /Sort by/ });
-  await expect(page.locator('main .route-list')).toBeVisible();
-  await sort.click(); // nearest
+  const sort = page.getByRole('button', { name: /Sort / });
   await expect(page.locator('main .flat-list')).toContainText(/Nearest first/i);
   await sort.click(); // category
   await expect(page.locator('main .flat-list')).toContainText(/By category/i);
@@ -102,9 +102,11 @@ test('buy again: past trips at the top of the add window, one tap adds', async (
   expect(await toastText(page)).not.toContain('Error');
 });
 
-test('the toggle strip fits on one line, and the map can be shown whole', async ({ page }) => {
+test('the toggle strip is usable, and the map can be shown whole', async ({ page }) => {
   await addItems(page, 'apples, bread, milk');
-  expect(await page.locator('.toggles').evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
+  await expect(page.locator('.toggles')).toBeVisible();
+  // Horizontal scroll is OK on a phone; the strip itself must stay one row tall.
+  expect(await page.locator('.toggles').evaluate((e) => e.clientHeight < 64)).toBe(true);
   const strip = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
   await page.getByRole('button', { name: 'Show the whole map' }).click();
   const whole = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);

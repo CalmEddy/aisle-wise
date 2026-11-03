@@ -19,7 +19,7 @@ test('a store map built only from answers: wall shelves, fridges, freezers and t
   // Aisles 1–5, guesses dashed.
   await expect(page.locator('.map-wrap .aisle-label text')).toHaveCount(5);
   await expect(page.locator('.map-wrap svg.map .place.frozen')).not.toHaveCount(0);
-  // The list follows the map.
-  await expect(page.locator('main .route-list .row').first()).toBeVisible();
+  // The list follows the map (nearest-first flat list).
+  await expect(page.locator('main .flat-list .row').first()).toBeVisible();
   ok();
 });
