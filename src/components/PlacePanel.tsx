@@ -145,6 +145,7 @@ function CategoryList({ ids, onChange, categories, looks, usedElsewhere, addLabe
         placeholder={addLabel}
         label={addLabel}
         clearOnPick
+        topsOnly
       />
     </>
   );

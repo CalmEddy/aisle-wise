@@ -8,12 +8,13 @@ import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import { addCategory, productCategoryIds, removeCategory, withCategories } from '../core/productCategories';
 import type { Category, Product, StoreLayout } from '../core/types';
-import { whereText } from './whereText';
+import { autoWhereText, whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker } from './CategoryPicker';
 import { SwipeRow } from './SwipeRow';
 import { WherePanel } from './WherePanel';
 import { aislesUsed, describeClue } from '../core/clues';
+import { isUncategorizedPlace } from '../core/taxonomy';
 
 interface Props {
   catalog: Catalog;
@@ -774,13 +775,38 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
   const storeRow = (l: StoreLayout) => {
     const sold = !product.notAt?.includes(l.id);
     const unknown = !!product.clearedAt?.includes(l.id) || !!product.mapClues?.[l.id];
-    // What "automatic" resolves to: the place stocking this item's category (ignoring a clear).
+    // What "automatic" resolves to: the place stocking this item's top-level category (ignoring a clear).
     const auto = locateProduct({ ...product, locations: {}, notAt: [], clearedAt: undefined, mapClues: undefined }, l, catalog);
-    const autoText = auto.kind === 'spot' ? auto.spot.label : auto.kind === 'clue' ? describeClue(auto.clue) : 'nowhere yet – pick a place';
+    const autoText = autoWhereText(auto, catalog);
     const clue = product.clues?.[l.id];
     const key = product.locations?.[l.id];
     const exactSpot = key && parseExactKey(key) ? resolveSpot(key, l, catalog) : undefined;
     const selectValue = unknown ? '__unknown__' : (key ?? '');
+    // Location choices correspond to top-level categories: matching tops first, then other
+    // categorized places, then uncategorized (marked so they're recognizable).
+    const productTops = new Set(productCategoryIds(product).map((id) => catalog.topOf(id)));
+    const placeTopIds = (pl: typeof l.places[number]) =>
+      [...new Set(pl.categories.map((cid) => catalog.topOf(cid)))];
+    const matchesTop = (pl: typeof l.places[number]) => placeTopIds(pl).some((t) => productTops.has(t));
+    const forTops = l.places.filter((pl) => !isUncategorizedPlace(pl) && matchesTop(pl));
+    const otherCat = l.places.filter((pl) => !isUncategorizedPlace(pl) && !matchesTop(pl));
+    const noCat = l.places.filter((pl) => isUncategorizedPlace(pl));
+    const placeOption = (pl: typeof l.places[number], markNoCat = false) => {
+      const label = pl.label || 'Unnamed';
+      const suffix = markNoCat ? ' · no category' : '';
+      // Location sections are top-level categories (subs collapse to their live top).
+      const sectionIds = placeTopIds(pl);
+      return (
+        <optgroup key={pl.id} label={`${label}${suffix}`}>
+          <option value={pl.id}>{label}{suffix}</option>
+          {sectionIds.length > 1 && sectionIds.map((cid) => (
+            <option key={cid} value={`${pl.id}:${cid}`}>
+              {label} · {catalog.categoryById.get(cid)?.name ?? cid}
+            </option>
+          ))}
+        </optgroup>
+      );
+    };
     return (
       <div className="store-row" key={l.id}>
         <label className="check">
@@ -801,16 +827,9 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
               <option value="">Automatic: {autoText}</option>
               <option value="__unknown__">Unknown — no place yet</option>
               {exactSpot && <option value={key}>📍 {exactSpot.label}</option>}
-              {l.places.map((pl) => (
-                <optgroup key={pl.id} label={pl.label || 'Unnamed'}>
-                  <option value={pl.id}>{pl.label || 'Unnamed'}</option>
-                  {pl.categories.length > 1 && pl.categories.map((cid) => (
-                    <option key={cid} value={`${pl.id}:${cid}`}>
-                      {pl.label} · {catalog.categoryById.get(cid)?.name ?? cid}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
+              {forTops.map((pl) => placeOption(pl))}
+              {otherCat.map((pl) => placeOption(pl))}
+              {noCat.map((pl) => placeOption(pl, true))}
             </select>
             <button type="button" className="btn" onClick={() => setMapFor(l)}>📍 Map</button>
             {!unknown && (

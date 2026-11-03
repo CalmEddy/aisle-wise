@@ -1,6 +1,7 @@
 import { forwardRef, type ReactNode, type SVGProps } from 'react';
 import { aisleShelves } from '../core/aisles';
 import { footprint, placeNear, sectionShapes, shelfBacks, type Segment } from '../core/geometry';
+import { isUncategorizedPlace } from '../core/taxonomy';
 import type { SectionLook } from '../display';
 import type { AisleLabel, Place, Point, Rect, StoreLayout } from '../core/types';
 
@@ -107,7 +108,8 @@ function PlaceLabel({ place, look }: { place: Place; look?: SectionLook }) {
 function labelClass(place: Place, look?: SectionLook): string {
   const isShelf = place.kind === 'shelf';
   const icons = !!look?.iconOf && sectionShapes(place).some((sec) => look.iconOf!(sec.categoryId));
-  return ['place-label', isShelf && 'shelf-label', isShelf && place.back && 'wall', place.temp, place.guess && 'guess', icons && 'with-icons'].filter(Boolean).join(' ');
+  const noCat = isUncategorizedPlace(place);
+  return ['place-label', isShelf && 'shelf-label', isShelf && place.back && 'wall', place.temp, place.guess && 'guess', noCat && 'uncategorized', icons && 'with-icons'].filter(Boolean).join(' ');
 }
 
 /**
@@ -284,7 +286,8 @@ function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap,
   const cy = f.y + f.h / 2;
   // The label's size (drawn by PlaceLabel), so section icons can keep clear of it.
   const size = isShelf ? Math.min(0.78, ((vertical ? f.h : f.w) / Math.max(1, place.label.length)) * 1.6) : 0;
-  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, changed && 'changed', place.guess && 'guess', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
+  const noCat = isUncategorizedPlace(place);
+  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, changed && 'changed', place.guess && 'guess', noCat && 'uncategorized', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
   const pad = 0.6; // easier to tap a thin shelf
 
@@ -320,6 +323,14 @@ function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap,
             fontSize={Math.min(0.8, f.w, f.h)} aria-label={place.temp === 'frozen' ? 'Freezer' : 'Fridge'}>
             {place.temp === 'frozen' ? '❄' : '🧊'}
           </text>
+        </>
+      )}
+      {noCat && (
+        <>
+          <rect className="uncat-frame" x={f.x + 0.08} y={f.y + 0.08} width={f.w - 0.16} height={f.h - 0.16} rx={isShelf ? 0.2 : 0.5} />
+          <text className="uncat-badge" x={f.x + Math.min(0.55, f.w / 2)} y={f.y + Math.min(0.55, f.h / 2)}
+            textAnchor="middle" dominantBaseline="central" fontSize={Math.min(0.7, f.w, f.h)}
+            aria-label="No category">?</text>
         </>
       )}
       {changed && <rect className="change-frame" x={f.x - 0.35} y={f.y - 0.35} width={f.w + 0.7} height={f.h + 0.7} rx={isShelf ? 0.45 : 0.8} />}

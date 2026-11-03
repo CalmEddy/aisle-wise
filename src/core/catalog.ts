@@ -1,5 +1,5 @@
 import type { Category, Product } from './types';
-import { liveParent, liveTop } from './taxonomy';
+import { homesOf, liveParent, liveTop, nearbyKinds, stocking, stocks, type ParentFn } from './taxonomy';
 
 /** Lowercases, strips punctuation and numbers, and singularises each word. */
 export function normalize(name: string): string {
@@ -113,5 +113,26 @@ export class Catalog {
   /** Top-level categories only (no parent), in walking order helpers' preferred order. */
   tops(): Category[] {
     return this.categories.filter((c) => !this.parentOf(c.id));
+  }
+
+  /** Live parent resolver for stocking / homes. */
+  get parentFn(): ParentFn {
+    return (id) => this.parentOf(id);
+  }
+
+  stocks(stocked: readonly string[], kind: string): boolean {
+    return stocks(stocked, kind, this.parentFn);
+  }
+
+  stocking<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(places: readonly T[], kind: string): T[] {
+    return stocking(places, kind, this.parentFn);
+  }
+
+  homesOf<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(places: readonly T[], kind: string): T[] {
+    return homesOf(places, kind, this.parentFn);
+  }
+
+  nearbyKinds<T extends { categories: readonly string[] }>(places: readonly T[], kind: string): T[] {
+    return nearbyKinds(places, kind, this.parentFn);
   }
 }

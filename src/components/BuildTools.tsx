@@ -320,6 +320,7 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
           noneLabel="Stocks: nothing yet"
           placeholder="Stocks: nothing yet"
           label={`Category the ${which} side stocks`}
+          topsOnly
         />
       )}
     </div>

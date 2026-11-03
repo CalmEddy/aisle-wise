@@ -48,17 +48,25 @@ export function liveIsSub(byId: ReadonlyMap<string, { parent?: string }>, id: st
 /** Walking order (categories in store order, subcategories within them); shopper-made ones come last. */
 export const orderOf = (id: string): number => ORDER.get(id) ?? 10_000;
 
+/** Resolves a subcategory's parent; pass `catalog.parentOf` so live edits stick. */
+export type ParentFn = (id: string) => string | undefined;
+
 /**
  * Whether a place stocking `stocked` (a shelf's category list) has an item of `kind`: the same id, or the
- * item's category when the place only knows the category ("Canned goods" has the soup).
+ * item's top category when the place only knows the category ("Canned goods" has the soup).
  */
-export function stocks(stocked: readonly string[], kind: string): boolean {
-  return stocked.includes(kind) || (PARENT.has(kind) && stocked.includes(PARENT.get(kind)!));
+export function stocks(stocked: readonly string[], kind: string, parentOfKind: ParentFn = parentOf): boolean {
+  const parent = parentOfKind(kind);
+  return stocked.includes(kind) || (!!parent && stocked.includes(parent));
 }
 
 /** Where a kind of thing lives: places stocking it, not tables or stands (those are only offered, never assumed). */
-export function homesOf<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(places: readonly T[], kind: string): T[] {
-  return stocking(places, kind).filter((p) => !p.display);
+export function homesOf<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(
+  places: readonly T[],
+  kind: string,
+  parentOfKind: ParentFn = parentOf,
+): T[] {
+  return stocking(places, kind, parentOfKind).filter((p) => !p.display);
 }
 
 /**
@@ -66,9 +74,15 @@ export function homesOf<T extends { categories: readonly string[]; holds?: Recor
  * stocking only its category (Meat & Seafood) half. A main home (set by hand, built from answers, or holding two
  * or more of it) beats one odd item put somewhere and beats tables and stands, which hold this week's display;
  * those count only when there's nowhere better.
+ *
+ * Pass `parentOfKind` (e.g. `catalog.parentOf`) so a subcategory moved under Condiments finds the Condiments shelf.
  */
-export function stocking<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(places: readonly T[], kind: string): T[] {
-  const parent = PARENT.get(kind);
+export function stocking<T extends { categories: readonly string[]; holds?: Record<string, number>; display?: boolean; own?: readonly string[] }>(
+  places: readonly T[],
+  kind: string,
+  parentOfKind: ParentFn = parentOf,
+): T[] {
+  const parent = parentOfKind(kind);
   const weight = (p: T, k: string) => p.holds?.[k] ?? (p.categories.includes(k) ? 1 : 0);
   // Its own kind counts fully; a place stocking only its category, half.
   let found = places.map((p) => ({ p, w: weight(p, kind) || (parent ? weight(p, parent) / 2 : 0) })).filter((c) => c.w > 0);
@@ -87,9 +101,20 @@ export function stocking<T extends { categories: readonly string[]; holds?: Reco
  * Places with another kind of thing from the same category (oatmeal: the cereal shelf). Often right, sometimes
  * not (soda isn't always by the water), so only offered as a one-tap answer, never used to place things.
  */
-export function nearbyKinds<T extends { categories: readonly string[] }>(places: readonly T[], kind: string): T[] {
-  const parent = PARENT.get(kind);
-  return parent ? places.filter((p) => p.categories.some((c) => c !== kind && PARENT.get(c) === parent)) : [];
+export function nearbyKinds<T extends { categories: readonly string[] }>(
+  places: readonly T[],
+  kind: string,
+  parentOfKind: ParentFn = parentOf,
+): T[] {
+  const parent = parentOfKind(kind);
+  return parent
+    ? places.filter((p) => p.categories.some((c) => c !== kind && parentOfKind(c) === parent))
+    : [];
+}
+
+/** A place with no category assigned — not a department shelf on the map. */
+export function isUncategorizedPlace(place: { categories: readonly string[] }): boolean {
+  return place.categories.length === 0;
 }
 
 /** Sorts categories into walking order: the taxonomy's first, then the shopper's own A–Z. */

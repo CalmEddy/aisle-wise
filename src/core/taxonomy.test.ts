@@ -3,7 +3,7 @@ import { Catalog } from './catalog';
 import { defaultCategories, defaultProducts } from './categories';
 import { guessDept } from './clues';
 import { hasOldCategories, migrateCategories } from './recategorize';
-import { liveParent, liveTop, orderOf, parentOf, SEED_CATEGORIES, stocking, stocks, topOf } from './taxonomy';
+import { isUncategorizedPlace, liveParent, liveTop, orderOf, parentOf, SEED_CATEGORIES, stocking, stocks, topOf } from './taxonomy';
 import type { Category, Product, StoreLayout } from './types';
 
 describe('the grocery taxonomy', () => {
@@ -42,6 +42,24 @@ describe('the grocery taxonomy', () => {
     const fish = { id: 'fish', categories: ['meat_fish_seafood'] };
     expect(stocking([meat, fish], 'meat_fish_seafood').map((p) => p.id)).toEqual(['fish', 'meat']); // exact first
     expect(stocking([meat, fish], 'meat_beef').map((p) => p.id)).toEqual(['meat']);
+  });
+
+  it('stocking uses a live parent so a reparented subcategory finds its new top shelf', () => {
+    const catalog = new Catalog([], defaultCategories.map((c) =>
+      c.id === 'breakfast_spreads' ? { ...c, parent: 'condiments_sauces' } : { ...c },
+    ));
+    const cereal = { id: 'cereal', categories: ['breakfast_cereal'] };
+    const condiments = { id: 'condiments', categories: ['condiments_sauces'] };
+    // Seed parent is still Breakfast — live parent is Condiments.
+    expect(parentOf('breakfast_spreads')).toBe('breakfast_cereal');
+    expect(catalog.parentOf('breakfast_spreads')).toBe('condiments_sauces');
+    expect(catalog.homesOf([cereal, condiments], 'breakfast_spreads').map((p) => p.id)).toEqual(['condiments']);
+    expect(catalog.homesOf([cereal, condiments], 'condiments_sauces').map((p) => p.id)).toEqual(['condiments']);
+  });
+
+  it('marks places with no categories as uncategorized', () => {
+    expect(isUncategorizedPlace({ categories: [] })).toBe(true);
+    expect(isUncategorizedPlace({ categories: ['produce'] })).toBe(false);
   });
 
   it('departments: Fish & Seafood is Seafood, the rest of Meat & Seafood is Meat; cheese is Dairy', () => {
