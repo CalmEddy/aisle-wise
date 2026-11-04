@@ -34,8 +34,12 @@ interface Props {
   onList: Set<string>;
   /** Active-list rows keyed by product id (unchecked first). */
   listItemOf: (productId: string) => ListItem | undefined;
-  /** Patch qty / price / unit / note on an active-list row. */
-  onPatchListItem: (item: ListItem, patch: ItemPatch) => void;
+  /**
+   * Patch qty / price on the active list for this product.
+   * Adds the product to the list first when it isn't there yet, so the × / $
+   * toggles do something while browsing the catalog.
+   */
+  onPatchProduct: (product: Product, patch: ItemPatch) => void;
   /** Name of the list being stocked (where adds go). */
   listName: string;
   /** What Undo would put back right now, and putting it back. */
@@ -131,7 +135,7 @@ interface ItemsToast {
 }
 
 function ProductList({
-  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, listItemOf, onPatchListItem,
+  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, listItemOf, onPatchProduct,
   snapshot, undo, listName, display, setDisplay,
 }: Props) {
   const [query, setQuery] = useState('');
@@ -360,11 +364,17 @@ function ProductList({
             {[whereText(p, layout, catalog), showPrice ? priceCue(p, layout.id, layouts, listItem?.price) : undefined].filter(Boolean).join(' · ')}
           </span>
         </button>
-        {listItem && showQty && (
-          <QtyStepper item={listItem} onPatch={(patch) => onPatchListItem(listItem, patch)} />
+        {showQty && (
+          <QtyStepper
+            item={listItem ?? { id: `new-${p.id}`, name: p.name, done: false }}
+            onPatch={(patch) => onPatchProduct(p, patch)}
+          />
         )}
-        {listItem && showPrice && (
-          <InlinePrice item={listItem} onPatch={(patch) => onPatchListItem(listItem, patch)} />
+        {showPrice && (
+          <InlinePrice
+            item={listItem ?? { id: `new-${p.id}`, name: p.name, done: false }}
+            onPatch={(patch) => onPatchProduct(p, patch)}
+          />
         )}
         <button
           className="icon add-icon"
