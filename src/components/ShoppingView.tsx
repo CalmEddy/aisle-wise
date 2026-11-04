@@ -707,6 +707,7 @@ export function ShoppingView(props: Props) {
   const showCats = props.display.listCategories ?? true;
   const groupByCategory = props.display.listGroupByCategory ?? false;
   const showQty = props.display.listQty ?? true;
+  const showPrice = props.display.listPrice ?? false;
   const showLocation = props.display.listLocation ?? true;
   /** Section headings under categories (sort-by-category, or the group toggle). */
   const showCatHeads = groupByCategory || listSort === 'category';
@@ -1229,6 +1230,7 @@ export function ShoppingView(props: Props) {
               onPatch={!building ? patchItem : undefined}
               simple={!building}
               showQty={showQty}
+              showPrice={showPrice}
               showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               drag={building ? dragHandlers : undefined}
@@ -1261,6 +1263,7 @@ export function ShoppingView(props: Props) {
               onPatch={!building ? patchItem : undefined}
               simple={!building}
               showQty={showQty}
+              showPrice={showPrice}
               showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
@@ -1291,6 +1294,7 @@ export function ShoppingView(props: Props) {
               onPatch={!building ? patchItem : undefined}
               simple={!building}
               showQty={showQty}
+              showPrice={showPrice}
               showLocation={showLocation}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
@@ -1405,6 +1409,7 @@ export function ShoppingView(props: Props) {
               iconOf={iconOf}
               simple
               showQty={showQty}
+              showPrice={showPrice}
               showLocation={showLocation}
             />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
@@ -1468,7 +1473,8 @@ export function ShoppingView(props: Props) {
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
-            show={['listCategories', 'listQty', 'listLocation', 'buildMode']}
+            show={['listCategories', 'listQty', 'listPrice', 'listLocation', 'buildMode']}
+            offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
             lead={(
               <>
                 {addButton}
@@ -1496,10 +1502,10 @@ export function ShoppingView(props: Props) {
               <DisplayToggles
                 display={props.display}
                 setDisplay={props.setDisplay}
-                show={['listGroupByCategory', 'listCategories', 'listQty', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
-                offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory']}
+                show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
               />
-              <span className="muted small">☰ group by category · 🏷 categories · × quantity · 📍 location · 🎨 colours · 🍎 icons</span>
+              <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons</span>
             </div>
           )}
         </>

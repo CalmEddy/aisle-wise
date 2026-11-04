@@ -1311,6 +1311,13 @@ export default function App() {
           setLayouts={setLayouts}
           onAddToList={addToList}
           onList={onList}
+          listItemOf={(productId) => {
+            const waiting = items.find((i) => !i.done && productFor(i, catalog)?.id === productId);
+            return waiting ?? items.find((i) => productFor(i, catalog)?.id === productId);
+          }}
+          onPatchListItem={(item, patch) => {
+            setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
+          }}
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
           undo={undo}

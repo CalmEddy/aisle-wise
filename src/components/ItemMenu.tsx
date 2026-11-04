@@ -86,7 +86,10 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
             />
           </label>
           {item.price !== undefined && (
-            <span className="muted small price-preview">{formatPrice(item.price)}</span>
+            <span className="muted small price-preview" title={qty > 1 ? `${qty} × ${formatPrice(item.price)}` : undefined}>
+              {formatPrice(qty > 1 ? item.price * qty : item.price)}
+              {qty > 1 ? ' total' : ''}
+            </span>
           )}
         </div>
         <input
