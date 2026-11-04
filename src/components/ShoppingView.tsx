@@ -54,6 +54,8 @@ import { TripDoneCard } from './TripDoneCard';
 import { DoorCard } from './DoorCard';
 import { DeptWallsSheet } from './DeptWallsSheet';
 import { offerWalls } from '../core/walls';
+import { priceCue } from '../core/prices';
+import type { ItemUnit } from '../core/types';
 
 interface Props {
   /** The household's lists; this view shows the current one. */
@@ -76,6 +78,8 @@ interface Props {
   /** A changed part has been looked at (tapped in Edit map). */
   onSeenChange: (id: string) => void;
   layout: StoreLayout;
+  /** All stores (for best-price cues). */
+  layouts: StoreLayout[];
   /** "Where was it?" → where I'm standing: what can be chosen or built there. */
   here: {
     options: HereOption[];
@@ -102,6 +106,8 @@ interface Props {
   quickAdd: (names: string[], mode: 'list' | 'cart', hereKey?: string) => QuickAddResult;
   undo: (snapshot: QuickAddResult['snapshot']) => void;
   setProductLocation: (productId: string, spotKey: string | null) => void;
+  /** Remembers a product's price at the current store when the list price is set. */
+  setProductPrice: (productId: string, amount: number, unit?: ItemUnit) => void;
   build: BuildApi;
   setItemCategory: (item: ListItem, categoryId: string | undefined) => void;
   /** "Where was it?": whether to ask in this store, saving answers, and logging check-off order. */
@@ -769,10 +775,29 @@ export function ShoppingView(props: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listSort, route, byClue, unplaced, catalog, showCats, showCatHeads]);
 
+  const learnPrice = (item: ListItem, patch: ItemPatch) => {
+    const product = productFor({ ...item, ...patch }, catalog);
+    if (!product) return;
+    // Clearing the list price keeps the remembered store price.
+    if ('price' in patch) {
+      if (patch.price === undefined) return;
+      props.setProductPrice(product.id, patch.price, patch.unit ?? item.unit);
+      return;
+    }
+    // Unit change with an existing list price: re-stamp under the new unit.
+    if ('unit' in patch && item.price !== undefined) {
+      props.setProductPrice(product.id, item.price, patch.unit);
+    }
+  };
+
   const patchItem = (item: ListItem, patch: ItemPatch) => {
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
     setMenuFor((m) => (m && m.id === item.id ? { ...m, ...patch } : m));
+    learnPrice(item, patch);
   };
+
+  const rowPriceCue = (item: ListItem) =>
+    priceCue(productFor(item, catalog), layout.id, props.layouts, item.price);
 
   const onList = useMemo(
     () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
@@ -1232,6 +1257,7 @@ export function ShoppingView(props: Props) {
               showQty={showQty}
               showPrice={showPrice}
               showLocation={showLocation}
+              priceOf={showPrice ? rowPriceCue : undefined}
               onNotHere={(i) => markAvailable(i, false)}
               drag={building ? dragHandlers : undefined}
               dragging={drag?.item.id}
@@ -1265,6 +1291,7 @@ export function ShoppingView(props: Props) {
               showQty={showQty}
               showPrice={showPrice}
               showLocation={showLocation}
+              priceOf={showPrice ? rowPriceCue : undefined}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               pinned={pinned}
@@ -1296,6 +1323,7 @@ export function ShoppingView(props: Props) {
               showQty={showQty}
               showPrice={showPrice}
               showLocation={showLocation}
+              priceOf={showPrice ? rowPriceCue : undefined}
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               headingOf={showCatHeads ? catsOf : undefined}
@@ -1411,6 +1439,7 @@ export function ShoppingView(props: Props) {
               showQty={showQty}
               showPrice={showPrice}
               showLocation={showLocation}
+              priceOf={showPrice ? rowPriceCue : undefined}
             />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>
@@ -1901,6 +1930,7 @@ export function ShoppingView(props: Props) {
           onAmount={(patch) => {
             setItems((prev) => prev.map((i) => (i.id === menuFor.id ? { ...i, ...patch } : i)));
             setMenuFor({ ...menuFor, ...patch });
+            learnPrice(menuFor, patch);
           }}
           pinned={pinned.has(menuFor.id)}
           onPin={() => {

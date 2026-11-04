@@ -25,6 +25,7 @@ import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle, selectionIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
+import { listTotals, setStorePrice } from './core/prices';
 import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut';
 import { parseLabel, type LabelStyle } from './core/labels';
 import { doorQuestion } from './core/door';
@@ -35,7 +36,7 @@ import { productFor, resolveSpot } from './core/locate';
 import {
   applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
-import type { Clue, GeoPoint, Rect, SectionShape, ShelfReach } from './core/types';
+import type { Clue, GeoPoint, ItemUnit, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import {
   clearList, combineLists, copyItem, copyListName, defaultLists, duplicateList, itemsOn, listOf,
@@ -833,9 +834,27 @@ export default function App() {
   function deleteStore(): boolean {
     if (layouts.length <= 1) return false;
     if (!confirm(`Delete “${layout.name}”? This can’t be undone.`)) return false;
-    const rest = layouts.filter((l) => l.id !== layout.id);
+    const gone = layout.id;
+    const rest = layouts.filter((l) => l.id !== gone);
     setLayouts(() => rest);
     setActiveId(rest[0].id);
+    // Drop per-store product facts for the deleted layout.
+    setProducts((prev) => prev.map((p) => {
+      const locations = p.locations ? { ...p.locations } : undefined;
+      if (locations) delete locations[gone];
+      const clues = p.clues ? { ...p.clues } : undefined;
+      if (clues) delete clues[gone];
+      const prices = p.prices ? { ...p.prices } : undefined;
+      if (prices) delete prices[gone];
+      const notAt = p.notAt?.filter((id) => id !== gone);
+      return {
+        ...p,
+        locations: locations && Object.keys(locations).length ? locations : undefined,
+        clues: clues && Object.keys(clues).length ? clues : undefined,
+        prices: prices && Object.keys(prices).length ? prices : undefined,
+        notAt: notAt?.length ? notAt : undefined,
+      };
+    }));
     return true;
   }
 
@@ -953,6 +972,11 @@ export default function App() {
     }));
   }
 
+  /** Remembers a product's price at the current store (list-price learning). */
+  function setProductPrice(productId: string, amount: number, unit?: ItemUnit) {
+    setProducts((prev) => prev.map((p) => (p.id === productId ? setStorePrice(p, layout.id, amount, unit) : p)));
+  }
+
   /**
    * Marks a list item as (not) available at the current store, adding it to the
    * master list if it's new. Returns what to restore for Undo.
@@ -974,12 +998,13 @@ export default function App() {
     return snapshot;
   }
 
-  /** A copied store starts with the same item locations and "not sold here" settings. */
+  /** A copied store starts with the same item locations, prices and "not sold here" settings. */
   function copyItemLocations(fromId: string, toId: string) {
     setProducts((prev) => prev.map((p) => ({
       ...p,
       locations: p.locations?.[fromId] ? { ...p.locations, [toId]: p.locations[fromId] } : p.locations,
       clues: p.clues?.[fromId] ? { ...p.clues, [toId]: p.clues[fromId] } : p.clues,
+      prices: p.prices?.[fromId] ? { ...p.prices, [toId]: p.prices[fromId] } : p.prices,
       notAt: p.notAt?.includes(fromId) ? [...p.notAt, toId] : p.notAt,
     })));
   }
@@ -1257,6 +1282,7 @@ export default function App() {
           quickAddTo={quickAddTo}
           onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           layout={shownLayout}
+          layouts={layouts}
           floor={floor}
           catalog={catalog}
           items={items}
@@ -1291,6 +1317,7 @@ export default function App() {
           shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
           here={{ options: hereChoices, place: placeHere }}
           setProductLocation={setProductLocation}
+          setProductPrice={setProductPrice}
           setAvailable={setAvailable}
           position={position}
           setPosition={(point) => setPos({ layoutId: layout.id, point })}
@@ -1317,6 +1344,14 @@ export default function App() {
           }}
           onPatchListItem={(item, patch) => {
             setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
+            // Same list-price learning as Shop: remember the product price for this store.
+            if ('price' in patch && patch.price !== undefined) {
+              const product = productFor({ ...item, ...patch }, catalog);
+              if (product) setProductPrice(product.id, patch.price, patch.unit ?? item.unit);
+            } else if ('unit' in patch && item.price !== undefined) {
+              const product = productFor({ ...item, ...patch }, catalog);
+              if (product) setProductPrice(product.id, item.price, patch.unit);
+            }
           }}
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
@@ -1349,6 +1384,7 @@ export default function App() {
           activeId={layout.id}
           here={here}
           locating={locating}
+          listTotals={listTotals(items, catalog, layouts)}
           onPick={(id) => setActiveId(id)}
           onNew={newStoreHere}
           onSaveHere={saveStoreHere}

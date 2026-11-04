@@ -219,7 +219,7 @@ export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -257,6 +257,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   showPrice?: boolean;
   /** Show the where-it-is line under the name. */
   showLocation?: boolean;
+  /** Remembered / best-elsewhere price cue (shown after the list-line price). */
+  priceOf?: (item: ListItem) => string | undefined;
 }) {
   const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
     <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
@@ -265,12 +267,14 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   const meta = (item: ListItem) => {
     // Stepper owns the count; inline price owns the amount — meta keeps unit (and price when no inline control).
     const line = qtyUnitPriceText(item, { qty: !showQty, price: showPrice && !onPatch });
+    const price = priceOf?.(item);
     const note = item.note;
     const where = whereOf(item);
-    if (!line && !note && !where) return null;
+    if (!line && !price && !note && !where) return null;
     return (
       <span className="name-meta">
         {line && <span className="qty">{line}</span>}
+        {price && <span className="price-cue muted">{line ? ` · ${price}` : price}</span>}
         {note && <span className="item-note">{note}</span>}
         {where && <span className="sub">{where}</span>}
       </span>

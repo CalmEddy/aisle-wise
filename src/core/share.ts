@@ -2,7 +2,7 @@ import { Catalog, normalize } from './catalog';
 import { newCategoryId, OLD_NAMES, OLD_TO_NEW, seedItemNamed } from './recategorize';
 import { aislesToShelves } from './migrate';
 import { listOf, withListId } from './lists';
-import { MAIN_LIST, type Category, type ListItem, type Product, type StoreLayout, type Clue } from './types';
+import { MAIN_LIST, type Category, type ListItem, type Product, type StoreLayout, type Clue, type StorePrice } from './types';
 
 /**
  * Sharing without a server: everything needed is packed into the link
@@ -19,6 +19,8 @@ export interface SharedItem {
   /** Where it is in plain words ("aisle 7, left") in the shared store. */
   clue?: Clue;
   notAvailable?: true;
+  /** Latest known price at the shared store. */
+  price?: StorePrice;
   /** How many, and a note (list shares). */
   qty?: number;
   note?: string;
@@ -62,10 +64,18 @@ export function buildStoreShare(layout: StoreLayout, catalog: Catalog): StoreSha
   for (const p of catalog.products) {
     const at = p.locations?.[layout.id];
     const clue = p.clues?.[layout.id];
+    const price = p.prices?.[layout.id];
     const notAvailable = p.notAt?.includes(layout.id);
-    if (!at && !clue && !notAvailable) continue;
+    if (!at && !clue && !price && !notAvailable) continue;
     const category = p.categoryId ? catalog.categoryById.get(p.categoryId)?.name : undefined;
-    items.push({ name: p.name, ...(category && { category }), ...(at && { at }), ...(clue && { clue }), ...(notAvailable && { notAvailable: true as const }) });
+    items.push({
+      name: p.name,
+      ...(category && { category }),
+      ...(at && { at }),
+      ...(clue && { clue }),
+      ...(price && { price }),
+      ...(notAvailable && { notAvailable: true as const }),
+    });
   }
   const used = new Set(layout.places.flatMap((p) => p.categories));
   return { v: 1, kind: 'store', layout, categories: catalog.categories.filter((c) => used.has(c.id)), items };
@@ -216,15 +226,25 @@ export function applyStoreShare(share: StoreShare, data: Data, replaceId?: strin
     delete locations[replaceId];
     const clues = { ...p.clues };
     delete clues[replaceId];
-    return { ...p, locations, clues, notAt: p.notAt?.filter((id) => id !== replaceId) };
+    const prices = { ...p.prices };
+    delete prices[replaceId];
+    return { ...p, locations, clues, prices, notAt: p.notAt?.filter((id) => id !== replaceId) };
   });
   for (const shared of share.items) {
     const product = productForShared(shared, products, categories);
     const i = products.indexOf(product);
+    const sharedPrice = shared.price && Number.isFinite(shared.price.amount) && shared.price.amount >= 0
+      ? {
+          amount: Math.round(shared.price.amount * 100) / 100,
+          at: typeof shared.price.at === 'string' ? shared.price.at : new Date().toISOString(),
+          ...(shared.price.unit && shared.price.unit !== 'each' ? { unit: shared.price.unit } : {}),
+        }
+      : undefined;
     products[i] = {
       ...product,
       locations: shared.at ? { ...product.locations, [layoutId]: remapKey(shared.at) } : product.locations,
       clues: shared.clue ? { ...product.clues, [layoutId]: shared.clue } : product.clues,
+      prices: sharedPrice ? { ...product.prices, [layoutId]: sharedPrice } : product.prices,
       notAt: shared.notAvailable ? [...(product.notAt ?? []).filter((id) => id !== layoutId), layoutId] : product.notAt,
     };
   }
