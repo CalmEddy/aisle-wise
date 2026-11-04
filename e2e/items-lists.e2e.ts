@@ -83,3 +83,34 @@ test('Items tab: qty stepper and price toggle match Shop, prices are line totals
   expect(display.listPrice).toBe(true);
   ok();
 });
+
+test('Items tab: × and $ toggles work while browsing items not yet on the list', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page); // empty shopping list
+  await page.getByRole('tab', { name: 'Items' }).click();
+  await page.getByPlaceholder(/Search or add/).fill('Apples');
+
+  const qtyToggle = page.getByRole('button', { name: 'Quantity stepper' });
+  const priceToggle = page.getByRole('button', { name: 'Prices' });
+  await expect(qtyToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(priceToggle).toHaveAttribute('aria-pressed', 'false');
+
+  // × on: steppers show on catalog rows (not only on-list items).
+  const apples = page.locator('.item-entry').filter({ has: page.locator('.product-row .name', { hasText: /^Apples$/ }) }).first();
+  await expect(apples.getByRole('button', { name: 'One more Apples' })).toBeVisible();
+  await qtyToggle.click();
+  await expect(qtyToggle).toHaveAttribute('aria-pressed', 'false');
+  await expect(apples.getByRole('button', { name: 'One more Apples' })).toHaveCount(0);
+
+  // $ on: price control appears; setting a price adds the item to the list.
+  await priceToggle.click();
+  await expect(priceToggle).toHaveAttribute('aria-pressed', 'true');
+  await expect(apples.getByRole('button', { name: /Add unit price for Apples/ })).toBeVisible();
+  await apples.getByRole('button', { name: /Add unit price for Apples/ }).click();
+  await apples.getByLabel('Unit price for Apples').fill('1.29');
+  await apples.getByLabel('Unit price for Apples').press('Enter');
+  await expect(apples.getByRole('button', { name: /Apples is on/ })).toBeVisible();
+  const items = await saved<{ name: string; price?: number }[]>(page, 'items');
+  expect(items.find((i) => i.name === 'Apples')).toMatchObject({ price: 1.29 });
+  ok();
+});

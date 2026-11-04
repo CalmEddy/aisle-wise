@@ -1342,15 +1342,22 @@ export default function App() {
             const waiting = items.find((i) => !i.done && productFor(i, catalog)?.id === productId);
             return waiting ?? items.find((i) => productFor(i, catalog)?.id === productId);
           }}
-          onPatchListItem={(item, patch) => {
-            setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
-            // Same list-price learning as Shop: remember the product price for this store.
+          onPatchProduct={(product, patch) => {
+            // Add to the active list if needed, then apply qty/price (so Items × / $ work while browsing).
+            const existing = items.find((i) => !i.done && (i.productId === product.id || productFor(i, catalog)?.id === product.id));
+            setItems((prev) => {
+              const idx = prev.findIndex((i) => !i.done && (i.productId === product.id || productFor(i, catalog)?.id === product.id));
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...patch };
+                return next;
+              }
+              return [...prev, { id: newId(), name: product.name, done: false, productId: product.id, ...patch }];
+            });
             if ('price' in patch && patch.price !== undefined) {
-              const product = productFor({ ...item, ...patch }, catalog);
-              if (product) setProductPrice(product.id, patch.price, patch.unit ?? item.unit);
-            } else if ('unit' in patch && item.price !== undefined) {
-              const product = productFor({ ...item, ...patch }, catalog);
-              if (product) setProductPrice(product.id, item.price, patch.unit);
+              setProductPrice(product.id, patch.price, patch.unit ?? existing?.unit);
+            } else if ('unit' in patch && existing?.price !== undefined) {
+              setProductPrice(product.id, existing.price, patch.unit);
             }
           }}
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
