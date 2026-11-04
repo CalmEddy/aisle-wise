@@ -48,13 +48,15 @@ test('inline qty and rename work without opening the menu', async ({ page }) => 
 
 test('the item menu sets unit, price and note, and pins it on the map', async ({ page }) => {
   await addItems(page, 'milk');
+  await page.getByRole('button', { name: 'Prices' }).click();
   await row(page, 'Milk').getByRole('button', { name: /More options/ }).click();
-  await page.getByLabel('Unit for Milk').selectOption('box');
-  await page.getByLabel('Price for Milk').fill('3.49');
-  await page.getByLabel('Note for Milk').fill('skim');
-  await page.getByRole('button', { name: '◎ Show on the map' }).click();
+  const menu = page.getByRole('dialog', { name: /Options for Milk/ });
+  await menu.getByLabel('Unit for Milk').selectOption('box');
+  await menu.getByLabel('Price for Milk').fill('3.49');
+  await menu.getByLabel('Note for Milk').fill('skim');
+  await menu.getByRole('button', { name: '◎ Show on the map' }).click();
   await expect(row(page, 'Milk')).toContainText(/box/i);
-  await expect(row(page, 'Milk')).toContainText(/\$3\.49/);
+  await expect(row(page, 'Milk').getByRole('button', { name: /Line total for Milk: \$3\.49/ })).toBeVisible();
   await expect(row(page, 'Milk')).toContainText('skim');
   await expect(page.locator('.map-pin')).toHaveCount(1);
   const items = await saved<{ unit?: string; price?: number; note?: string; productId?: string }[]>(page, 'items');

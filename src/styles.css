@@ -814,12 +814,16 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .row-inner { display: flex; align-items: center; gap: 4px; min-height: 48px; min-width: 0; }
 .row-inner > label { flex: 1 1 0; min-width: 0; overflow: hidden; gap: 8px; }
 .row-inner > .qty-stepper,
+.row-inner > .inline-price,
+.row-inner > .inline-price-input,
 .row-inner > .icon,
 .row-inner > .pinned-dot { flex: none; }
 /* Compact stepper so the name keeps room on phone-width lists. */
 .row-inner .qty-stepper.inline .icon { width: 1.55rem; height: 1.55rem; font-size: 0.9rem; }
 .row-inner .qty-stepper.inline .qty-stepper-value { min-width: 0.9rem; font-size: 0.85rem; padding: 0 1px; }
 .row-inner > .icon { width: 2rem; height: 2rem; font-size: 1.2rem; }
+.row-inner .inline-price,
+.row-inner .inline-price-input { font-size: 0.8rem; padding: 4px 6px; min-width: 2.75rem; }
 .pinned-dot { font-size: 0.9rem; flex: none; }
 .route-list .spot-detail { margin: 6px 0 0 6px; position: relative; z-index: 1; }
 .route-list .spot.tinted { padding-top: 2px; }
@@ -890,6 +894,23 @@ main { padding-bottom: 110px; }
 .qty-stepper.inline { flex: none; border-radius: 10px; }
 .qty-stepper.inline .icon { width: 2rem; height: 2rem; font-size: 1rem; }
 .qty-stepper.inline .qty-stepper-value { min-width: 1.25rem; font-size: 0.9rem; }
+.inline-price {
+  flex: none; min-width: 3.25rem; padding: 6px 8px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface); color: var(--accent);
+  font: inherit; font-weight: 700; font-size: 0.85rem; line-height: 1; text-align: center;
+}
+.inline-price.empty { color: var(--muted); font-weight: 600; }
+.inline-price-input {
+  flex: none; width: 4.5rem; min-width: 0; padding: 6px 8px; border-radius: 10px;
+  border: 1px solid var(--accent); background: var(--surface); color: var(--text);
+  font: inherit; font-size: 0.85rem; text-align: center; box-sizing: border-box;
+}
+/* Items catalog: same stepper / price chrome beside the add control. */
+.item-entry .row > .qty-stepper.inline { margin-left: 2px; }
+.item-entry .row > .qty-stepper.inline .icon { width: 1.55rem; height: 1.55rem; font-size: 0.9rem; }
+.item-entry .row > .qty-stepper.inline .qty-stepper-value { min-width: 0.9rem; font-size: 0.85rem; padding: 0 1px; }
+.item-entry .row > .inline-price,
+.item-entry .row > .inline-price-input { font-size: 0.8rem; padding: 4px 6px; min-width: 2.75rem; }
 .amount-row { display: flex; gap: 0.5rem; align-items: flex-end; margin: 0.25rem 0 0.75rem; flex-wrap: wrap; }
 .qty-stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; }
 .qty-stepper .icon { width: 2.5rem; height: 2.5rem; font-size: 1.2rem; }

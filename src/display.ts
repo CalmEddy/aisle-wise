@@ -35,6 +35,11 @@ export interface Display {
   itemsGroupByCategory?: boolean;
   /** Show the −/＋ quantity stepper on shopping rows (default on). */
   listQty?: boolean;
+  /**
+   * Show prices on shopping / on-list rows (default off).
+   * When on, displayed amounts are line totals (unit price × quantity).
+   */
+  listPrice?: boolean;
   /** Show where-it-is under each item name (aisle / place line; default on). */
   listLocation?: boolean;
   /** Build the store map from where you pick things up. */

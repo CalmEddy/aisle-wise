@@ -1338,6 +1338,21 @@ export default function App() {
           setLayouts={setLayouts}
           onAddToList={addToList}
           onList={onList}
+          listItemOf={(productId) => {
+            const waiting = items.find((i) => !i.done && productFor(i, catalog)?.id === productId);
+            return waiting ?? items.find((i) => productFor(i, catalog)?.id === productId);
+          }}
+          onPatchListItem={(item, patch) => {
+            setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, ...patch } : i)));
+            // Same list-price learning as Shop: remember the product price for this store.
+            if ('price' in patch && patch.price !== undefined) {
+              const product = productFor({ ...item, ...patch }, catalog);
+              if (product) setProductPrice(product.id, patch.price, patch.unit ?? item.unit);
+            } else if ('unit' in patch && item.price !== undefined) {
+              const product = productFor({ ...item, ...patch }, catalog);
+              if (product) setProductPrice(product.id, item.price, patch.unit);
+            }
+          }}
           listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           snapshot={snapshotNow}
           undo={undo}

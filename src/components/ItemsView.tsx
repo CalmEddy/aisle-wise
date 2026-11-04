@@ -8,7 +8,7 @@ import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import { addCategory, productCategoryIds, removeCategory, withCategories } from '../core/productCategories';
 import { bestPrice, clearStorePrice, priceAt, priceCue, setStorePrice } from '../core/prices';
-import type { Category, Product, StoreLayout } from '../core/types';
+import type { Category, ListItem, Product, StoreLayout } from '../core/types';
 import { resolveItemsGroupByCategory, resolveItemsSort, type Display } from '../display';
 import { autoWhereText, whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
@@ -16,6 +16,7 @@ import { CategoryPicker } from './CategoryPicker';
 import { DisplayToggles, ItemsSortToggle } from './DisplayToggles';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { AddItemsSheet } from './AddItemsSheet';
+import { InlinePrice, QtyStepper, type ItemPatch } from './ItemRows';
 import { SwipeRow } from './SwipeRow';
 import { WherePanel } from './WherePanel';
 import { aislesUsed, describeClue } from '../core/clues';
@@ -31,6 +32,10 @@ interface Props {
   onAddToList: (product: Product) => void;
   /** Ids of products already on the active shopping list. */
   onList: Set<string>;
+  /** Active-list rows keyed by product id (unchecked first). */
+  listItemOf: (productId: string) => ListItem | undefined;
+  /** Patch qty / price / unit / note on an active-list row. */
+  onPatchListItem: (item: ListItem, patch: ItemPatch) => void;
   /** Name of the list being stocked (where adds go). */
   listName: string;
   /** What Undo would put back right now, and putting it back. */
@@ -126,8 +131,8 @@ interface ItemsToast {
 }
 
 function ProductList({
-  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, snapshot, undo, listName,
-  display, setDisplay,
+  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, listItemOf, onPatchListItem,
+  snapshot, undo, listName, display, setDisplay,
 }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ItemFilter>('all');
@@ -159,6 +164,8 @@ function ProductList({
 
   const itemsSort = resolveItemsSort(display);
   const groupByCategory = resolveItemsGroupByCategory(display);
+  const showQty = display.listQty ?? true;
+  const showPrice = display.listPrice ?? false;
 
   const q = query.trim();
   const searching = q.length > 0 && !q.includes(',');
@@ -326,11 +333,13 @@ function ProductList({
   const row = (p: Product, keyPrefix = '') => {
     const key = keyPrefix + p.id;
     const open = openKey === key;
+    const listed = onList.has(p.id);
+    const listItem = listed ? listItemOf(p.id) : undefined;
     return (
     <li key={key} id={`item-${key}`} className={`item-entry${open ? ' open' : ''}${selecting && selected.has(p.id) ? ' chosen' : ''}`}>
       <SwipeRow
         disabled={selecting || open}
-        onSwipeRight={onList.has(p.id) ? undefined : () => addManyToList([p])}
+        onSwipeRight={listed ? undefined : () => addManyToList([p])}
         rightLabel={<>＋ Add to “{listName}”</>}
         leftActions={(close) => (
           <>
@@ -348,16 +357,22 @@ function ProductList({
         <button className="product-row" onClick={() => (selecting ? toggleSelect(p.id) : setOpenKey(open ? undefined : key))} aria-expanded={selecting ? undefined : open}>
           <span className="name">{keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}{p.name}</span>
           <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>
-            {[whereText(p, layout, catalog), priceCue(p, layout.id, layouts)].filter(Boolean).join(' · ')}
+            {[whereText(p, layout, catalog), showPrice ? priceCue(p, layout.id, layouts, listItem?.price) : undefined].filter(Boolean).join(' · ')}
           </span>
         </button>
+        {listItem && showQty && (
+          <QtyStepper item={listItem} onPatch={(patch) => onPatchListItem(listItem, patch)} />
+        )}
+        {listItem && showPrice && (
+          <InlinePrice item={listItem} onPatch={(patch) => onPatchListItem(listItem, patch)} />
+        )}
         <button
           className="icon add-icon"
           onClick={() => addManyToList([p])}
-          disabled={onList.has(p.id)}
-          aria-label={onList.has(p.id) ? `${p.name} is on “${listName}”` : `Add ${p.name} to “${listName}”`}
+          disabled={listed}
+          aria-label={listed ? `${p.name} is on “${listName}”` : `Add ${p.name} to “${listName}”`}
         >
-          {onList.has(p.id) ? '✓' : '+'}
+          {listed ? '✓' : '+'}
         </button>
       </div>
       </SwipeRow>
@@ -406,8 +421,8 @@ function ProductList({
         <DisplayToggles
           display={display}
           setDisplay={setDisplay}
-          show={['itemsGroupByCategory']}
-          offByDefault={['buildMode', 'buildArea', 'buildDouble']}
+          show={['itemsGroupByCategory', 'listQty', 'listPrice']}
+          offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
           lead={<ItemsSortToggle display={display} setDisplay={setDisplay} />}
         />
         <div className="chips filters" role="group" aria-label="Show">

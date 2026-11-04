@@ -95,15 +95,28 @@ export function formatPrice(price?: number): string | undefined {
 }
 
 /**
- * Qty, unit and price for a row ("×2 box · $3.49").
+ * Qty, unit and price for a row ("×2 box · $6.98").
  * Qty of 1 is omitted unless a non-each unit or price is set.
+ * Viewed prices are line totals (unit price × quantity) unless `lineTotal: false`.
  */
 export function qtyUnitPriceText(
   item: Pick<ListItem, 'qty' | 'unit' | 'price'>,
-  opts?: { /** Include ×N (default true). Off when a qty stepper is already shown. */ qty?: boolean },
+  opts?: {
+    /** Include ×N (default true). Off when a qty stepper is already shown. */
+    qty?: boolean;
+    /** Include price (default true). Off when the prices display toggle is off. */
+    price?: boolean;
+    /** Multiply unit price by qty for the displayed amount (default true). */
+    lineTotal?: boolean;
+  },
 ): string {
   const u = unitLabel(item.unit);
-  const p = formatPrice(item.price);
+  const includePrice = opts?.price !== false;
+  const qty = item.qty && item.qty > 1 ? item.qty : 1;
+  const amount = includePrice && item.price !== undefined
+    ? (opts?.lineTotal === false ? item.price : item.price * qty)
+    : undefined;
+  const p = formatPrice(amount);
   const includeQty = opts?.qty !== false;
   const needQty = includeQty && ((item.qty && item.qty > 1) || !!u || p !== undefined);
   const qtyBit = needQty ? `×${item.qty && item.qty > 1 ? item.qty : 1}${u ? ` ${u}` : ''}` : (!includeQty && u ? u : '');

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ItemUnit, ListItem, Stop } from '../core/types';
-import { qtyUnitPriceText } from '../core/items';
+import { formatPrice, parsePrice, qtyUnitPriceText } from '../core/items';
 import { SwipeRow } from './SwipeRow';
 import { capitalize } from './whereText';
 
@@ -140,7 +140,8 @@ function InlineName({ item, onRename }: { item: ListItem; onRename: (name: strin
   );
 }
 
-function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPatch) => void }) {
+/** −/＋ quantity control shared by Shop rows and the Items catalog. */
+export function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPatch) => void }) {
   const qty = item.qty ?? 1;
   return (
     <div className="qty-stepper inline" role="group" aria-label={`How many ${item.name}`}>
@@ -166,7 +167,59 @@ function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPa
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showLocation = true, priceOf }: {
+/**
+ * Compact price control: shows the line total (unit × qty), edits the unit price.
+ * Used on Shop and Items when the prices display toggle is on.
+ */
+export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPatch) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(item.price !== undefined ? String(item.price) : '');
+  const ref = useRef<HTMLInputElement>(null);
+  const qty = item.qty && item.qty > 1 ? item.qty : 1;
+  const line = item.price !== undefined ? item.price * qty : undefined;
+  useEffect(() => {
+    if (!editing) setText(item.price !== undefined ? String(item.price) : '');
+  }, [item.price, editing]);
+  useEffect(() => { if (editing) ref.current?.select(); }, [editing]);
+  const commit = () => {
+    const next = parsePrice(text);
+    setEditing(false);
+    if (next !== item.price) onPatch({ price: next });
+    setText(next !== undefined ? String(next) : '');
+  };
+  if (editing) {
+    return (
+      <input
+        ref={ref}
+        className="inline-price-input"
+        inputMode="decimal"
+        value={text}
+        aria-label={`Unit price for ${item.name}`}
+        placeholder="$0.00"
+        onChange={(e) => setText(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') { setText(item.price !== undefined ? String(item.price) : ''); setEditing(false); }
+        }}
+        onClick={(e) => e.stopPropagation()}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={`inline-price${line === undefined ? ' empty' : ''}`}
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditing(true); }}
+      aria-label={line !== undefined ? `Line total for ${item.name}: ${formatPrice(line)}. Tap to edit unit price.` : `Add unit price for ${item.name}`}
+      title={item.price !== undefined && qty > 1 ? `${qty} × ${formatPrice(item.price)}` : 'Set price'}
+    >
+      {line !== undefined ? formatPrice(line) : '$'}
+    </button>
+  );
+}
+
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -200,6 +253,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   onPatch?: (item: ListItem, patch: ItemPatch) => void;
   /** Show the −/＋ quantity stepper (and hide ×N from the meta line while it is). */
   showQty?: boolean;
+  /** Show prices (line totals) and the inline price control. */
+  showPrice?: boolean;
   /** Show the where-it-is line under the name. */
   showLocation?: boolean;
   /** Remembered / best-elsewhere price cue (shown after the list-line price). */
@@ -210,8 +265,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   );
   const whereOf = (item: ListItem) => (showLocation ? subOf?.(item) : undefined);
   const meta = (item: ListItem) => {
-    // When the stepper is visible it owns the count; meta keeps unit/price only.
-    const line = qtyUnitPriceText(item, { qty: !showQty });
+    // Stepper owns the count; inline price owns the amount — meta keeps unit (and price when no inline control).
+    const line = qtyUnitPriceText(item, { qty: !showQty, price: showPrice && !onPatch });
     const price = priceOf?.(item);
     const note = item.note;
     const where = whereOf(item);
@@ -266,6 +321,7 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                   </span>
                 </label>
                 {onPatch && !item.done && showQty && <QtyStepper item={item} onPatch={(patch) => onPatch(item, patch)} />}
+                {onPatch && !item.done && showPrice && <InlinePrice item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
                 {clearBtn(item)}
                 {onMenu
@@ -283,7 +339,10 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
             <span className="name">
               <span className="name-text">{item.name}</span>
               {showQty && item.qty && item.qty > 1 && <span className="qty"> ×{item.qty}</span>}
-              {!showQty && qtyUnitPriceText(item) && <span className="qty"> {qtyUnitPriceText(item)}</span>}
+              {!showQty && qtyUnitPriceText(item, { price: showPrice }) && <span className="qty"> {qtyUnitPriceText(item, { price: showPrice })}</span>}
+              {showQty && showPrice && !onPatch && qtyUnitPriceText(item, { qty: false, price: true }) && (
+                <span className="qty"> {qtyUnitPriceText(item, { qty: false, price: true })}</span>
+              )}
               {item.note && <span className="item-note">{item.note}</span>}
               {whereOf(item) && <span className="sub">{whereOf(item)}</span>}
             </span>
