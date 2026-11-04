@@ -75,7 +75,10 @@ describe('amounts and notes', () => {
     expect(parsePrice('$3.49')).toBe(3.49);
     expect(parsePrice('')).toBeUndefined();
     expect(qtyUnitPriceText({ qty: 2, unit: 'box', price: 3.49 })).toMatch(/×2 box/);
-    expect(qtyUnitPriceText({ qty: 2, unit: 'box', price: 3.49 })).toMatch(/\$3\.49/);
+    // Viewed price is the line total (unit × qty).
+    expect(qtyUnitPriceText({ qty: 2, unit: 'box', price: 3.49 })).toMatch(/\$6\.98/);
+    expect(qtyUnitPriceText({ qty: 2, unit: 'box', price: 3.49 }, { lineTotal: false })).toMatch(/\$3\.49/);
+    expect(qtyUnitPriceText({ qty: 2, price: 3.49 }, { price: false })).toBe('×2');
     expect(qtyUnitPriceText({})).toBe('');
     expect(qtyUnitPriceText({ unit: 'bag', price: 1 })).toMatch(/×1 bag/);
   });

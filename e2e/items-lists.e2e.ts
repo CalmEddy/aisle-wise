@@ -49,3 +49,37 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
   expect(display.itemsGroupByCategory).toBe(false);
   ok();
 });
+
+test('Items tab: qty stepper and price toggle match Shop, prices are line totals', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, {
+    items: [{ id: 'm1', name: 'Milk', done: false, productId: 'p-milk' }],
+  });
+
+  await page.getByRole('tab', { name: 'Items' }).click();
+  await page.getByPlaceholder(/Search or add/).fill('Milk');
+  const milk = page.locator('.item-entry').filter({ has: page.getByRole('button', { name: /Milk is on/ }) }).first();
+
+  // Qty stepper is on by default (same × toggle as Shop).
+  await expect(page.getByRole('button', { name: 'Quantity stepper' })).toHaveAttribute('aria-pressed', 'true');
+  await milk.getByRole('button', { name: 'One more Milk' }).click();
+  await expect(milk.locator('.qty-stepper-value')).toHaveText('2');
+
+  // Prices start off; turning $ on reveals an inline price control.
+  const prices = page.getByRole('button', { name: 'Prices' });
+  await expect(prices).toHaveAttribute('aria-pressed', 'false');
+  await expect(milk.getByRole('button', { name: /Add unit price for Milk/ })).toHaveCount(0);
+  await prices.click();
+  await expect(prices).toHaveAttribute('aria-pressed', 'true');
+  await milk.getByRole('button', { name: /Add unit price for Milk/ }).click();
+  await milk.getByLabel('Unit price for Milk').fill('3.49');
+  await milk.getByLabel('Unit price for Milk').press('Enter');
+  // Viewed amount is qty × unit price.
+  await expect(milk.getByRole('button', { name: /Line total for Milk: \$6\.98/ })).toBeVisible();
+
+  const items = await saved<{ name: string; qty?: number; price?: number }[]>(page, 'items');
+  expect(items.find((i) => i.name === 'Milk')).toMatchObject({ qty: 2, price: 3.49 });
+  const display = await saved<{ listPrice?: boolean; listQty?: boolean }>(page, 'display');
+  expect(display.listPrice).toBe(true);
+  ok();
+});
