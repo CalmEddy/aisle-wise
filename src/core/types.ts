@@ -257,6 +257,16 @@ export interface Category {
   order?: number;
 }
 
+/** Latest known price for one unit of a product at a store. */
+export interface StorePrice {
+  /** Currency amount (two decimal places). */
+  amount: number;
+  /** Pack unit this amount is for (missing means each / single). */
+  unit?: ItemUnit;
+  /** ISO timestamp of the last observation. */
+  at: string;
+}
+
 /** An item in the master grocery list. */
 export interface Product {
   id: string;
@@ -278,6 +288,8 @@ export interface Product {
   locations?: Record<string, string>;
   /** Layout ids of stores that don't sell this item. */
   notAt?: string[];
+  /** Layout id → latest known price at that store. */
+  prices?: Record<string, StorePrice>;
   /**
    * Layout id → where the shopper said it was, in plain store terms ("aisle 7,
    * left, middle", "Produce"). Independent of the map, so maps can be

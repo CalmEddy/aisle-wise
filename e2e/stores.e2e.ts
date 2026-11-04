@@ -28,6 +28,35 @@ test('a new store where you stand is picked again when you come back', async ({ 
   await expect(page.locator('.store-pick')).toContainText('Demo Market');
 });
 
+test('store picker shows list price totals and marks the cheapest store', async ({ page }) => {
+  await fresh(page);
+  // Second store so comparison has somewhere else to go.
+  await page.getByRole('button', { name: /Change store/ }).click();
+  await page.getByLabel('New store name').fill('Aldi');
+  await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('radio', { name: /Blank/ }).click();
+  await page.getByRole('button', { name: 'Create store' }).click();
+  await expect(page.locator('.store-pick')).toContainText('Aldi');
+
+  // Remember Milk cheaper at Demo than Aldi.
+  const products = await saved<any[]>(page, 'products');
+  const layouts = await saved<any[]>(page, 'layouts');
+  const demoId = layouts.find((l) => l.name === 'Demo Market')!.id;
+  const aldiId = layouts.find((l) => l.name === 'Aldi')!.id;
+  const next = products.map((p) => (p.name === 'Milk'
+    ? { ...p, prices: { [demoId]: { amount: 2.5, at: '2026-01-01T00:00:00.000Z' }, [aldiId]: { amount: 3.5, at: '2026-01-01T00:00:00.000Z' } } }
+    : p));
+  await page.evaluate((ps) => localStorage.setItem('aw.products', JSON.stringify(ps)), next);
+  await page.reload();
+  await addItems(page, 'Milk');
+  await page.getByRole('button', { name: /Change store/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Stores' });
+  await expect(sheet).toContainText(/List totals use remembered prices/);
+  await expect(sheet.locator('.store-row-btn', { hasText: 'Demo Market' })).toContainText(/best price/);
+  await expect(sheet.locator('.store-row-btn', { hasText: 'Demo Market' })).toContainText(/\$2\.50/);
+  await expect(sheet.locator('.store-row-btn', { hasText: 'Aldi' })).toContainText(/\$3\.50/);
+});
+
 test('a new store starts from a default map: pick the kind, see a preview, set the aisles', async ({ page }) => {
   await fresh(page);
   await page.getByRole('button', { name: /Change store/ }).click();

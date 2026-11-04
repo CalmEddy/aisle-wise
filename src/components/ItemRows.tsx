@@ -166,7 +166,7 @@ function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch: ItemPa
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showLocation = true }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -202,6 +202,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   showQty?: boolean;
   /** Show the where-it-is line under the name. */
   showLocation?: boolean;
+  /** Remembered / best-elsewhere price cue (shown after the list-line price). */
+  priceOf?: (item: ListItem) => string | undefined;
 }) {
   const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
     <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
@@ -210,12 +212,14 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   const meta = (item: ListItem) => {
     // When the stepper is visible it owns the count; meta keeps unit/price only.
     const line = qtyUnitPriceText(item, { qty: !showQty });
+    const price = priceOf?.(item);
     const note = item.note;
     const where = whereOf(item);
-    if (!line && !note && !where) return null;
+    if (!line && !price && !note && !where) return null;
     return (
       <span className="name-meta">
         {line && <span className="qty">{line}</span>}
+        {price && <span className="price-cue muted">{line ? ` · ${price}` : price}</span>}
         {note && <span className="item-note">{note}</span>}
         {where && <span className="sub">{where}</span>}
       </span>

@@ -77,6 +77,23 @@ describe('sharing a store', () => {
     expect(result.products.find((p) => p.name === 'Bread')!.clues?.[result.layoutId]).toEqual({ kind: 'aisle', aisle: '7', side: 'L' });
   });
 
+  it('carries store prices with the store', () => {
+    const priced = defaultProducts.map((p) => (p.name === 'Milk'
+      ? { ...p, prices: { demo: { amount: 3.49, at: '2026-01-01T00:00:00.000Z' } } }
+      : p));
+    const s2 = buildStoreShare(demoLayout, new Catalog(priced, defaultCategories));
+    expect(s2.items).toContainEqual({
+      name: 'Milk',
+      category: 'Milk',
+      price: { amount: 3.49, at: '2026-01-01T00:00:00.000Z' },
+    });
+    const result = applyStoreShare(s2, fresh());
+    expect(result.products.find((p) => p.name === 'Milk')!.prices?.[result.layoutId]).toEqual({
+      amount: 3.49,
+      at: '2026-01-01T00:00:00.000Z',
+    });
+  });
+
   it('maps categories by name when ids differ, creating missing ones', () => {
     const renamed = { ...share, categories: share.categories.map((c) => ({ ...c, id: `their-${c.id}` })) };
     renamed.layout = { ...share.layout, places: share.layout.places.map((p) => ({ ...p, categories: p.categories.map((c) => `their-${c}`) })) };

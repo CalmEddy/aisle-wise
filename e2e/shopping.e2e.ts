@@ -57,8 +57,14 @@ test('the item menu sets unit, price and note, and pins it on the map', async ({
   await expect(row(page, 'Milk')).toContainText(/\$3\.49/);
   await expect(row(page, 'Milk')).toContainText('skim');
   await expect(page.locator('.map-pin')).toHaveCount(1);
-  const items = await saved<{ unit?: string; price?: number; note?: string }[]>(page, 'items');
+  const items = await saved<{ unit?: string; price?: number; note?: string; productId?: string }[]>(page, 'items');
   expect(items[0]).toMatchObject({ unit: 'box', price: 3.49, note: 'skim' });
+  // List price is remembered on the product for the active store.
+  const products = await saved<{ id: string; name: string; prices?: Record<string, { amount: number; unit?: string }> }[]>(page, 'products');
+  const milk = products.find((p) => p.id === items[0].productId) ?? products.find((p) => p.name === 'Milk');
+  expect(milk?.prices).toBeTruthy();
+  const storePrice = Object.values(milk!.prices!)[0];
+  expect(storePrice).toMatchObject({ amount: 3.49, unit: 'box' });
 });
 
 test('list sort cycles through nearest, category and A–Z', async ({ page }) => {

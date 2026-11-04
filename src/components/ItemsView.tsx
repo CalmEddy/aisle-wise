@@ -1,12 +1,13 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { inWalkingOrder, orderOf } from '../core/taxonomy';
 import type { QuickAddResult, Snapshot } from '../App';
-import { itemMatches, quickAddItems, type ItemFilter } from '../core/items';
+import { formatPrice, itemMatches, parsePrice, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
 import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
 import { parseExactKey } from '../core/geometry';
 import { locateProduct, resolveSpot } from '../core/locate';
 import { addCategory, productCategoryIds, removeCategory, withCategories } from '../core/productCategories';
+import { bestPrice, clearStorePrice, priceAt, priceCue, setStorePrice } from '../core/prices';
 import type { Category, Product, StoreLayout } from '../core/types';
 import { resolveItemsGroupByCategory, resolveItemsSort, type Display } from '../display';
 import { autoWhereText, whereText } from './whereText';
@@ -346,7 +347,9 @@ function ProductList({
         )}
         <button className="product-row" onClick={() => (selecting ? toggleSelect(p.id) : setOpenKey(open ? undefined : key))} aria-expanded={selecting ? undefined : open}>
           <span className="name">{keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}{p.name}</span>
-          <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>{whereText(p, layout, catalog)}</span>
+          <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>
+            {[whereText(p, layout, catalog), priceCue(p, layout.id, layouts)].filter(Boolean).join(' · ')}
+          </span>
         </button>
         <button
           className="icon add-icon"
@@ -807,6 +810,45 @@ function CategoriesEditor({ product, catalog, iconOf, onChange }: {
   );
 }
 
+/** Per-store price input for the item editor. */
+function StorePriceRow({ product, layout, layouts, onSave, onClear }: {
+  product: Product;
+  layout: StoreLayout;
+  layouts: StoreLayout[];
+  onSave: (raw: string) => void;
+  onClear: () => void;
+}) {
+  const known = priceAt(product, layout.id);
+  const [text, setText] = useState(known ? String(known.amount) : '');
+  useEffect(() => {
+    setText(known ? String(known.amount) : '');
+  }, [product.id, layout.id, known?.amount]);
+  const best = bestPrice(product, layouts, { preferUnit: known?.unit });
+  const elsewhere = best && best.layoutId !== layout.id
+    ? `Best: ${layouts.find((l) => l.id === best.layoutId)?.name ?? 'elsewhere'} ${formatPrice(best.amount)}`
+    : undefined;
+  return (
+    <div className="price-row store-price-row">
+      <label className="price-field">
+        <span className="muted small">Price at {layout.name}</span>
+        <input
+          className="price-input"
+          inputMode="decimal"
+          placeholder="0.00"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={() => onSave(text)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSave(text); (e.target as HTMLInputElement).blur(); } }}
+          aria-label={`Price for ${product.name} at ${layout.name}`}
+        />
+      </label>
+      {known && <span className="muted small price-preview">{formatPrice(known.amount)}</span>}
+      {known && <button type="button" className="link" onClick={() => { setText(''); onClear(); }}>Clear</button>}
+      {elsewhere && <span className="muted small price-cue">{elsewhere}</span>}
+    </div>
+  );
+}
+
 /**
  * An item opened in place: every change saves straight away (with Undo).
  * Name, category, and for each store whether it's sold there and where.
@@ -841,6 +883,18 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
     const notAt = (p.notAt ?? []).filter((id) => id !== l.id);
     return { ...p, notAt: sold ? notAt : [...notAt, l.id] };
   }, sold ? `${product.name} is sold at ${l.name}.` : `${product.name} marked not sold at ${l.name}.`);
+
+  const savePrice = (l: StoreLayout, raw: string) => {
+    const next = parsePrice(raw);
+    const cur = priceAt(product, l.id)?.amount;
+    if (next === undefined) {
+      if (cur === undefined) return;
+      onChange((p) => clearStorePrice(p, l.id), `${product.name}: price cleared at ${l.name}.`);
+      return;
+    }
+    if (next === cur) return;
+    onChange((p) => setStorePrice(p, l.id, next), `${product.name}: ${formatPrice(next)} at ${l.name}.`);
+  };
 
   const setLocation = (l: StoreLayout, key: string) => onChange((p) => {
     const locations = { ...p.locations };
@@ -955,10 +1009,23 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
             )}
           </div>
         )}
+        {sold && (
+          <StorePriceRow
+            product={product}
+            layout={l}
+            layouts={layouts}
+            onSave={(raw) => savePrice(l, raw)}
+            onClear={() => {
+              if (priceAt(product, l.id) === undefined) return;
+              onChange((p) => clearStorePrice(p, l.id), `${product.name}: price cleared at ${l.name}.`);
+            }}
+          />
+        )}
       </div>
     );
   };
   const others = layouts.filter((l) => l.id !== layout.id);
+  const best = bestPrice(product, layouts);
 
   return (
     <div className="item-editor">
@@ -974,6 +1041,11 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
         iconOf={iconOf}
         onChange={onChange}
       />
+      {best && (
+        <p className="muted small best-price-hint">
+          Best known: {formatPrice(best.amount)} at {layouts.find((l) => l.id === best.layoutId)?.name ?? 'a store'}
+        </p>
+      )}
       {storeRow(layout)}
       {others.length > 0 && (
         <details className="other-stores">

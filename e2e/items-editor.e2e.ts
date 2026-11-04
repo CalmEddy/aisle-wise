@@ -33,6 +33,23 @@ test('item editor: switch subcategory quickly and add a second category', async 
   ok();
 });
 
+test('item editor: set and clear a per-store price', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page);
+  await openPeanutButter(page);
+  const price = page.getByLabel(/Price for Peanut butter at/);
+  await price.fill('4.29');
+  await price.blur();
+  await expect(page.locator('.item-editor')).toContainText(/\$4\.29/);
+  let products = await saved<{ name: string; prices?: Record<string, { amount: number }> }[]>(page, 'products');
+  const pb = products.find((p) => p.name === 'Peanut butter')!;
+  expect(Object.values(pb.prices ?? {})[0]?.amount).toBe(4.29);
+  await page.locator('.store-price-row').getByRole('button', { name: 'Clear' }).click();
+  products = await saved(page, 'products');
+  expect(products.find((p) => p.name === 'Peanut butter')?.prices).toBeFalsy();
+  ok();
+});
+
 test('item editor: Clear returns Automatic location to Unknown', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page);
