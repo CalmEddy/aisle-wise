@@ -63,6 +63,14 @@ interface Props {
   /** The lists sheet (opened from the list picker in the header). */
   listsOpen: boolean;
   onListsClose: () => void;
+  /** Full undo snapshot (every list's items). */
+  listSnapshot: () => Snapshot;
+  /** Multi-list trip overlay (active + Also-shop lists). */
+  trip?: {
+    ids: string[];
+    sourcesOf: (item: ListItem) => string[];
+    dismissOverlay: (listId: string) => void;
+  };
   /** Move / copy a single item onto another list. */
   moveItemTo: (itemId: string, toList: string) => { snapshot: Snapshot; moved: boolean; skipped: boolean };
   copyItemTo: (itemId: string, toList: string) => { snapshot: Snapshot; copied: boolean; skipped: boolean };
@@ -863,12 +871,13 @@ export function ShoppingView(props: Props) {
     }
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
     props.where.notePick(item, !item.done);
-    // Picking something up tells us where the shopper is standing.
-    const loc = locate(item);
-    if (!item.done && loc.kind === 'spot') setPosition(loc.spot.point);
     // Nothing saved about where it is in this store yet: ask (when the map already has its kind somewhere,
     // that's the first, one-tap answer).
     const ask = needsPlace(item);
+    // Only advance the pin to the item when we're not about to ask "Where was it?".
+    // Jumping first made "Where I'm standing" save at the item's old/inferred place.
+    const loc = locate(item);
+    if (!item.done && !ask && loc.kind === 'spot') setPosition(loc.spot.point);
     if (!item.done && props.where.ask && ask && askAtCheckout) {
       setLaterHere((ids) => [...ids.filter((id) => id !== item.id), item.id]);
     } else if (!item.done && props.where.ask && ask) {
@@ -1082,14 +1091,14 @@ export function ShoppingView(props: Props) {
   /** Takes items off the list, with Undo. */
   function removeWithUndo(gone: ListItem[]) {
     if (!gone.length) return;
-    const snapshot = { items, products: catalog.products };
+    const snapshot = props.listSnapshot();
     const ids = new Set(gone.map((i) => i.id));
     setItems((prev) => prev.filter((i) => !ids.has(i.id)));
     setToast({ snapshot, added: [], mode: 'list', note: gone.length === 1 ? `Removed ${gone[0].name} from the list.` : `Removed ${gone.length} items from the list.` });
   }
 
   function newTrip() {
-    const snapshot = { items, products: catalog.products };
+    const snapshot = props.listSnapshot();
     const n = items.filter((i) => i.done).length;
     props.where.newTrip();
     setWhereBarFor(null); // its item is leaving with the cart
@@ -1099,6 +1108,15 @@ export function ShoppingView(props: Props) {
     setPosition(layout.entrance);
     setToast({ snapshot, added: [], mode: 'list', note: `Cart cleared (${n} item${n === 1 ? '' : 's'}). Ready for next time.` });
   }
+
+  const listNameOf = (id: string) => props.lists.all.find((l) => l.id === id)?.name ?? id;
+  const tripMulti = (props.trip?.ids.length ?? 1) > 1;
+  const sourceBadges = (item: ListItem): string[] | undefined => {
+    if (!tripMulti || !props.trip) return undefined;
+    const ids = props.trip.sourcesOf(item);
+    if (ids.length < 2 && ids[0] === props.lists.current) return undefined;
+    return ids.map(listNameOf);
+  };
 
   // --- Drag an item onto a new location (map or stop card) ---
   /** What's under the finger: an exact spot on the map, or a stop in the list. */
@@ -1223,6 +1241,28 @@ export function ShoppingView(props: Props) {
   );
   const listMain = (
       <main>
+        {tripMulti && props.trip && (
+          <div className="chips trip-chips wrap" role="list" aria-label="Lists on this trip">
+            {props.trip.ids.map((id) => {
+              const active = id === props.lists.current;
+              const label = listNameOf(id);
+              const n = props.lists.counts.get(id) ?? 0;
+              return (
+                <span key={id} className={`chip trip-chip${active ? ' active' : ''}`} role="listitem">
+                  <span>{label}{n > 0 ? ` · ${n}` : ''}</span>
+                  {!active && (
+                    <button
+                      type="button"
+                      className="trip-chip-x"
+                      aria-label={`Stop also shopping ${label}`}
+                      onClick={() => props.trip!.dismissOverlay(id)}
+                    >×</button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
         {laterHere.length > 0 && !tripDone && (
           <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => setListOpen(true)}>
             📍 {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>
@@ -1265,6 +1305,7 @@ export function ShoppingView(props: Props) {
               pinned={pinned}
               onPin={togglePin}
               headingOf={showCatHeads ? catsOf : undefined}
+              badgesOf={sourceBadges}
               subOf={(item) => withCat(nearestFirst.find((e) => e.item.id === item.id)?.stop.label, item)}
               tintOf={(item) => { const e = nearestFirst.find((x) => x.item.id === item.id); return e && sectionColor(e.stop); }}
               dropOf={(item) => nearestFirst.find((e) => e.item.id === item.id)?.stop.key}
@@ -1297,6 +1338,7 @@ export function ShoppingView(props: Props) {
               pinned={pinned}
               onPin={togglePin}
               headingOf={showCatHeads ? catsOf : undefined}
+              badgesOf={sourceBadges}
               subOf={(item) => flatSorted.find((e) => e.item.id === item.id)?.sub}
             />
           </section>
@@ -1327,6 +1369,7 @@ export function ShoppingView(props: Props) {
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               headingOf={showCatHeads ? catsOf : undefined}
+              badgesOf={sourceBadges}
               subOf={(item) => {
                 const b = byClue.find((x) => x.item.id === item.id);
                 if (!b) return undefined;
@@ -1441,6 +1484,7 @@ export function ShoppingView(props: Props) {
               showPrice={showPrice}
               showLocation={showLocation}
               priceOf={showPrice ? rowPriceCue : undefined}
+              badgesOf={sourceBadges}
             />
             <button className="link" onClick={newTrip}>Clear cart and start a new trip</button>
           </details>

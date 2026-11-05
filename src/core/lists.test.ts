@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
 import {
-  clearList, combineLists, copyItem, copyListName, duplicateList, itemsOn, listOf,
-  moveItem, moveListOrder, removeList, updateList,
+  clearList, clearTripCart, combineLists, copyItem, copyListName, duplicateList, itemsOn, listOf,
+  moveItem, moveListOrder, removeList, setTripItemDone, shopTrip, updateList,
 } from './lists';
 import type { ListItem, ShoppingList } from './types';
 
@@ -89,5 +89,23 @@ describe('several lists', () => {
     expect(moveListOrder(lists, 'main', -1)).toBe(lists);
     expect(copyListName('Taco night', ['Shopping list', 'Taco night'])).toBe('Taco night (again)');
     expect(copyListName('Taco night', ['Taco night', 'Taco night (again)'])).toBe('Taco night (2)');
+  });
+
+  it('shops several lists as a union without copying onto the active list', () => {
+    const trip = shopTrip(items, 'main', ['staples', 'tacos'], lists, catalog);
+    // Milk + milk merge; Eggs on staples + tacos merge; Tortillas alone.
+    expect(trip.toBuy.map((r) => r.item.name).sort()).toEqual(['Eggs', 'Milk', 'Tortillas']);
+    const milk = trip.toBuy.find((r) => r.item.productId === 'milk' || r.item.name.toLowerCase() === 'milk')!;
+    expect(milk.listIds.sort()).toEqual(['main', 'staples']);
+    expect(milk.item.id).toBe('1'); // prefers active list's copy
+    const eggs = trip.toBuy.find((r) => r.item.name === 'Eggs')!;
+    expect(eggs.listIds.sort()).toEqual(['staples', 'tacos']);
+    // Checking milk off marks both main and staples copies done; items stay on their lists.
+    const after = setTripItemDone(items, milk, true, catalog);
+    expect(after.find((i) => i.id === '1')?.done).toBe(true);
+    expect(after.find((i) => i.id === '3')?.done).toBe(true);
+    expect(names(after, 'main')).toEqual(['Milk']);
+    expect(names(after, 'staples')).toEqual(['Eggs', 'milk', 'Bread']);
+    expect(clearTripCart(after, ['main', 'staples']).map((i) => i.id).sort()).toEqual(['2', '5', '6']);
   });
 });

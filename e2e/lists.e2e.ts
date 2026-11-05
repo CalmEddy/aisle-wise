@@ -105,3 +105,52 @@ test('things with no place and things not sold here can be removed from the list
   await page.locator('.off-route .off-head', { hasText: 'No location yet' }).getByRole('button', { name: 'Remove all' }).click();
   await expect(page.locator('.off-route')).toHaveCount(0);
 });
+
+test('Also shop shows another list without copying onto the active list', async ({ page }) => {
+  await fresh(page, {
+    items: [
+      { id: 'a', name: 'Apples', done: false },
+      { id: 'd', name: 'Bread', done: false },
+      { id: 'b', name: 'Milk', done: false, listId: 'staples', productId: 'milk' },
+      { id: 'c', name: 'Bread', done: false, listId: 'staples' },
+    ],
+    lists: [
+      { id: 'main', name: 'Shopping list' },
+      { id: 'staples', name: 'Weekly staples' },
+    ],
+    display: { noAskStores: ['demo'] },
+  });
+  const toBuyNames = async () => (await page.locator('main .row:not(.checked) .name').allInnerTexts())
+    .map((t) => t.split('\n')[0].trim()).filter(Boolean).sort();
+  const mainItems = async () => (await saved<any[]>(page, 'items')).filter((i) => !i.listId || i.listId === 'main');
+
+  expect(await toBuyNames()).toEqual(['Apples', 'Bread']);
+  expect((await mainItems()).length).toBe(2);
+
+  await page.locator('.list-bar').click();
+  await page.getByLabel('Also shop Weekly staples').check();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  await expect(page.locator('.list-bar-name')).toContainText('Weekly staples');
+  await expect(page.locator('.trip-chips')).toContainText('Shopping list');
+  await expect(page.locator('.trip-chips')).toContainText('Weekly staples');
+  // Union + dedupe: Bread once (on both lists), plus Milk from staples.
+  expect(await toBuyNames()).toEqual(['Apples', 'Bread', 'Milk']);
+  await expect(page.locator('main .row', { hasText: 'Bread' }).locator('.source-badge')).toHaveText(['Shopping list', 'Weekly staples']);
+  // Active list was not grown — staples items stay on staples.
+  expect((await mainItems()).length).toBe(2);
+  expect(await saved<string[]>(page, 'shopWith')).toEqual(['staples']);
+
+  // Milk is only on staples; checking it off marks that source done.
+  await page.locator('main .row', { hasText: 'Milk' }).getByRole('checkbox').click();
+  const afterMilk = await saved<any[]>(page, 'items');
+  expect(afterMilk.find((i) => i.id === 'b')?.done).toBe(true);
+  expect(afterMilk.find((i) => i.id === 'a')?.done).toBe(false);
+  expect((await mainItems()).length).toBe(2);
+
+  // Same product on both lists: one check-off marks every trip source.
+  await page.locator('main .row', { hasText: 'Bread' }).getByRole('checkbox').click();
+  const afterBread = await saved<any[]>(page, 'items');
+  expect(afterBread.find((i) => i.id === 'c')?.done).toBe(true);
+  expect(afterBread.find((i) => i.id === 'd')?.done).toBe(true);
+});

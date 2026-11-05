@@ -152,3 +152,83 @@ export function copyListName(name: string, existing: string[]): string {
   }
   return `${name} (${newId()})`;
 }
+
+/** One row in a multi-list shopping trip (product once, with source list ids). */
+export interface TripRow {
+  /** Representative item (prefers the active list's copy when present). */
+  item: ListItem;
+  /** Lists in the trip that still have this thing to buy (or had it, for cart). */
+  listIds: string[];
+}
+
+/** List ids in a trip: active first, then overlays (deduped, existing only). */
+export function tripListIds(activeListId: string, shopWith: string[], lists: ShoppingList[]): string[] {
+  const known = new Set(lists.map((l) => l.id));
+  const out = [activeListId];
+  for (const id of shopWith) {
+    if (id !== activeListId && known.has(id) && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Non-destructive multi-list shop: union of to-buy (and cart) across the trip
+ * lists, one row per product. Does not copy items onto the active list.
+ */
+export function shopTrip(
+  items: ListItem[],
+  activeListId: string,
+  shopWith: string[],
+  lists: ShoppingList[],
+  catalog: Catalog,
+): { toBuy: TripRow[]; done: TripRow[] } {
+  const ids = tripListIds(activeListId, shopWith, lists);
+  const toBuy: TripRow[] = [];
+  const done: TripRow[] = [];
+  const add = (bucket: TripRow[], i: ListItem, lid: string) => {
+    const hit = bucket.find((r) => sameThing(r.item, i, catalog));
+    if (hit) {
+      if (!hit.listIds.includes(lid)) hit.listIds.push(lid);
+      if (lid === activeListId) hit.item = i;
+      return;
+    }
+    bucket.push({ item: i, listIds: [lid] });
+  };
+  for (const lid of ids) {
+    for (const i of itemsOn(items, lid)) {
+      if (i.done) add(done, i, lid);
+      else add(toBuy, i, lid);
+    }
+  }
+  return { toBuy, done };
+}
+
+/**
+ * Marks every matching to-buy (or done) row on the trip lists as done/undone.
+ * Used when a unified trip row is checked off.
+ */
+export function setTripItemDone(
+  items: ListItem[],
+  row: TripRow,
+  done: boolean,
+  catalog: Catalog,
+): ListItem[] {
+  return items.map((i) => {
+    if (!row.listIds.includes(listOf(i))) return i;
+    if (!sameThing(i, row.item, catalog)) return i;
+    if (i.done === done) return i;
+    return { ...i, done };
+  });
+}
+
+/** Clears checked-off items on every list in the trip (active + overlays). */
+export function clearTripCart(items: ListItem[], tripIds: string[]): ListItem[] {
+  const set = new Set(tripIds);
+  return items.filter((i) => !(set.has(listOf(i)) && i.done));
+}
+
+/** Drop overlay ids that no longer exist or match the active list. */
+export function cleanShopWith(shopWith: string[], activeListId: string, lists: ShoppingList[]): string[] {
+  const known = new Set(lists.map((l) => l.id));
+  return shopWith.filter((id) => id !== activeListId && known.has(id));
+}

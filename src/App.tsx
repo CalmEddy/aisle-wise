@@ -39,8 +39,9 @@ import {
 import type { Clue, GeoPoint, ItemUnit, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import {
-  clearList, combineLists, copyItem, copyListName, defaultLists, duplicateList, itemsOn, listOf,
-  moveItem, moveListOrder, removeList, updateList, type ClearMode,
+  clearList, clearTripCart, cleanShopWith, combineLists, copyItem, copyListName, defaultLists, duplicateList,
+  itemsOn, listOf, moveItem, moveListOrder, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
+  updateList, type ClearMode,
 } from './core/lists';
 import { clampPlace } from './core/geometry';
 import { useHousehold } from './sync/useHousehold';
@@ -103,6 +104,14 @@ export default function App() {
   );
   const [savedListId, setActiveListId] = usePersistentState('aw.activeList', MAIN_LIST);
   const listId = lists.some((l) => l.id === savedListId) ? savedListId : MAIN_LIST;
+  /** Other lists also being shopped this trip (view overlay; not synced). */
+  const [shopWithRaw, setShopWith] = usePersistentState<string[]>('aw.shopWith', []);
+  const shopWith = useMemo(() => cleanShopWith(shopWithRaw, listId, lists), [shopWithRaw, listId, lists]);
+  useEffect(() => {
+    if (shopWith.length === shopWithRaw.length && shopWith.every((id, i) => id === shopWithRaw[i])) return;
+    setShopWith(() => shopWith);
+  }, [shopWith, shopWithRaw, setShopWith]);
+  /** Active list only (Items tab, share, add-to-list). */
   const items = useMemo(() => itemsOn(allItems, listId), [allItems, listId]);
   /** Changes the current list's items (other lists are left alone). */
   const setItems = useCallback(
@@ -206,7 +215,6 @@ export default function App() {
     iconOf: display.mapIcons ? (id: string) => looks.get(id)?.icon : undefined,
   }), [looks, display.mapColors, display.mapIcons]);
   const position = pos?.layoutId === layout.id ? pos.point : layout.entrance;
-  const done = items.filter((i) => i.done).length;
   const onList = useMemo(
     () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
     [items, catalog],
@@ -223,7 +231,7 @@ export default function App() {
     }
     const created: Product = { ...newProduct(item.name), locations: { [layout.id]: spotKey } };
     setProducts((prev) => [...prev, created]);
-    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
+    setAllItems((all) => all.map((i) => (i.id === item.id ? { ...i, productId: created.id } : i)));
   }
 
   /**
@@ -692,7 +700,7 @@ export default function App() {
   }
 
   /** What Undo puts back for a change to the current store. */
-  const snapshotNow = (): Snapshot => ({ items, products, layouts });
+  const snapshotNow = (): Snapshot => ({ items, products, layouts, allItems, lists, activeList: listId });
 
   /** Adds a shelf (10 squares) or open area (6 × 4) centred where the map was tapped. */
   function addPlaceAt(kind: 'shelf-v' | 'shelf-h' | 'area', at: Point): { placeId: string; label: string; snapshot: Snapshot } {
@@ -1028,6 +1036,68 @@ export default function App() {
     items, products, layouts, allItems, lists, activeList: listId,
   });
 
+  /** Shop view: union of active + Also-shop overlays (no copying onto active). */
+  const trip = useMemo(
+    () => shopTrip(allItems, listId, shopWith, lists, catalog),
+    [allItems, listId, shopWith, lists, catalog],
+  );
+  const tripIds = useMemo(() => tripListIds(listId, shopWith, lists), [listId, shopWith, lists]);
+  const shopItems = useMemo(
+    () => [...trip.toBuy.map((r) => r.item), ...trip.done.map((r) => r.item)],
+    [trip],
+  );
+  const tripSourcesOf = useCallback((item: ListItem) => {
+    const row = trip.toBuy.find((r) => r.item.id === item.id) ?? trip.done.find((r) => r.item.id === item.id);
+    return row?.listIds ?? [listOf(item)];
+  }, [trip]);
+  const done = shopItems.filter((i) => i.done).length;
+
+  /**
+   * Applies Shop-view edits across the trip: check-off marks every matching
+   * source row; remove drops the product on every trip list; clear-cart clears
+   * done on the trip. Qty/price/name patch the representative row only.
+   */
+  const setShopItems = useCallback((fn: (prev: ListItem[]) => ListItem[]) => {
+    setAllItems((all) => {
+      const now = shopTrip(all, listId, shopWith, lists, catalog);
+      const visible = [...now.toBuy.map((r) => r.item), ...now.done.map((r) => r.item)];
+      const nextVisible = fn(visible);
+      const nextById = new Map(nextVisible.map((i) => [i.id, i]));
+      const removed = visible.filter((v) => !nextById.has(v.id));
+      const ids = tripListIds(listId, shopWith, lists);
+
+      // Clear cart: every done row left and to-buy rows kept → drop done on the trip.
+      if (
+        removed.length > 0
+        && removed.every((r) => r.done)
+        && nextVisible.length === visible.filter((v) => !v.done).length
+        && nextVisible.every((n) => visible.some((v) => v.id === n.id && !v.done))
+      ) {
+        return clearTripCart(all, ids);
+      }
+
+      let result = all.map((i) => (nextById.has(i.id) ? nextById.get(i.id)! : i));
+
+      for (const v of removed) {
+        const row = now.toBuy.find((r) => r.item.id === v.id) ?? now.done.find((r) => r.item.id === v.id);
+        if (!row) {
+          result = result.filter((i) => i.id !== v.id);
+          continue;
+        }
+        result = result.filter((i) => !(row.listIds.includes(listOf(i)) && sameThing(i, row.item, catalog)));
+      }
+
+      for (const v of visible) {
+        const n = nextById.get(v.id);
+        if (!n || n.done === v.done) continue;
+        const row = now.toBuy.find((r) => r.item.id === v.id) ?? now.done.find((r) => r.item.id === v.id);
+        if (row) result = setTripItemDone(result, row, n.done, catalog);
+      }
+
+      return result;
+    });
+  }, [listId, shopWith, lists, catalog, setAllItems]);
+
   /** Creates a list without switching to it. */
   function createList(name: string): string {
     const id = `l-${newId()}`;
@@ -1238,8 +1308,13 @@ export default function App() {
             {(view === 'list' || view === 'items') && (
               <ListBar
                 name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
-                toBuy={listCounts.get(listId) ?? 0}
-                otherPending={[...listCounts.entries()].filter(([id, n]) => id !== listId && n > 0).length}
+                toBuy={view === 'list' ? trip.toBuy.length : (listCounts.get(listId) ?? 0)}
+                otherPending={[...listCounts.entries()].filter(([id, n]) => id !== listId && !shopWith.includes(id) && n > 0).length}
+                overlays={shopWith.map((id) => ({
+                  id,
+                  name: lists.find((l) => l.id === id)?.name ?? id,
+                  toBuy: listCounts.get(id) ?? 0,
+                }))}
                 onOpen={() => setListsOpen(true)}
               />
             )}
@@ -1247,11 +1322,11 @@ export default function App() {
         </div>
         {view === 'list' && (
           <div className="top-right">
-            {items.length > done && (
+            {shopItems.length > done && (
               <button className="btn share-btn" onClick={shareList} aria-label="Share list">Share</button>
             )}
             <div className="progress" aria-label="Progress">
-              <strong>{done}</strong>/{items.length}
+              <strong>{done}</strong>/{shopItems.length}
             </div>
           </div>
         )}
@@ -1276,6 +1351,13 @@ export default function App() {
             create: createList, rename: renameList, remove: deleteList, combine: combineInto,
             preview: (sources) => combineLists(allItems, listId, sources, catalog),
             duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
+            shopWith, setShopWith: (ids) => setShopWith(() => cleanShopWith(ids, listId, lists)),
+          }}
+          listSnapshot={listsSnapshot}
+          trip={{
+            ids: tripIds,
+            sourcesOf: tripSourcesOf,
+            dismissOverlay: (id) => setShopWith((prev) => prev.filter((x) => x !== id)),
           }}
           moveItemTo={moveItemTo}
           copyItemTo={copyItemTo}
@@ -1285,8 +1367,8 @@ export default function App() {
           layouts={layouts}
           floor={floor}
           catalog={catalog}
-          items={items}
-          setItems={setItems}
+          items={shopItems}
+          setItems={setShopItems}
           setLocation={setLocation}
           quickAdd={quickAdd}
           build={{
@@ -1373,6 +1455,7 @@ export default function App() {
             create: createList, rename: renameList, remove: deleteList, combine: combineInto,
             preview: (sources) => combineLists(allItems, listId, sources, catalog),
             duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
+            shopWith, setShopWith: (ids) => setShopWith(() => cleanShopWith(ids, listId, lists)),
           }}
           onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           quickAddTo={quickAddTo}

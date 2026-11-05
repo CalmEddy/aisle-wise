@@ -631,6 +631,32 @@ test('a map broken by an older version (a changed shelf in the way of a new aisl
   expect(x('g-shelf-1-L')).toBeGreaterThan(x('g-shelf-2-L')); // aisle 1 on the right, beside its own shelf
 });
 
+test('“Where I’m standing” keeps the pin and moves the item to where you are', async ({ page }) => {
+  // Demo Market: Milk’s category home is Dairy at the back. Stand elsewhere, check off,
+  // and save via “Where I’m standing” without teleporting the pin to Dairy first.
+  const ok = noPageErrors(page);
+  await fresh(page);
+  await addItems(page, 'milk');
+  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  await tapMap(page, 6, 20);
+  const before = await saved<{ layoutId: string; point: { x: number; y: number } }>(page, 'position.v2');
+  expect(before.point).toEqual({ x: 6, y: 20 });
+  await tick(page, 'Milk');
+  const afterTick = await saved<{ point: { x: number; y: number } }>(page, 'position.v2');
+  expect(afterTick.point).toEqual({ x: 6, y: 20 });
+  const bar = page.locator('.where-bar');
+  await expect(bar).toContainText('Where was Milk?');
+  await bar.getByRole('button', { name: '🧍 Where I’m standing' }).click();
+  await bar.locator('[aria-label="Where I’m standing"] .btn').first().click();
+  const milk = (await saved<{ name: string; locations?: Record<string, string> }[]>(page, 'products')).find((p) => p.name === 'Milk')!;
+  expect(milk.locations?.demo).toBeTruthy();
+  // Not parked on the dairy area (id "dairy") — saved at the standing place.
+  expect(milk.locations!.demo.startsWith('dairy')).toBe(false);
+  const still = await saved<{ point: { x: number; y: number } }>(page, 'position.v2');
+  expect(still.point).toEqual({ x: 6, y: 20 });
+  ok();
+});
+
 test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carries on there in one tap', async ({ page }) => {
   const ok = noPageErrors(page);
   const v = (id: string, label: string, x: number) => ({ kind: 'shelf', id, label, orientation: 'vertical', x, y: 2, length: 10, categories: [] });

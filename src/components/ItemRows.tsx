@@ -219,7 +219,7 @@ export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -232,6 +232,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   onPin?: (i: ListItem) => void;
   /** A second line under the name (where it is). */
   subOf?: (i: ListItem) => string | undefined;
+  /** Small source-list badges (multi-list shop trip). */
+  badgesOf?: (i: ListItem) => string[] | undefined;
   /** Row tint (category colour). */
   tintOf?: (i: ListItem) => string | undefined;
   /** Drop target key per row. */
@@ -264,15 +266,26 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
     <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
   );
   const whereOf = (item: ListItem) => (showLocation ? subOf?.(item) : undefined);
+  const badges = (item: ListItem) => {
+    const names = badgesOf?.(item);
+    if (!names?.length) return null;
+    return (
+      <span className="source-badges">
+        {names.map((n) => <span key={n} className="source-badge">{n}</span>)}
+      </span>
+    );
+  };
   const meta = (item: ListItem) => {
     // Stepper owns the count; inline price owns the amount — meta keeps unit (and price when no inline control).
     const line = qtyUnitPriceText(item, { qty: !showQty, price: showPrice && !onPatch });
     const price = priceOf?.(item);
     const note = item.note;
     const where = whereOf(item);
-    if (!line && !price && !note && !where) return null;
+    const badgeRow = badges(item);
+    if (!line && !price && !note && !where && !badgeRow) return null;
     return (
       <span className="name-meta">
+        {badgeRow}
         {line && <span className="qty">{line}</span>}
         {price && <span className="price-cue muted">{line ? ` · ${price}` : price}</span>}
         {note && <span className="item-note">{note}</span>}
