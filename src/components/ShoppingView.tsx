@@ -1433,6 +1433,7 @@ export function ShoppingView(props: Props) {
               items={done}
               onToggle={toggle}
               onRemove={removeWithUndoOne}
+              onMenu={setMenuFor}
               onPatch={patchItem}
               iconOf={iconOf}
               simple

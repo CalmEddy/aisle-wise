@@ -98,6 +98,23 @@ test('trip done: summary, things to get elsewhere, clear the cart with undo', as
   expect((await saved<{ name: string }[]>(page, 'items')).length).toBe(3);
 });
 
+test('cart items have the ⋯ menu for place, aisle and price', async ({ page }) => {
+  await fresh(page, { display: { noAskStores: ['demo'] } });
+  await addItems(page, 'milk');
+  await tick(page, 'Milk');
+  const cart = page.locator('details.done');
+  await expect(cart).toContainText('In the cart');
+  await cart.locator('summary').click();
+  await cart.getByRole('button', { name: /More options for Milk/ }).click();
+  const menu = page.getByRole('dialog', { name: /Options for Milk/ });
+  await expect(menu.getByRole('button', { name: /Change place on the map/ })).toBeVisible();
+  await expect(menu.getByRole('button', { name: /Aisle \/ department/ })).toBeVisible();
+  await menu.getByLabel('Price for Milk').fill('2.49');
+  await menu.getByRole('button', { name: 'Done' }).click();
+  const items = await saved<{ name: string; done?: boolean; price?: number }[]>(page, 'items');
+  expect(items.find((i) => i.name === 'Milk')).toMatchObject({ done: true, price: 2.49 });
+});
+
 test('buy again: past trips at the top of the add window, one tap adds', async ({ page }) => {
   const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
   await fresh(page, { trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])], display: { noAskStores: ['demo'] } });
