@@ -195,6 +195,13 @@ button { cursor: pointer; }
 }
 .add-row button { border-radius: 12px; padding: 0 16px; font-weight: 600; background: var(--accent); color: #fff; border: 0; }
 .add-row button:disabled { opacity: 0.4; }
+.add-row button.mic {
+  flex: none; min-width: 44px; padding: 0 12px; background: var(--surface); color: var(--text);
+  border: 1px solid var(--line); font-size: 1.1rem; line-height: 1;
+}
+.add-row button.mic.listening {
+  border-color: var(--accent); background: var(--accent-soft); color: var(--accent);
+}
 .suggestions {
   list-style: none; margin: 4px 0 0; padding: 4px; background: var(--surface);
   border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 18px #0002;
