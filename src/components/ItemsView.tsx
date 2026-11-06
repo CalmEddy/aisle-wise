@@ -21,6 +21,8 @@ import { SwipeRow } from './SwipeRow';
 import { WherePanel } from './WherePanel';
 import { aislesUsed, describeClue } from '../core/clues';
 import { isUncategorizedPlace } from '../core/taxonomy';
+import { splitSpokenItems } from '../core/speech';
+import { useVoiceMic } from './useVoiceMic';
 
 interface Props {
   catalog: Catalog;
@@ -307,20 +309,22 @@ function ProductList({
     requestAnimationFrame(() => scrollTo(document.getElementById(`item-${key}`)));
   }
 
-  function submit() {
-    if (!q) return;
-    // Exactly one name that's already there: open it.
-    const one = !q.includes(',') ? catalog.exact(q) : undefined;
-    if (one && !alsoList) {
+  /** Adds typed/spoken names to the catalog (and to the list when `toList`). */
+  function addNames(raw: string, toList: boolean) {
+    const text = raw.trim();
+    if (!text) return;
+    // Exactly one name that's already there: open it (typing only, not forcing onto the list).
+    const one = !text.includes(',') ? catalog.exact(text) : undefined;
+    if (one && !toList) {
       setQuery('');
       setFilter('all');
       openItem(one, false);
       return;
     }
     const snap = snapshot();
-    const { created, existing } = quickAddItems(q, catalog);
+    const { created, existing } = quickAddItems(text, catalog);
     if (created.length) setProducts((prev) => [...prev, ...created]);
-    if (alsoList) for (const p of [...created, ...existing]) if (!onList.has(p.id)) onAddToList(p);
+    if (toList) for (const p of [...created, ...existing]) if (!onList.has(p.id)) onAddToList(p);
     setRecent((prev) => [...created.map((p) => p.id), ...prev.filter((id) => !created.some((p) => p.id === id))].slice(0, 12));
     setQuery('');
     const names = (list: Product[]) => list.map((p) => p.name).join(', ');
@@ -329,10 +333,24 @@ function ProductList({
     const parts = [
       created.length ? (one1 ? `Added ${one1.name} · ${catName ? `${catName} (guessed)` : 'no category'}.` : `Added ${names(created)}.`) : '',
       existing.length ? `${names(existing)} ${existing.length === 1 ? 'was' : 'were'} already in your items.` : '',
-      alsoList ? `On “${listName}” now.` : '',
+      toList ? `On “${listName}” now.` : '',
     ].filter(Boolean);
     setToast({ text: parts.join(' '), snapshot: snap, openId: one1?.id });
   }
+
+  function submit() {
+    addNames(q, alsoList);
+  }
+
+  const voice = useVoiceMic({
+    onFinal: (transcript) => {
+      const names = splitSpokenItems(transcript);
+      if (!names.length) return;
+      // Speaking always stocks the active list (same as checking “Add to …”).
+      addNames(names.join(', '), true);
+    },
+    onInterim: (transcript) => setQuery(transcript.trim()),
+  });
 
   const row = (p: Product, keyPrefix = '') => {
     const key = keyPrefix + p.id;
@@ -408,12 +426,21 @@ function ProductList({
         <form className="add-row" onSubmit={(e) => { e.preventDefault(); submit(); }}>
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder={`Search or add · ${catalog.products.length} items`}
+            onChange={(e) => { setQuery(e.target.value); voice.setError(undefined); }}
+            placeholder={`Search, type, or speak · ${catalog.products.length} items`}
             aria-label="Search or add grocery items"
             type="search"
             enterKeyHint="done"
           />
+          <button
+            type="button"
+            className={voice.listening ? 'mic listening' : 'mic'}
+            aria-label={voice.listening ? 'Stop listening' : 'Add by voice'}
+            aria-pressed={voice.listening}
+            onClick={voice.toggle}
+          >
+            {voice.listening ? '⏹' : '🎤'}
+          </button>
           <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : '+ Add'}</button>
         </form>
         <div className="items-sub">
@@ -422,7 +449,17 @@ function ProductList({
             <span>Add to “{listName}”</span>
           </label>
           <span className="muted small hint">
-            {q.includes(',') ? 'Enter adds each name.' : q ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`) : selecting ? 'Tap items to select.' : 'Swipe an item for shortcuts.'}
+            {voice.error
+              ? voice.error
+              : voice.listening
+                ? 'Listening… pause to add to your list.'
+                : q.includes(',')
+                  ? 'Enter adds each name.'
+                  : q
+                    ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`)
+                    : selecting
+                      ? 'Tap items to select.'
+                      : 'Swipe an item for shortcuts.'}
           </span>
           <button className={`chip select-toggle${selecting ? ' active' : ''}`} aria-pressed={selecting} onClick={() => startSelecting(!selecting)}>
             {selecting ? 'Done' : '☑ Select'}

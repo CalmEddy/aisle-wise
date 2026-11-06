@@ -40,6 +40,16 @@ async function mockSpeech(page: Page) {
   });
 }
 
+async function fireFinal(page: Page, transcript: string) {
+  await page.evaluate((t) => {
+    const rec = (window as unknown as { __awSpeech: Array<{ onresult: ((ev: unknown) => void) | null }> }).__awSpeech.at(-1);
+    rec?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, 0: { transcript: t } }],
+    });
+  }, transcript);
+}
+
 test('voice mic auto-adds spoken items on pause (and commas)', async ({ page }) => {
   const ok = noPageErrors(page);
   await mockSpeech(page);
@@ -52,13 +62,7 @@ test('voice mic auto-adds spoken items on pause (and commas)', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Stop listening' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('.add-sheet-hint')).toContainText('Listening');
 
-  await page.evaluate(() => {
-    const rec = (window as unknown as { __awSpeech: Array<{ onresult: ((ev: unknown) => void) | null }> }).__awSpeech.at(-1);
-    rec?.onresult?.({
-      resultIndex: 0,
-      results: [{ isFinal: true, 0: { transcript: 'Milk, Eggs' } }],
-    });
-  });
+  await fireFinal(page, 'Milk, Eggs');
 
   await expect(page.locator('.added-strip')).toContainText('Added Milk, Eggs');
   await expect(page.locator('main .name')).toContainText(['Milk', 'Eggs']);
@@ -72,10 +76,28 @@ test('voice mic auto-adds spoken items on pause (and commas)', async ({ page }) 
   ok();
 });
 
-test('mic stays hidden when speech is unavailable', async ({ page }) => {
+test('Items tab mic is always visible and adds spoken names to the list', async ({ page }) => {
   const ok = noPageErrors(page);
-  // No mock → Chromium in CI may still expose webkitSpeechRecognition.
-  // Force-clear constructors before load.
+  await mockSpeech(page);
+  await fresh(page, {
+    lists: [{ id: 'main', name: 'Shopping list' }, { id: 'aldi', name: 'Aldi' }],
+    activeList: 'aldi',
+  });
+
+  await page.getByRole('tab', { name: 'Items' }).click();
+  const mic = page.getByRole('button', { name: 'Add by voice' });
+  await expect(mic).toBeVisible();
+  await mic.click();
+  await fireFinal(page, 'Butter');
+
+  await expect(page.locator('.toast')).toContainText('On “Aldi” now');
+  const items = await saved<{ name: string; listId?: string }[]>(page, 'items');
+  expect(items.some((i) => i.name === 'Butter' && i.listId === 'aldi')).toBe(true);
+  ok();
+});
+
+test('mic stays visible when speech is unavailable and explains why', async ({ page }) => {
+  const ok = noPageErrors(page);
   await page.addInitScript(() => {
     const w = window as unknown as {
       SpeechRecognition?: unknown;
@@ -86,7 +108,9 @@ test('mic stays hidden when speech is unavailable', async ({ page }) => {
   });
   await fresh(page);
   await page.getByRole('button', { name: 'Add items' }).first().click();
-  await expect(page.getByLabel('Item to add')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Add by voice' })).toHaveCount(0);
+  const mic = page.getByRole('button', { name: 'Add by voice' });
+  await expect(mic).toBeVisible();
+  await mic.click();
+  await expect(page.locator('.add-sheet-hint')).toContainText('Voice isn’t available');
   ok();
 });
