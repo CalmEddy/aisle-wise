@@ -5,7 +5,7 @@ async function openPeanutButter(page: import('@playwright/test').Page) {
   await page.getByRole('tab', { name: 'Items' }).click();
   await page.getByRole('button', { name: 'Grocery items' }).click();
   // Search jumps straight to the item without unfolding categories.
-  await page.getByPlaceholder(/Search or add/).fill('Peanut butter');
+  await page.getByLabel('Search or add grocery items').fill('Peanut butter');
   await page.locator('.item-entry .product-row', { hasText: 'Peanut butter' }).click();
   await expect(page.locator('.item-editor')).toBeVisible();
 }

@@ -33,7 +33,7 @@ test('after reparent, Automatic follows the new top-level category (or says no s
   await expect(page.locator('.toast')).toContainText(/moved under Condiments/);
 
   // Open Peanut butter: Automatic should name Condiments (or say no Condiments shelf), not Cereal.
-  await page.getByPlaceholder(/Search or add/).fill('Peanut butter');
+  await page.getByLabel('Search or add grocery items').fill('Peanut butter');
   await page.locator('.item-entry .product-row', { hasText: 'Peanut butter' }).click();
   await expect(page.locator('.item-editor')).toBeVisible();
   const loc = page.getByLabel(/Location at/);

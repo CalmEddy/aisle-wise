@@ -21,7 +21,7 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
   await expect(page.getByRole('button', { name: 'Grocery items' })).toHaveClass(/active/);
 
   // Search and add Milk onto the active list; toast names the list.
-  await page.getByPlaceholder(/Search or add/).fill('Milk');
+  await page.getByLabel('Search or add grocery items').fill('Milk');
   await page.getByRole('button', { name: 'Add Milk to “Party”' }).click();
   await expect(page.locator('.toast')).toContainText('Added Milk to “Party”');
 
@@ -57,7 +57,7 @@ test('Items tab: qty stepper and price toggle match Shop, prices are line totals
   });
 
   await page.getByRole('tab', { name: 'Items' }).click();
-  await page.getByPlaceholder(/Search or add/).fill('Milk');
+  await page.getByLabel('Search or add grocery items').fill('Milk');
   const milk = page.locator('.item-entry').filter({ has: page.getByRole('button', { name: /Milk is on/ }) }).first();
 
   // Qty stepper is on by default (same × toggle as Shop).
@@ -88,7 +88,7 @@ test('Items tab: × and $ toggles work while browsing items not yet on the list'
   const ok = noPageErrors(page);
   await fresh(page); // empty shopping list
   await page.getByRole('tab', { name: 'Items' }).click();
-  await page.getByPlaceholder(/Search or add/).fill('Apples');
+  await page.getByLabel('Search or add grocery items').fill('Apples');
 
   const qtyToggle = page.getByRole('button', { name: 'Quantity stepper' });
   const priceToggle = page.getByRole('button', { name: 'Prices' });
