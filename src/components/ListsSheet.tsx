@@ -27,28 +27,44 @@ export interface ListsApi {
   clear: (id: string, mode: ClearMode) => import('../App').Snapshot;
   /** Move a list up (-1) or down (+1) in the saved order. */
   reorder: (id: string, dir: -1 | 1) => void;
+  /** Other list ids also shown on Shop this trip (non-destructive overlay). */
+  shopWith: string[];
+  setShopWith: (ids: string[]) => void;
 }
 
 /** The list switcher (in the header): the list being shopped; opens the lists sheet. */
-export function ListBar({ name, toBuy, otherPending, onOpen }: {
+export function ListBar({ name, toBuy, otherPending, overlays = [], onOpen }: {
   name: string;
-  /** Still to buy on the active list. */
+  /** Still to buy on the active list (or trip union on Shop). */
   toBuy: number;
-  /** How many other lists still have something to buy. */
+  /** How many other lists still have something to buy (not already overlaid). */
   otherPending: number;
+  /** Lists also being shopped this trip. */
+  overlays?: { id: string; name: string; toBuy: number }[];
   onOpen: () => void;
 }) {
-  const extra = otherPending > 0 ? ` · +${otherPending} list${otherPending === 1 ? '' : 's'}` : '';
+  const overlayBit = overlays.length === 1
+    ? ` + ${overlays[0].name}`
+    : overlays.length > 1
+      ? ` +${overlays.length}`
+      : '';
+  const extra = otherPending > 0 && !overlays.length
+    ? ` · +${otherPending} list${otherPending === 1 ? '' : 's'}`
+    : '';
+  const overlayToBuy = overlays.reduce((n, o) => n + o.toBuy, 0);
   return (
     <button
       className="list-bar"
       onClick={onOpen}
-      aria-label={`List: ${name}${toBuy ? `, ${toBuy} to buy` : ''}${otherPending ? `, ${otherPending} other list${otherPending === 1 ? '' : 's'} with items` : ''}. Change list`}
+      aria-label={`List: ${name}${toBuy ? `, ${toBuy} to buy` : ''}${overlays.length ? `, also shopping ${overlays.map((o) => o.name).join(' and ')}` : ''}${otherPending && !overlays.length ? `, ${otherPending} other list${otherPending === 1 ? '' : 's'} with items` : ''}. Change list`}
     >
       <span aria-hidden="true">📝</span>
-      <span className="list-bar-name">{name}</span>
+      <span className="list-bar-name">{name}{overlayBit}</span>
       {toBuy > 0 && <span className="list-bar-count" aria-hidden="true">{toBuy}</span>}
-      {otherPending > 0 && <span className="list-bar-others" aria-hidden="true">+{otherPending}</span>}
+      {overlays.length > 0 && overlayToBuy > 0 && (
+        <span className="list-bar-others" aria-hidden="true">+{overlayToBuy}</span>
+      )}
+      {otherPending > 0 && !overlays.length && <span className="list-bar-others" aria-hidden="true">+{otherPending}</span>}
       <span aria-hidden="true" className="list-bar-more">▾</span>
       <span className="sr-only">{extra}</span>
     </button>
@@ -91,10 +107,18 @@ export function ListsSheet({ lists, onCombined, onRemoved, onCleared, onDuplicat
     return 'Empty';
   }
 
+  function toggleAlsoShop(id: string, on: boolean) {
+    const next = on
+      ? [...lists.shopWith.filter((x) => x !== id), id]
+      : lists.shopWith.filter((x) => x !== id);
+    lists.setShopWith(next);
+  }
+
   const row = (l: ShoppingList, opts?: { shoppingNow?: boolean }) => {
     const isCurrent = l.id === lists.current;
     const openMenu = menuFor === l.id;
     const deleting = confirmDelete === l.id;
+    const also = lists.shopWith.includes(l.id);
     if (renaming === l.id) {
       return (
         <li key={l.id} className={isCurrent ? 'current' : ''}>
@@ -138,13 +162,29 @@ export function ListsSheet({ lists, onCombined, onRemoved, onCleared, onDuplicat
         >
           <span className="radio" aria-hidden="true">{isCurrent ? '●' : '○'}</span>
           <span className="name">{l.name}</span>
-          <span className="muted small">{opts?.shoppingNow ? 'Shopping now' : status(l.id)}</span>
+          <span className="muted small">{opts?.shoppingNow ? 'Shopping now' : also ? 'Also shopping' : status(l.id)}</span>
         </button>
+        {!isCurrent && (
+          <label className="also-shop">
+            <input
+              type="checkbox"
+              checked={also}
+              onChange={(e) => toggleAlsoShop(l.id, e.target.checked)}
+              aria-label={`Also shop ${l.name}`}
+            />
+            <span aria-hidden="true">Also shop</span>
+          </label>
+        )}
         <button className="icon" onClick={() => { setMenuFor(openMenu ? undefined : l.id); setConfirmDelete(undefined); }} aria-label={`More for ${l.name}`} aria-expanded={openMenu}>⋯</button>
         {openMenu && (
           <div className="list-row-menu" role="group" aria-label={`Actions for ${l.name}`}>
             <button className="pick" onClick={() => { onAddItems(l.id); }}>＋ Add items</button>
             {!isCurrent && <button className="pick" onClick={() => { lists.switchTo(l.id); onClose(); }}>Shop this list</button>}
+            {!isCurrent && (
+              <button className="pick" onClick={() => { toggleAlsoShop(l.id, !also); setMenuFor(undefined); }}>
+                {also ? 'Stop also shopping' : 'Also shop this list'}
+              </button>
+            )}
             <button className="pick" onClick={() => { setRenaming(l.id); setName(l.name); setMenuFor(undefined); }}>Rename</button>
             <button className="pick" onClick={() => {
               const r = lists.duplicate(l.id);
@@ -200,6 +240,7 @@ export function ListsSheet({ lists, onCombined, onRemoved, onCleared, onDuplicat
         {others.length > 0 && (
           <section className="lists-section">
             <h3>Other lists</h3>
+            <p className="muted small also-shop-hint">Tick Also shop to see a list’s to-buy on Shop without copying it onto “{current.name}”.</p>
             <ul className="lists">{others.map((l) => row(l))}</ul>
           </section>
         )}
