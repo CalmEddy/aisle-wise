@@ -140,10 +140,13 @@ Tap the list name under the store (📝) to manage lists:
 
 ## Sharing
 
-- **Share a list** – tap **Share** at the top of the Shop tab.
-- **Share a store** – in **Edit map** / store settings, pick the store and
-  tap **Share**. The layout, its categories, where items are in that store
-  and which items it doesn't carry all come along.
+Tap **Share** at the top of the Shop tab (or **Share** in **Edit map** /
+store settings). Choose what to send:
+
+- **Shopping list** — unchecked items on the list you’re shopping.
+- **This store’s map** — the layout, its categories, where items are in
+  that store, and which items it doesn’t carry.
+- **Both** — one link with the list and the map together.
 
 Send the link any way you like (the phone's share menu, text, email). When
 someone opens it, Aisle Wise shows what was shared and lets them add it —
