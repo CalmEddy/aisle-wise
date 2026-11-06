@@ -34,7 +34,7 @@ import { aisleNumber, DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
 import { productFor, resolveSpot } from './core/locate';
 import {
-  applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, shareFromHash, type Share,
+  applyBothShare, applyListShare, applyStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
 import type { Clue, GeoPoint, ItemUnit, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
@@ -172,8 +172,8 @@ export default function App() {
   };
   const [joinCode, setJoinCode] = useState<string>();
 
-  // Sharing: what we're sending, and anything that arrived in a link.
-  const [sending, setSending] = useState<{ title: string; summary: string; share: Share } | null>(null);
+  // Sharing: chooser defaults (list/map), and anything that arrived in a link.
+  const [sending, setSending] = useState<{ list: boolean; map: boolean } | null>(null);
   const [incoming, setIncoming] = useState<Share | 'error' | null>(null);
   const [notice, setNotice] = useState('');
   useEffect(() => {
@@ -1235,19 +1235,9 @@ export default function App() {
     setItems((prev) => [...prev, { id: newId(), name: product.name, done: false, productId: product.id }]);
   }
 
-  function shareList() {
-    const share = buildListShare(items, catalog);
-    setSending({ title: 'your list', summary: `${share.items.length} item${share.items.length === 1 ? '' : 's'} still to get.`, share });
-  }
-
-  function shareStore(l: StoreLayout) {
-    const share = buildStoreShare(l, catalog);
-    const located = share.items.filter((i) => i.at).length;
-    const unavailable = share.items.filter((i) => i.notAvailable).length;
-    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-    const summary = `The store layout and ${plural(located, 'item location')}`
-      + (unavailable ? `, plus ${plural(unavailable, 'item')} not available there.` : '.');
-    setSending({ title: `“${l.name}”`, summary, share });
+  /** Opens the share chooser (Shop → list; Edit map → map). */
+  function openShare(initial: { list: boolean; map: boolean }) {
+    setSending(initial);
   }
 
   const data = () => ({ items: allItems, products, categories, layouts });
@@ -1281,6 +1271,28 @@ export default function App() {
     setView('list');
     const name = r.layouts.find((l) => l.id === r.layoutId)?.name;
     setNotice(replaceId ? `Updated “${name}”.` : `Added “${name}”. You’re now shopping there.`);
+  }
+
+  function importBoth(opts: { listTarget: 'current' | { newName: string }; replaceStoreId?: string }) {
+    if (!incoming || incoming === 'error' || incoming.kind !== 'both') return;
+    let targetId = listId;
+    let listLabel = lists.find((l) => l.id === listId)?.name ?? 'Shopping list';
+    if (opts.listTarget !== 'current') {
+      targetId = createList(opts.listTarget.newName.trim() || 'Shared list');
+      listLabel = opts.listTarget.newName.trim() || 'Shared list';
+      setActiveListId(targetId);
+    }
+    const r = applyBothShare(incoming, data(), targetId, opts.replaceStoreId);
+    setCategories(() => r.categories);
+    setProducts(() => r.products);
+    setAllItems(() => r.items);
+    setLayouts(() => r.layouts);
+    setActiveId(r.layoutId);
+    setIncoming(null);
+    setView('list');
+    const storeName = r.layouts.find((l) => l.id === r.layoutId)?.name;
+    const storeBit = opts.replaceStoreId ? `Updated “${storeName}”` : `Added “${storeName}”`;
+    setNotice(`${storeBit}. Added ${r.added} item${r.added === 1 ? '' : 's'} to “${listLabel}”${r.skipped ? ` (${r.skipped} already on it)` : ''}.`);
   }
 
   const tab = (id: View, label: string) => (
@@ -1321,9 +1333,7 @@ export default function App() {
         </div>
         {view === 'list' && (
           <div className="top-right">
-            {shopItems.length > done && (
-              <button className="btn share-btn" onClick={shareList} aria-label="Share list">Share</button>
-            )}
+            <button className="btn share-btn" onClick={() => openShare({ list: true, map: false })} aria-label="Share">Share</button>
             <div className="progress" aria-label="Progress">
               <strong>{done}</strong>/{shopItems.length}
             </div>
@@ -1370,7 +1380,7 @@ export default function App() {
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
             startBlankStore, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
             store: {
-              layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => shareStore(layout), resetDemo, isDemo: layout.id === demoLayout.id,
+              layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => openShare({ list: false, map: true }), resetDemo, isDemo: layout.id === demoLayout.id,
               gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,
             },
           }}
@@ -1483,7 +1493,16 @@ export default function App() {
           onClose={() => { setHouseholdOpen(false); setJoinCode(undefined); }}
         />
       )}
-      {sending && <ShareSheet {...sending} onClose={() => setSending(null)} />}
+      {sending && (
+        <ShareSheet
+          listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
+          items={items}
+          layout={layout}
+          catalog={catalog}
+          initial={sending}
+          onClose={() => setSending(null)}
+        />
+      )}
       {incoming && (
         <ImportSheet
           share={incoming}
@@ -1491,6 +1510,7 @@ export default function App() {
           currentListName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
           onAddList={importList}
           onAddStore={importStore}
+          onAddBoth={importBoth}
           onCancel={() => setIncoming(null)}
         />
       )}

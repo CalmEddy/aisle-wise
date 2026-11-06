@@ -40,7 +40,15 @@ export interface StoreShare {
   items: SharedItem[];
 }
 
-export type Share = ListShare | StoreShare;
+/** List + store in one link (nested so applyListShare / applyStoreShare reuse). */
+export interface BothShare {
+  v: 1;
+  kind: 'both';
+  list: ListShare;
+  store: StoreShare;
+}
+
+export type Share = ListShare | StoreShare | BothShare;
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -81,6 +89,33 @@ export function buildStoreShare(layout: StoreLayout, catalog: Catalog): StoreSha
   return { v: 1, kind: 'store', layout, categories: catalog.categories.filter((c) => used.has(c.id)), items };
 }
 
+/** One link with both the shopping list and the store map. */
+export function buildBothShare(items: ListItem[], layout: StoreLayout, catalog: Catalog): BothShare {
+  return {
+    v: 1,
+    kind: 'both',
+    list: buildListShare(items, catalog),
+    store: buildStoreShare(layout, catalog),
+  };
+}
+
+/**
+ * Builds the share for the chooser: list only, map only, or both.
+ * At least one of `includeList` / `includeMap` must be true.
+ */
+export function buildShare(opts: {
+  includeList: boolean;
+  includeMap: boolean;
+  items: ListItem[];
+  layout: StoreLayout;
+  catalog: Catalog;
+}): Share {
+  const { includeList, includeMap, items, layout, catalog } = opts;
+  if (includeList && includeMap) return buildBothShare(items, layout, catalog);
+  if (includeMap) return buildStoreShare(layout, catalog);
+  return buildListShare(items, catalog);
+}
+
 // ---------------------------------------------------------------------------
 // Encoding
 
@@ -113,13 +148,37 @@ export function shareFromHash(hash: string): string | undefined {
   return m?.[1];
 }
 
-function isShare(x: unknown): x is Share {
-  const s = x as Share;
-  if (!s || s.v !== 1 || !Array.isArray(s.items) || !s.items.every((i) => typeof i?.name === 'string')) return false;
-  if (s.kind === 'list') return true;
-  const l = s.kind === 'store' ? s.layout : undefined;
+function isListShare(x: unknown): x is ListShare {
+  const s = x as ListShare;
+  return !!s && s.v === 1 && s.kind === 'list' && Array.isArray(s.items) && s.items.every((i) => typeof i?.name === 'string');
+}
+
+function isStoreShare(x: unknown): x is StoreShare {
+  const s = x as StoreShare;
+  if (!s || s.v !== 1 || s.kind !== 'store' || !Array.isArray(s.items) || !s.items.every((i) => typeof i?.name === 'string')) return false;
+  const l = s.layout;
   return !!l && typeof l.name === 'string' && Array.isArray(l.places) && Array.isArray(s.categories)
     && Number.isFinite(l.width) && Number.isFinite(l.height) && !!l.entrance && !!l.checkout;
+}
+
+function isShare(x: unknown): x is Share {
+  if (isListShare(x) || isStoreShare(x)) return true;
+  const s = x as BothShare;
+  return !!s && s.v === 1 && s.kind === 'both' && isListShare(s.list) && isStoreShare(s.store);
+}
+
+/**
+ * Applies a combined list+store share: store first, then list onto `targetListId`.
+ */
+export function applyBothShare(
+  share: BothShare,
+  data: Data,
+  targetListId = MAIN_LIST,
+  replaceId?: string,
+): Data & { layoutId: string; added: number; skipped: number } {
+  const withStore = applyStoreShare(share.store, data, replaceId);
+  const withList = applyListShare(share.list, withStore, targetListId);
+  return { ...withList, layoutId: withStore.layoutId };
 }
 
 // ---------------------------------------------------------------------------

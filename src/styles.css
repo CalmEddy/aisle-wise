@@ -288,6 +288,10 @@ button { cursor: pointer; }
 .top-right { display: flex; align-items: center; gap: 10px; }
 .share-btn { padding: 6px 12px; }
 .share-url { width: 100%; font-size: 0.85rem !important; color: var(--muted) !important; }
+.share-options { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.share-option { align-items: flex-start; padding: 8px 0; }
+.share-option-title { display: block; font-weight: 600; }
+.share-summary { margin: 0 0 8px; }
 .preview { columns: 2; margin: 6px 0; padding-left: 18px; font-size: 0.9rem; }
 .sheet-actions.wrap { flex-wrap: wrap; }
 .toast.top { bottom: auto; top: calc(env(safe-area-inset-top) + 12px); }

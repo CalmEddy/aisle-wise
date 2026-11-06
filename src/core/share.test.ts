@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
 import { defaultCategories, defaultProducts } from './categories';
 import { demoLayout } from './demoLayout';
-import { applyListShare, applyStoreShare, buildListShare, buildStoreShare, decodeShare, encodeShare, shareFromHash, type Data } from './share';
+import {
+  applyBothShare, applyListShare, applyStoreShare, buildBothShare, buildListShare, buildShare, buildStoreShare,
+  decodeShare, encodeShare, shareFromHash, type Data,
+} from './share';
 import type { Product } from './types';
 
 const fresh = (): Data => ({ items: [], products: defaultProducts, categories: defaultCategories, layouts: [demoLayout] });
@@ -20,6 +23,27 @@ describe('share links', () => {
   it('rejects damaged links', async () => {
     await expect(decodeShare('not-a-share')).rejects.toThrow();
     await expect(decodeShare(await encodeShare({ v: 1, kind: 'store', items: [] } as never))).rejects.toThrow();
+  });
+
+  it('round-trips a list+store share', async () => {
+    const catalog = new Catalog(defaultProducts, defaultCategories);
+    const share = buildBothShare(
+      [{ id: '1', name: 'Milk', done: false }, { id: '2', name: 'Bread', done: false }],
+      demoLayout,
+      catalog,
+    );
+    expect(share.kind).toBe('both');
+    expect(share.list.items.map((i) => i.name).sort()).toEqual(['Bread', 'Milk']);
+    const text = await encodeShare(share);
+    expect(await decodeShare(text)).toEqual(share);
+  });
+
+  it('buildShare picks list, store, or both from the chooser', () => {
+    const catalog = new Catalog(defaultProducts, defaultCategories);
+    const items = [{ id: '1', name: 'Milk', done: false }];
+    expect(buildShare({ includeList: true, includeMap: false, items, layout: demoLayout, catalog }).kind).toBe('list');
+    expect(buildShare({ includeList: false, includeMap: true, items, layout: demoLayout, catalog }).kind).toBe('store');
+    expect(buildShare({ includeList: true, includeMap: true, items, layout: demoLayout, catalog }).kind).toBe('both');
   });
 });
 
@@ -121,5 +145,24 @@ describe('sharing a store', () => {
     expect(result.products.find((p) => p.name === 'Milk')!.locations?.demo).toBe('a3');
     // Our old location for eggs is replaced by the shared store's (none → category).
     expect(result.products.find((p) => p.name === 'Eggs')!.locations?.demo).toBeUndefined();
+  });
+});
+
+describe('sharing a list and a store together', () => {
+  it('adds the store then the list items', () => {
+    const catalog = new Catalog(
+      defaultProducts.map((p) => (p.name === 'Milk' ? { ...p, locations: { demo: 'a3' } } : p)),
+      defaultCategories,
+    );
+    const share = buildBothShare(
+      [{ id: '1', name: 'Milk', done: false }, { id: '2', name: 'Apples', done: false }],
+      demoLayout,
+      catalog,
+    );
+    const result = applyBothShare(share, fresh());
+    expect(result.layouts.find((l) => l.id === result.layoutId)!.name).toBe('Demo Market (shared)');
+    expect(result.products.find((p) => p.name === 'Milk')!.locations?.[result.layoutId]).toBe('a3');
+    expect(result.added).toBe(2);
+    expect(result.items.map((i) => i.name).sort()).toEqual(['Apples', 'Milk']);
   });
 });
