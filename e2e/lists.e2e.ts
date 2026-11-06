@@ -132,8 +132,6 @@ test('Also shop shows another list without copying onto the active list', async 
   await page.getByRole('button', { name: 'Close' }).click();
 
   await expect(page.locator('.list-bar-name')).toContainText('Weekly staples');
-  await expect(page.locator('.trip-chips')).toContainText('Shopping list');
-  await expect(page.locator('.trip-chips')).toContainText('Weekly staples');
   // Union + dedupe: Bread once (on both lists), plus Milk from staples.
   expect(await toBuyNames()).toEqual(['Apples', 'Bread', 'Milk']);
   await expect(page.locator('main .row', { hasText: 'Bread' }).locator('.source-badge')).toHaveText(['Shopping list', 'Weekly staples']);

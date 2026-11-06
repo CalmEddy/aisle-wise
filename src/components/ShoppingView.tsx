@@ -65,12 +65,8 @@ interface Props {
   onListsClose: () => void;
   /** Full undo snapshot (every list's items). */
   listSnapshot: () => Snapshot;
-  /** Multi-list trip overlay (active + Also-shop lists). */
-  trip?: {
-    ids: string[];
-    sourcesOf: (item: ListItem) => string[];
-    dismissOverlay: (listId: string) => void;
-  };
+  /** Multi-list trip: source list ids for a visible row (for badges). */
+  tripSourcesOf?: (item: ListItem) => string[];
   /** Move / copy a single item onto another list. */
   moveItemTo: (itemId: string, toList: string) => { snapshot: Snapshot; moved: boolean; skipped: boolean };
   copyItemTo: (itemId: string, toList: string) => { snapshot: Snapshot; copied: boolean; skipped: boolean };
@@ -1110,10 +1106,10 @@ export function ShoppingView(props: Props) {
   }
 
   const listNameOf = (id: string) => props.lists.all.find((l) => l.id === id)?.name ?? id;
-  const tripMulti = (props.trip?.ids.length ?? 1) > 1;
+  const tripMulti = (props.lists.shopWith?.length ?? 0) > 0;
   const sourceBadges = (item: ListItem): string[] | undefined => {
-    if (!tripMulti || !props.trip) return undefined;
-    const ids = props.trip.sourcesOf(item);
+    if (!tripMulti || !props.tripSourcesOf) return undefined;
+    const ids = props.tripSourcesOf(item);
     if (ids.length < 2 && ids[0] === props.lists.current) return undefined;
     return ids.map(listNameOf);
   };
@@ -1241,28 +1237,6 @@ export function ShoppingView(props: Props) {
   );
   const listMain = (
       <main>
-        {tripMulti && props.trip && (
-          <div className="chips trip-chips wrap" role="list" aria-label="Lists on this trip">
-            {props.trip.ids.map((id) => {
-              const active = id === props.lists.current;
-              const label = listNameOf(id);
-              const n = props.lists.counts.get(id) ?? 0;
-              return (
-                <span key={id} className={`chip trip-chip${active ? ' active' : ''}`} role="listitem">
-                  <span>{label}{n > 0 ? ` · ${n}` : ''}</span>
-                  {!active && (
-                    <button
-                      type="button"
-                      className="trip-chip-x"
-                      aria-label={`Stop also shopping ${label}`}
-                      onClick={() => props.trip!.dismissOverlay(id)}
-                    >×</button>
-                  )}
-                </span>
-              );
-            })}
-          </div>
-        )}
         {laterHere.length > 0 && !tripDone && (
           <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => setListOpen(true)}>
             📍 {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>

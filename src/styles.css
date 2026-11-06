@@ -633,13 +633,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .lists-sheet .also-shop input { margin: 0; }
 .lists-sheet .also-shop-hint { margin: 0 0 6px; }
 .lists-sheet .list-row-menu { flex: 1 0 100%; display: flex; flex-direction: column; gap: 0; padding: 0 0 8px 28px; }
-.trip-chips { margin: 0 0 8px; gap: 6px; }
-.trip-chip { display: inline-flex; align-items: center; gap: 4px; padding-right: 4px; }
-.trip-chip.active { cursor: default; }
-.trip-chip-x {
-  border: 0; background: transparent; color: inherit; opacity: 0.75;
-  font-size: 1rem; line-height: 1; padding: 0 4px; cursor: pointer;
-}
 .source-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 1px; }
 .source-badge {
   display: inline-block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.01em;

@@ -1041,7 +1041,6 @@ export default function App() {
     () => shopTrip(allItems, listId, shopWith, lists, catalog),
     [allItems, listId, shopWith, lists, catalog],
   );
-  const tripIds = useMemo(() => tripListIds(listId, shopWith, lists), [listId, shopWith, lists]);
   const shopItems = useMemo(
     () => [...trip.toBuy.map((r) => r.item), ...trip.done.map((r) => r.item)],
     [trip],
@@ -1354,11 +1353,7 @@ export default function App() {
             shopWith, setShopWith: (ids) => setShopWith(() => cleanShopWith(ids, listId, lists)),
           }}
           listSnapshot={listsSnapshot}
-          trip={{
-            ids: tripIds,
-            sourcesOf: tripSourcesOf,
-            dismissOverlay: (id) => setShopWith((prev) => prev.filter((x) => x !== id)),
-          }}
+          tripSourcesOf={tripSourcesOf}
           moveItemTo={moveItemTo}
           copyItemTo={copyItemTo}
           quickAddTo={quickAddTo}
