@@ -1,17 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { inWalkingOrder } from '../core/taxonomy';
 import { guessCategory } from '../core/guess';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
 import { amountText, parseAmount, withAmount } from '../core/items';
-import { createSpeechRecognizer, speechSupported, splitSpokenItems, type SpeechRecognizer } from '../core/speech';
+import { splitSpokenItems } from '../core/speech';
 import type { Product } from '../core/types';
+import { useVoiceMic } from './useVoiceMic';
 
 /**
  * Compact add composer: search (commas for several), or browse by category.
  * Docks at the bottom so the shopping list stays visible and updates as you add.
  * Stays open for more; Undo last undoes the most recent add.
- * Mic (when the device supports it) listens and adds on pause / commas.
+ * Mic listens and adds on pause / commas when the browser exposes speech.
  */
 export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose }: {
   listName: string;
@@ -33,10 +34,6 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   const [text, setText] = useState('');
   const [browse, setBrowse] = useState<string>();
   const [lastAdd, setLastAdd] = useState<{ names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }>();
-  const [listening, setListening] = useState(false);
-  const [speechError, setSpeechError] = useState<string>();
-  const canSpeak = useMemo(() => speechSupported(), []);
-  const recRef = useRef<SpeechRecognizer>();
   const onAddRef = useRef(onAdd);
   onAddRef.current = onAdd;
 
@@ -71,47 +68,20 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
     setText('');
   }
 
-  function stopListening() {
-    recRef.current?.stop();
-    recRef.current = undefined;
-    setListening(false);
-  }
+  const voice = useVoiceMic({
+    onFinal: (transcript) => {
+      const names = splitSpokenItems(transcript);
+      if (!names.length) return;
+      add(names, 'list');
+      setText('');
+    },
+    onInterim: (transcript) => setText(transcript.trim()),
+  });
 
-  function toggleMic() {
-    if (listening) {
-      stopListening();
-      return;
-    }
-    setSpeechError(undefined);
-    setBrowse(undefined);
-    const rec = createSpeechRecognizer({
-      onFinal: (transcript) => {
-        const names = splitSpokenItems(transcript);
-        if (!names.length) return;
-        add(names, 'list');
-        setText('');
-      },
-      onInterim: (transcript) => {
-        setText(transcript.trim());
-      },
-      onError: (error) => {
-        setSpeechError(error === 'not-allowed' ? 'Microphone permission denied.' : 'Couldn’t hear that — try again.');
-        stopListening();
-      },
-    });
-    if (!rec) {
-      setSpeechError('Voice isn’t available on this device.');
-      return;
-    }
-    recRef.current = rec;
-    setListening(true);
-    rec.start();
+  function close() {
+    voice.stop();
+    onClose();
   }
-
-  useEffect(() => () => {
-    recRef.current?.stop();
-    recRef.current = undefined;
-  }, []);
 
   const row = (p: Product) => {
     const waiting = onList.has(p.id);
@@ -133,45 +103,43 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   };
 
   return (
-    <div className="sheet-backdrop add-backdrop" onClick={() => { stopListening(); onClose(); }}>
+    <div className="sheet-backdrop add-backdrop" onClick={close}>
       <div className="sheet add-sheet" role="dialog" aria-label={`Add to ${listName}`} onClick={(e) => e.stopPropagation()}>
         <div className="add-sheet-head">
           <h2>Add to “{listName}”</h2>
-          <button className="btn primary" onClick={() => { stopListening(); onClose(); }}>Done</button>
+          <button className="btn primary" onClick={close}>Done</button>
         </div>
         <form className="add-row" onSubmit={(e) => { e.preventDefault(); addFromBox(typed, 'list'); }}>
           <input
             value={text}
-            onChange={(e) => { setText(e.target.value); if (e.target.value) setBrowse(undefined); }}
-            placeholder={canSpeak ? 'Type or speak an item' : 'Type an item, or several with commas'}
+            onChange={(e) => { setText(e.target.value); if (e.target.value) setBrowse(undefined); voice.setError(undefined); }}
+            placeholder="Type or speak an item"
             aria-label="Item to add"
             autoComplete="off"
             enterKeyHint="done"
             autoFocus
           />
-          {canSpeak && (
-            <button
-              type="button"
-              className={listening ? 'mic listening' : 'mic'}
-              aria-label={listening ? 'Stop listening' : 'Add by voice'}
-              aria-pressed={listening}
-              onClick={toggleMic}
-            >
-              {listening ? '⏹' : '🎤'}
-            </button>
-          )}
+          <button
+            type="button"
+            className={voice.listening ? 'mic listening' : 'mic'}
+            aria-label={voice.listening ? 'Stop listening' : 'Add by voice'}
+            aria-pressed={voice.listening}
+            onClick={() => { setBrowse(undefined); voice.toggle(); }}
+          >
+            {voice.listening ? '⏹' : '🎤'}
+          </button>
           <button type="submit" disabled={!typed}>+ List</button>
         </form>
         <p className="muted small add-sheet-hint">
-          {speechError
-            ? speechError
-            : listening
+          {voice.error
+            ? voice.error
+            : voice.listening
               ? <>Listening… say an item, pause to add. Commas add several.</>
               : typed
                 ? <>Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
                 : again.length > 0 && browse === undefined
                   ? null
-                  : <>Browse by category, or type{canSpeak ? ' / speak' : ''} above. The list updates behind this panel.</>}
+                  : <>Browse by category, or type / speak above. The list updates behind this panel.</>}
         </p>
 
         {typed ? (
