@@ -343,11 +343,12 @@ function ProductList({
   }
 
   const voice = useVoiceMic({
+    stopOnFinal: true,
     onFinal: (transcript) => {
       const names = splitSpokenItems(transcript);
       if (!names.length) return;
-      // Speaking always stocks the active list (same as checking “Add to …”).
-      addNames(names.join(', '), true);
+      // Fill for review; matching items stay listed underneath.
+      setQuery(names.join(', '));
     },
     onInterim: (transcript) => setQuery(transcript.trim()),
   });
@@ -452,11 +453,11 @@ function ProductList({
             {voice.error
               ? voice.error
               : voice.listening
-                ? 'Listening… pause to add to your list.'
+                ? 'Listening… pause to fill the box, then pick or add.'
                 : q.includes(',')
                   ? 'Enter adds each name.'
                   : q
-                    ? (catalog.exact(q) ? 'Already in your items.' : `Enter adds “${q}”.`)
+                    ? (catalog.exact(q) ? 'Already in your items — open or add below.' : `Enter adds “${q}”.`)
                     : selecting
                       ? 'Tap items to select.'
                       : 'Swipe an item for shortcuts.'}
