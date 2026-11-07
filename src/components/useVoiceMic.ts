@@ -8,6 +8,8 @@ import { createSpeechRecognizer, speechSupported, type SpeechRecognizer } from '
 export function useVoiceMic(opts: {
   onFinal: (transcript: string) => void;
   onInterim?: (transcript: string) => void;
+  /** Stop after a final result so the user can review the filled text. */
+  stopOnFinal?: boolean;
 }) {
   const [listening, setListening] = useState(false);
   const [error, setError] = useState<string>();
@@ -15,8 +17,10 @@ export function useVoiceMic(opts: {
   const recRef = useRef<SpeechRecognizer>();
   const onFinalRef = useRef(opts.onFinal);
   const onInterimRef = useRef(opts.onInterim);
+  const stopOnFinalRef = useRef(opts.stopOnFinal);
   onFinalRef.current = opts.onFinal;
   onInterimRef.current = opts.onInterim;
+  stopOnFinalRef.current = opts.stopOnFinal;
 
   function stop() {
     recRef.current?.stop();
@@ -35,7 +39,10 @@ export function useVoiceMic(opts: {
       return;
     }
     const rec = createSpeechRecognizer({
-      onFinal: (t) => onFinalRef.current(t),
+      onFinal: (t) => {
+        onFinalRef.current(t);
+        if (stopOnFinalRef.current) stop();
+      },
       onInterim: (t) => onInterimRef.current?.(t),
       onError: (err) => {
         setError(err === 'not-allowed' ? 'Microphone permission denied.' : 'Couldn’t hear that — try again.');

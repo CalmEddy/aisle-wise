@@ -12,7 +12,8 @@ import { useVoiceMic } from './useVoiceMic';
  * Compact add composer: search (commas for several), or browse by category.
  * Docks at the bottom so the shopping list stays visible and updates as you add.
  * Stays open for more; Undo last undoes the most recent add.
- * Mic listens and adds on pause / commas when the browser exposes speech.
+ * Mic fills the box for review; matching catalog rows (and “On your list”)
+ * appear underneath so you can pick or tap + List.
  */
 export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose }: {
   listName: string;
@@ -69,13 +70,17 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   }
 
   const voice = useVoiceMic({
+    stopOnFinal: true,
     onFinal: (transcript) => {
       const names = splitSpokenItems(transcript);
       if (!names.length) return;
-      add(names, 'list');
-      setText('');
+      setText(names.join(', '));
+      setBrowse(undefined);
     },
-    onInterim: (transcript) => setText(transcript.trim()),
+    onInterim: (transcript) => {
+      setText(transcript.trim());
+      setBrowse(undefined);
+    },
   });
 
   function close() {
@@ -134,9 +139,9 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           {voice.error
             ? voice.error
             : voice.listening
-              ? <>Listening… say an item, pause to add. Commas add several.</>
+              ? <>Listening… say an item, then pause to review.</>
               : typed
-                ? <>Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
+                ? <>Pick a match below, or Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
                 : again.length > 0 && browse === undefined
                   ? null
                   : <>Browse by category, or type / speak above. The list updates behind this panel.</>}
