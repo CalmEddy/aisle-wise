@@ -78,7 +78,7 @@ export function StoreSheet({ layouts, activeId, here, locating, listTotals, onPi
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New store, e.g. Kroger Main St" aria-label="New store name" />
           <button type="submit">＋ Here</button>
         </form>
-        <p className="muted small">Next, pick what kind of store it is (or start blank): it learns where things are as you shop{here ? ', and remembers where it is' : ''}.</p>
+        <p className="muted small">Next, start from a typical supermarket layout (you can change that). It learns where things are as you shop{here ? ', and remembers where it is' : ''}.</p>
 
         {here && active && (activeHere === undefined || activeHere > AT_STORE_METRES) && (
           <button className="btn wide" onClick={() => { onSaveHere(); onClose(); }}>📍 I’m at {active.name} – remember it’s here</button>

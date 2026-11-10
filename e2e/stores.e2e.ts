@@ -8,7 +8,7 @@ test('a new store where you stand is picked again when you come back', async ({ 
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill('Kroger Main St');
   await page.getByRole('button', { name: '＋ Here' }).click();
-  await page.getByRole('button', { name: 'Create store' }).click(); // as a typical supermarket
+  await page.getByRole('button', { name: 'Create typical store' }).click();
   await expect(page.locator('.store-pick')).toContainText('Kroger Main St');
   const kroger = (await saved<any[]>(page, 'layouts')).find((l) => l.name === 'Kroger Main St');
   expect(kroger.geo).toEqual({ lat: 39.1, lon: -84.5 });
@@ -34,6 +34,7 @@ test('store picker shows list price totals and marks the cheapest store', async 
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill('Aldi');
   await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('button', { name: 'Other layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
   await expect(page.locator('.store-pick')).toContainText('Aldi');
@@ -64,6 +65,7 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   await page.getByRole('button', { name: '＋ Here' }).click();
   const sheet = page.getByRole('dialog', { name: 'Start the map' });
   await expect(sheet.getByRole('radio', { name: /Typical supermarket/ })).toHaveAttribute('aria-checked', 'true');
+  await sheet.getByRole('button', { name: 'Other layouts or blank…' }).click();
   await sheet.getByRole('radio', { name: /Small store/ }).click();
   await expect(sheet.locator('input[type=number]')).toHaveValue('7');
   await sheet.getByRole('button', { name: 'More Aisles' }).click();
@@ -79,5 +81,7 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   await expect(row(page, 'Milk')).toBeVisible();
   await expect(page.locator('svg.map .place.guess')).not.toHaveCount(0);
   await tick(page, 'Milk');
-  await expect(page.locator('.where-bar')).toBeVisible();
+  // Template dairy home is a clear guess → quiet save (Change opens the bar).
+  await expect(page.locator('.toast')).toContainText(/Milk: saved at/i);
+  await expect(page.locator('.where-bar')).toHaveCount(0);
 });

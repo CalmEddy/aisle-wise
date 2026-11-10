@@ -143,8 +143,8 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
               : typed
                 ? <>Pick a match below, or Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
                 : again.length > 0 && browse === undefined
-                  ? null
-                  : <>Browse by category, or type / speak above. The list updates behind this panel.</>}
+                  ? <span className="add-sheet-hint-extra">＋ List queues it · 🛒 means you’re holding it (checked off).</span>
+                  : <>Browse by category, or type / speak above. ＋ List queues it · 🛒 means you’re holding it. The list updates behind this panel.</>}
         </p>
 
         {typed ? (

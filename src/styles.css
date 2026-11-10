@@ -991,6 +991,9 @@ main { padding-bottom: 110px; }
 
 /* ---- Controls on the map ---- */
 .map-wrap { position: relative; }
+.you-at { margin: 4px 2px 0; font-weight: 600; }
+.danger-link { color: var(--danger); align-self: flex-start; margin-top: 6px; padding: 4px 0; }
+.add-sheet-hint-extra { display: block; }
 .map-tools {
   position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 4px; align-items: stretch;
   padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { brushSegments, paintStep, rekeyInto, type Brush } from './brush';
 import { Floor } from './floor';
 import { Catalog } from './catalog';
-import { moveHere, pickUp, shelvesAcross } from './build';
+import { pickUp, shelvesAcross } from './build';
 import type { Shelf, StoreLayout } from './types';
 
 const store = (places: StoreLayout['places'] = [], w = 20, h = 20): StoreLayout =>
@@ -136,18 +136,15 @@ describe('which side was it on?', () => {
     expect(shelvesAcross(l, { x: 5, y: 12 }, 1)).toHaveLength(0);
   });
 
-  it('asks on pick-up, then saves the item on the chosen side', () => {
+  it('auto-picks a side on pick-up between shelves (no ask)', () => {
     const l = painted();
     const catalog = new Catalog([], []);
     const state = { items: [], products: [], layout: l, catalog };
     const r = pickUp(state, 'Jam', undefined, { x: 5, y: 12 }, 'shelf', false, 2);
-    expect(r.outcome.kind).toBe('chooseSide');
-    expect(r.layout).toBe(l);
+    expect(r.outcome.kind).toBe('built');
     expect(r.items[0].done).toBe(true);
-    const right = r.outcome.kind === 'chooseSide' ? r.outcome.options[1].shelfId : '';
-    const placed = moveHere({ products: r.products, layout: r.layout, catalog: new Catalog(r.products, []) }, r.products[0].id, { x: 5, y: 12 }, { onShelf: right })!;
-    expect(placed.products[0].locations?.s?.startsWith(right)).toBe(true);
-    // Without a reach (not walking an aisle) it doesn't ask.
+    expect(r.products[0].locations?.s).toBeTruthy();
+    // Without a reach it still builds on the nearest shelf.
     expect(pickUp(state, 'Jam', undefined, { x: 5, y: 12 }).outcome.kind).toBe('built');
   });
 });

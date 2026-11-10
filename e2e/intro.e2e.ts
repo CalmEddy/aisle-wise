@@ -6,7 +6,7 @@ test('first visit: a short intro, straight into picking a store; not shown again
   await page.reload();
   const intro = page.getByRole('dialog', { name: 'How Aisle Wise works' });
   await expect(intro).toContainText('Add what you need');
-  await expect(intro).toContainText('Pick your store');
+  await expect(intro).toContainText('Add your store');
   await intro.getByRole('button', { name: 'I’m at a store now' }).click();
   await expect(page.locator('.store-sheet')).toBeVisible();
   await page.locator('.store-sheet').getByRole('button', { name: 'Close' }).click();
