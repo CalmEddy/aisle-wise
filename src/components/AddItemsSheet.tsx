@@ -8,6 +8,9 @@ import { splitSpokenItems } from '../core/speech';
 import type { Product } from '../core/types';
 import { useVoiceMic } from './useVoiceMic';
 
+/** A past purchase chip: product plus an optional frequency cue. */
+export type BuyAgainChip = { product: Product; cue?: 'due' | 'often' };
+
 /**
  * Compact add composer: search (commas for several), or browse by category.
  * Docks at the bottom so the shopping list stays visible and updates as you add.
@@ -15,7 +18,7 @@ import { useVoiceMic } from './useVoiceMic';
  * Mic fills the box for review; matching catalog rows (and “On your list”)
  * appear underneath so you can pick or tap + List.
  */
-export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose }: {
+export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText, iconOf, onAdd, buyAgain = [], lastTripNames = [], onUndo, onClose }: {
   listName: string;
   catalog: Catalog;
   /** Master-list items already waiting on the list. */
@@ -27,11 +30,17 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   /** Adds names to the list or cart. Returns what happened (for Undo). */
   onAdd: (names: string[], mode: 'list' | 'cart') => QuickAddResult | undefined;
   /** Things bought before, best first (shown before anything is typed). */
-  buyAgain?: Product[];
+  buyAgain?: BuyAgainChip[];
+  /** Names from the last completed trip at this store (one-tap restock). */
+  lastTripNames?: string[];
   onUndo: (snapshot: QuickAddResult['snapshot']) => void;
   onClose: () => void;
 }) {
-  const again = buyAgain.filter((p) => !onList.has(p.id)).slice(0, 16);
+  const again = buyAgain.filter((c) => !onList.has(c.product.id)).slice(0, 16);
+  const tripRestock = lastTripNames.filter((n) => {
+    const p = catalog.exact(n) ?? catalog.match(n);
+    return !p || !onList.has(p.id);
+  });
   const [text, setText] = useState('');
   const [browse, setBrowse] = useState<string>();
   const [lastAdd, setLastAdd] = useState<{ names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }>();
@@ -142,7 +151,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
               ? <>Listening… say an item, then pause to review.</>
               : typed
                 ? <>Pick a match below, or Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
-                : again.length > 0 && browse === undefined
+                : (again.length > 0 || tripRestock.length > 0) && browse === undefined
                   ? <span className="add-sheet-hint-extra">＋ List queues it · 🛒 means you’re holding it (checked off).</span>
                   : <>Browse by category, or type / speak above. ＋ List queues it · 🛒 means you’re holding it. The list updates behind this panel.</>}
         </p>
@@ -164,16 +173,27 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           </ul>
         ) : (
           <>
-            {again.length > 0 && browse === undefined && (
+            {(tripRestock.length > 0 || again.length > 0) && browse === undefined && (
               <section className="buy-again" aria-label="Buy again">
-                <h3 className="muted small">Buy again · tap to add</h3>
-                <div className="chips again-scroll">
-                  {again.map((p) => (
-                    <button key={p.id} className="chip again" onClick={() => add([p.name], 'list')}>
-                      <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
-                    </button>
-                  ))}
-                </div>
+                {tripRestock.length > 0 && (
+                  <button type="button" className="btn wide last-trip" onClick={() => add(tripRestock, 'list')}>
+                    Last trip · add all ({tripRestock.length})
+                  </button>
+                )}
+                {again.length > 0 && (
+                  <>
+                    <h3 className="muted small">Buy again · tap to add</h3>
+                    <div className="chips again-scroll">
+                      {again.map(({ product: p, cue }) => (
+                        <button key={p.id} className={`chip again${cue ? ` cue-${cue}` : ''}`} onClick={() => add([p.name], 'list')}>
+                          <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
+                          {cue === 'due' && <span className="again-cue">due</span>}
+                          {cue === 'often' && <span className="again-cue">often</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <h3 className="muted small">Browse by category</h3>
               </section>
             )}

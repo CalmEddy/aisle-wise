@@ -121,10 +121,37 @@ test('buy again: past trips at the top of the add window, one tap adds', async (
   await page.getByRole('button', { name: 'Add items' }).first().click();
   const chips = page.locator('.buy-again .chip');
   await expect(chips.first()).toContainText('Milk');
+  // Frequent / overdue buys get a short cue on the chip.
+  await expect(chips.filter({ hasText: 'Milk' }).locator('.again-cue')).toHaveText(/due|often/);
   await chips.filter({ hasText: 'Milk' }).click();
   await expect(chips.filter({ hasText: 'Milk' })).toHaveCount(0);
   await expect(page.locator('.added-strip')).toContainText('Milk');
   expect(await toastText(page)).not.toContain('Error');
+});
+
+test('empty list: Shop last trip restocks with Undo', async ({ page }) => {
+  const ok = noPageErrors(page);
+  const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
+  await fresh(page, {
+    trips: [t(1000, ['Milk', 'Bread', 'Eggs']), t(2000, ['Apples', 'Pasta'])],
+    items: [],
+    display: { noAskStores: ['demo'] },
+  });
+  await expect(page.locator('.empty')).toContainText('Your list is empty');
+  await page.getByRole('button', { name: /Shop last trip · 2 items/ }).click();
+  await expect(page.locator('.toast')).toContainText(/Added 2 from last trip/);
+  await expect(row(page, 'Apples')).toBeVisible();
+  await expect(row(page, 'Pasta')).toBeVisible();
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.locator('.empty')).toContainText('Your list is empty');
+  // Add sheet also offers last-trip restock.
+  await page.getByRole('button', { name: '＋ Add items' }).click();
+  await page.getByRole('button', { name: /Last trip · add all \(2\)/ }).click();
+  await expect(page.locator('.added-strip')).toContainText(/Apples|Pasta/);
+  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
+  await expect(row(page, 'Apples')).toBeVisible();
+  await expect(row(page, 'Pasta')).toBeVisible();
+  ok();
 });
 
 test('the toggle strip is usable, and the map can be shown whole', async ({ page }) => {

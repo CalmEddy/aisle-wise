@@ -23,7 +23,7 @@ import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, moveHere, nextLabel, pickUp, rekeyResized, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle, selectionIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
-import { recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
+import { lastCompletedTrip, recordPick, startTrip, TRIP_GAP, unrecordPick, usuals, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { listTotals, setStorePrice } from './core/prices';
 import { cutAisles, cutUnder, renumberAisles, type CutNumbers } from './core/cut';
@@ -485,6 +485,23 @@ export default function App() {
   const doorAsk = useMemo(() => doorQuestion(layout, trips, catalog), [layout, trips, catalog]);
   /** Things bought before, for "Buy again" in the add window. */
   const buyAgain = useMemo(() => usuals(trips), [trips]);
+  /** Names from the last completed trip here (empty-list / add-sheet restock). */
+  const lastTripNames = useMemo(
+    () => lastCompletedTrip(trips, layout.id)?.picks.map((p) => p.name) ?? [],
+    [trips, layout.id],
+  );
+  /** Catalog chips for Items-tab add (Shop builds the same from usuals). */
+  const buyAgainChips = useMemo(() => {
+    const out: { product: import('./core/types').Product; cue?: 'due' | 'often' }[] = [];
+    for (const u of buyAgain) {
+      const p = (u.productId && catalog.productById.get(u.productId)) || catalog.match(u.name);
+      if (p && !out.some((c) => c.product.id === p.id)) {
+        const cue = u.due ? 'due' as const : u.count >= 3 ? 'often' as const : undefined;
+        out.push({ product: p, ...(cue && { cue }) });
+      }
+    }
+    return out;
+  }, [buyAgain, catalog]);
   /** What all the trips here say (including one in progress): for the one question. */
   // The store as the app reads it: each place's categories include what's put there (see holdings.ts).
   const shownLayout = useMemo(() => withHoldings(layout, products, new Map(categories.map((c) => [c.id, c.name]))), [layout, products, categories]);
@@ -1363,6 +1380,7 @@ export default function App() {
           key={listId}
           listsOpen={listsOpen}
           usuals={buyAgain}
+          lastTripNames={lastTripNames}
           mapChanges={mapChanges[layout.id] ?? []}
           onSeenChange={seenChange}
           onListsClose={() => setListsOpen(false)}
@@ -1476,6 +1494,8 @@ export default function App() {
           }}
           onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           quickAddTo={quickAddTo}
+          buyAgain={buyAgainChips}
+          lastTripNames={lastTripNames}
         />
       )}
       {introOpen && (

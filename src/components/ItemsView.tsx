@@ -56,6 +56,10 @@ interface Props {
   onListIds: (listId: string) => Set<string>;
   /** Add names onto any list without forcing a switch. */
   quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart') => QuickAddResult;
+  /** Things bought before (same chips as Shop add). */
+  buyAgain?: import('./AddItemsSheet').BuyAgainChip[];
+  /** Names from the last completed trip at this store. */
+  lastTripNames?: string[];
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -98,6 +102,8 @@ export function ItemsView(props: Props) {
           whereText={(p) => whereText(p, props.layout, props.catalog)}
           iconOf={(id) => lookOf(id)?.icon}
           onAdd={(names, mode) => props.quickAddTo(addingFor, names, mode)}
+          buyAgain={props.buyAgain}
+          lastTripNames={props.lastTripNames}
           onUndo={props.undo}
           onClose={() => setAddingFor(undefined)}
         />

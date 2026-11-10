@@ -27,7 +27,7 @@ import { PlacePanel, clamp, handlePoint } from './PlacePanel';
 import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
-import { AddItemsSheet } from './AddItemsSheet';
+import { AddItemsSheet, type BuyAgainChip } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { WhereBar, nextAisles, type MapSpot } from './WhereBar';
 import { orderOf } from '../core/taxonomy';
@@ -75,6 +75,8 @@ interface Props {
   /** Show the how-it-works hint (toggled by ⓘ in the header). */
   /** Things bought before, most likely wanted again first. */
   usuals: Usual[];
+  /** Names from the last completed trip at this store (one-tap restock). */
+  lastTripNames: string[];
   /** Parts of the map just added or changed (outlined). */
   mapChanges: string[];
   /** A changed part has been looked at (tapped in Edit map). */
@@ -807,13 +809,30 @@ export function ShoppingView(props: Props) {
   );
   /** "Buy again": things bought before that are in the master list, best first. */
   const buyAgain = useMemo(() => {
-    const out: Product[] = [];
+    const out: BuyAgainChip[] = [];
     for (const u of props.usuals) {
       const p = (u.productId && catalog.productById.get(u.productId)) || catalog.match(u.name);
-      if (p && !out.includes(p)) out.push(p);
+      if (p && !out.some((c) => c.product.id === p.id)) {
+        const cue = u.due ? 'due' as const : u.count >= 3 ? 'often' as const : undefined;
+        out.push({ product: p, ...(cue && { cue }) });
+      }
     }
     return out;
   }, [props.usuals, catalog]);
+  const lastTripRestock = useMemo(() => props.lastTripNames.filter((n) => {
+    const p = catalog.exact(n) ?? catalog.match(n);
+    return !p || !onList.has(p.id);
+  }), [props.lastTripNames, catalog, onList]);
+
+  function restockLastTrip() {
+    if (!lastTripRestock.length) return;
+    const result = props.quickAdd(lastTripRestock, 'list');
+    setToast({
+      ...result,
+      mode: 'list',
+      note: `Added ${lastTripRestock.length} from last trip.`,
+    });
+  }
 
   const done = items.filter((i) => i.done);
   // Everything's in the cart (apart from things this store doesn't sell).
@@ -1340,7 +1359,12 @@ export function ShoppingView(props: Props) {
             <p className="muted">
               Add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
-            <button className="btn primary" onClick={() => setAddingFor(props.lists.current)}>＋ Add items</button>
+            {lastTripRestock.length > 0 && (
+              <button className="btn primary" onClick={restockLastTrip}>
+                Shop last trip · {lastTripRestock.length} item{lastTripRestock.length === 1 ? '' : 's'}
+              </button>
+            )}
+            <button className={lastTripRestock.length > 0 ? 'btn' : 'btn primary'} onClick={() => setAddingFor(props.lists.current)}>＋ Add items</button>
             <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
           </div>
         )}
@@ -1588,6 +1612,7 @@ export function ShoppingView(props: Props) {
           iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
           onAdd={addNames}
           buyAgain={buyAgain}
+          lastTripNames={props.lastTripNames}
           onUndo={props.undo}
           onClose={() => setAddingFor(undefined)}
         />
