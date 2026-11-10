@@ -33,11 +33,23 @@ export async function tick(page: Page, name: string) {
   await row(page, name).getByRole('checkbox').click();
 }
 
+/** Opens Edit map (strip when the list is empty; otherwise under View settings). */
+export async function enterBuildMode(page: Page) {
+  const direct = page.getByRole('button', { name: 'Edit map', exact: true });
+  if (await direct.count()) {
+    await direct.click();
+    return;
+  }
+  await page.getByRole('button', { name: 'View settings' }).click();
+  await page.getByRole('button', { name: 'Build mode' }).click();
+}
+
 /** Starts a new, empty store right here. */
 export async function newStore(page: Page, name: string) {
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill(name);
   await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('button', { name: 'Other layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
 }

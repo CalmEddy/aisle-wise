@@ -587,16 +587,24 @@ export function pickUp(
   const savedKey = product.locations?.[layout.id];
   const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
   const conflict = !!saved && saved.placeId !== plan.placeId;
-  // On open floor with shelves lined up further away: let the shopper choose.
-  // Standing between two shelves (and the item has no saved place here): ask which side.
+  // Between two shelves: auto-pick the nearer (or the one already stocking this kind).
+  // Within REACH past a shelf end, planBuild already extends; farther away → new shelf
+  // (no quiz). Only conflicts still ask (keep vs move).
   const sides = !conflict && !saved && reach > 0 && plan.action !== 'inArea' ? shelvesAcross(layout, at, reach) : [];
-  const options = !conflict && !sides.length && (plan.action === 'create' || plan.action === 'createArea') ? extendCandidates(layout, at) : [];
+
+  let applied: BuildPlan | undefined;
+  if (!conflict && sides.length) {
+    const sideId = preferSide(layout, at, sides, category?.id);
+    applied = planChoice(layout, at, category, { onShelf: sideId }, double);
+  } else if (!conflict && plan.action !== 'blocked') {
+    applied = plan;
+  }
 
   let next = layout;
-  if (!conflict && !options.length && !sides.length && plan.action !== 'blocked') {
-    next = plan.layout;
-    products = rekeyAll(products, layout.id, plan.rekey).map((p) => (p.id === pid
-      ? { ...p, locations: { ...p.locations, [layout.id]: plan.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
+  if (applied && applied.action !== 'blocked' && applied.spotKey) {
+    next = applied.layout;
+    products = rekeyAll(products, layout.id, applied.rekey).map((p) => (p.id === pid
+      ? { ...p, locations: { ...p.locations, [layout.id]: applied!.spotKey! }, notAt: p.notAt?.filter((id) => id !== layout.id) }
       : p));
   }
 
@@ -607,14 +615,30 @@ export function pickUp(
 
   const outcome: PickUpOutcome = conflict
     ? { kind: 'conflict', productId: pid, itemName, savedKey: savedKey! }
-    : sides.length
-      ? { kind: 'chooseSide', productId: pid, itemName, at, options: sides }
-    : options.length
-      ? { kind: 'choose', productId: pid, itemName, at, options }
-    : plan.action === 'blocked'
+    : !applied || applied.action === 'blocked'
       ? { kind: 'blocked', itemName, productId: pid }
-      : { kind: 'built', action: plan.action, placeId: plan.placeId!, label: plan.label, itemName, productId: pid, matched: plan.matched, pairId: plan.pairId };
+      : { kind: 'built', action: applied.action, placeId: applied.placeId!, label: applied.label, itemName, productId: pid, matched: applied.matched, pairId: applied.pairId };
   return { layout: next, products, items: nextItems, outcome };
+}
+
+/** Nearer shelf across the walkway, preferring one that already stocks this category. */
+function preferSide(l: StoreLayout, p: Point, sides: SideOption[], categoryId?: string): string {
+  if (categoryId) {
+    const stocked = sides.find((s) => {
+      const pl = l.places.find((x) => x.id === s.shelfId);
+      return !!pl && 'categories' in pl && (pl.categories ?? []).some((c) => c === categoryId || c.startsWith(`${categoryId}`));
+    });
+    if (stocked) return stocked.shelfId;
+  }
+  let best = sides[0]!;
+  let bestD = Infinity;
+  for (const s of sides) {
+    const pl = l.places.find((x): x is Shelf => x.id === s.shelfId && x.kind === 'shelf');
+    if (!pl) continue;
+    const d = pl.orientation === 'vertical' ? Math.abs(pl.x - p.x) : Math.abs(pl.y - p.y);
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  return best.shelfId;
 }
 
 /** Places an item picked up at `at` (after a conflict or a choice): build there and save its spot. */

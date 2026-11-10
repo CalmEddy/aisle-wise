@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { cornerStore, dragMap, fresh, noPageErrors, saved, tapMap } from './helpers';
+import { cornerStore, dragMap, enterBuildMode, fresh, noPageErrors, saved, tapMap } from './helpers';
 
 const layout = async (page: Page, name?: string) => {
   const all = await saved<any[]>(page, 'layouts');
@@ -14,10 +14,11 @@ async function openSheet(page: Page, tab?: string) {
 
 async function blankStore(page: Page) {
   await fresh(page);
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await openSheet(page, 'Store');
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'New store' }).click();
+  await page.getByRole('button', { name: 'Other layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
   await page.locator('.toast .icon').click().catch(() => {});
@@ -46,7 +47,7 @@ test('aisle brush: paints both sides with categories and an aisle label, and bac
 
 test('a shelf can be a fridge or freezer, shown on the map', async ({ page }) => {
   await fresh(page);
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.locator('svg.map g.place.shelf').nth(3).click({ force: true });
   await openSheet(page);
   await page.getByRole('button', { name: '❄ Freezer' }).click();
@@ -56,7 +57,7 @@ test('a shelf can be a fridge or freezer, shown on the map', async ({ page }) =>
 
 test('aisle labels: tap to edit, rename, remove with undo', async ({ page }) => {
   await fresh(page, cornerStore());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.locator('svg.map .aisle-label', { hasText: /AISLE 3/i }).locator('text').first().click({ force: true });
   await openSheet(page);
   await expect(page.locator('.aisle-edit h3')).toHaveText('Aisle label');
@@ -81,7 +82,7 @@ test('selecting an aisle selects its shelves; it moves as one, and turns when th
     }],
     activeLayout: 's1',
   });
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.locator('svg.map .aisle-label text').first().click({ force: true });
   await expect(page.locator('svg.map g.place.selected')).toHaveCount(2);
   await expect(page.locator('.aisle-group-outline')).toHaveCount(1);
@@ -102,7 +103,7 @@ test('selecting an aisle selects its shelves; it moves as one, and turns when th
 
 test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page }) => {
   await fresh(page, cornerStore());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   // The main five tools show first; the rest are under "More tools" (remembered).
   await expect(page.locator('.tool-icons .chip:not(.more-tools)')).toHaveCount(5);
   await page.getByRole('button', { name: 'More tools' }).click();
@@ -151,7 +152,7 @@ const threeAisles = () => {
 test('select a group of aisles with a box, turn it as one block, then delete it with undo', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page, threeAisles());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await dragMap(page, [12, 10], [19, 11]);
   const tools = page.getByRole('toolbar', { name: 'Change 3 aisles' });
@@ -186,7 +187,7 @@ test('select works without aisle labels: shelves and an area by box, tap one out
   data.layouts[0].aisles = [];
   (data.layouts[0].places as any[]).push({ kind: 'area', id: 'deli', label: 'Deli', x: 24, y: 6, w: 4, h: 3, categories: [] });
   await fresh(page, data);
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   await dragMap(page, [9, 7], [26, 8]);
   await expect(page.getByRole('toolbar', { name: 'Change 6 shelves, 1 area' })).toBeVisible();
@@ -205,7 +206,7 @@ test('select works without aisle labels: shelves and an area by box, tap one out
 
 test('bumping a shelf away from its aisle widens the aisle; it won’t go onto the next one', async ({ page }) => {
   await fresh(page, threeAisles());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.locator('svg.map g.place.shelf').first().click({ force: true }); // a1, the left side of Aisle 1
   const tools = page.getByRole('toolbar', { name: 'Change a1' });
   await tools.getByRole('button', { name: 'Move shelf left' }).click();
@@ -231,7 +232,7 @@ test('bumping a shelf away from its aisle widens the aisle; it won’t go onto t
 test('the editor: map fills the screen, zoom, list in the sheet, undo in the top bar', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page, threeAisles());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   // Map first: most of the screen, no page scrolling.
   const mapH = await page.locator('.build-map').evaluate((e) => e.getBoundingClientRect().height);
   expect(mapH / 760).toBeGreaterThan(0.6);
@@ -261,7 +262,7 @@ test('the editor: map fills the screen, zoom, list in the sheet, undo in the top
 test('make some aisles their own block: side to side, placed on the mini-map, joined back from Store settings', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page, cornerStore());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
   // Aisles 4 and 5 are the leftmost two.
   const l0 = await layout(page);
@@ -289,7 +290,7 @@ test('make some aisles their own block: side to side, placed on the mini-map, jo
 
 test('an area put down over shelves can cut them', async ({ page }) => {
   await fresh(page, threeAisles());
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await page.getByRole('button', { name: 'Open area' }).click();
   await tapMap(page, 15, 10); // a 6 × 4 area over the middle of the aisles
   const l0 = await layout(page);
@@ -316,7 +317,7 @@ test('pieces side by side on a wall swap with one tap, or by dragging one onto a
     products: [{ id: 'steak', name: 'Steak', categoryId: 'meat_beef', locations: { s1: 'meat@0.5,0.5' } }],
   });
   const xs = async () => Object.fromEntries((await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => [p.id, p.x]));
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await tapMap(page, 3, 0);
   await page.getByRole('toolbar', { name: /Change Meat/ }).getByRole('button', { name: 'Move shelf right' }).click();
   await expect.poll(xs).toEqual({ cheese: 1, meat: 4, milk: 10 });
@@ -336,11 +337,12 @@ test('pieces side by side on a wall swap with one tap, or by dragging one onto a
 test('a new store in the editor starts from a default map too', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page);
-  await page.getByRole('button', { name: 'Build mode' }).click();
+  await enterBuildMode(page);
   await openSheet(page, 'Store');
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'New store' }).click();
   const sheet = page.getByRole('dialog', { name: 'Start the map' });
+  await sheet.getByRole('button', { name: 'Other layouts or blank…' }).click();
   await sheet.getByRole('radio', { name: /Discount store/ }).click();
   await sheet.getByRole('button', { name: 'Less Aisles' }).click();
   await sheet.getByRole('button', { name: 'Create store' }).click();

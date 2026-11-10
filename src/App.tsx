@@ -338,13 +338,23 @@ export default function App() {
     if (!gen.enabled) return;
     const model = storeModel(layout, products);
     if (modelKey(model, { ...gen, labels: layout.labels }) === gen.key) return;
-    const after = regenerate({ ...layout, gen }, model);
     // Outline what changed, until the next trip (or it's tapped in Edit map) – but not on a store's
     // first map, where everything is new and outlines would just cover it.
     const first = !layout.places.some((p) => p.id.startsWith('g-'));
-    const changed = first ? [] : changedParts(layout, after);
-    setLayouts((prev) => prev.map((l) => (l.id === layout.id ? after : l)));
-    if (changed.length) setMapChanges((prev) => ({ ...prev, [layout.id]: [...new Set([...(prev[layout.id] ?? []), ...changed])] }));
+    // Merge through prev so a concurrent setGen (door sure, extend, …) isn't stomped by a
+    // regenerate scheduled from the same products/layout tick.
+    let outlined: string[] = [];
+    setLayouts((prev) => prev.map((l) => {
+      if (l.id !== layout.id) return l;
+      const live = l.gen ?? gen;
+      if (!live.enabled) return l;
+      const liveModel = storeModel(l, products);
+      if (modelKey(liveModel, { ...live, labels: l.labels }) === live.key) return l;
+      const after = regenerate({ ...l, gen: live }, liveModel);
+      if (!first) outlined = changedParts(l, after);
+      return after;
+    }));
+    if (outlined.length) setMapChanges((m) => ({ ...m, [layout.id]: [...new Set([...(m[layout.id] ?? []), ...outlined])] }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [products, layout, setLayouts]);
 
@@ -1307,7 +1317,9 @@ export default function App() {
         <div className="title">
           <div className="title-line">
             <h1>Aisle Wise</h1>
-            <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
+            {household.configured && (
+              <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
+            )}
             {view === 'list' && (
               <button className="info-btn" aria-label="How this works" title="How this works" onClick={() => setIntroOpen(true)}>ⓘ</button>
             )}

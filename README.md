@@ -35,8 +35,8 @@ re-orders it as you move.
 5. **Stops** – items on the same shelf or in the same area share one card,
    listed in walking order with where each one is ("near the top"). Items on
    the same square count as one spot (tomato soup and vegetable soup side by
-   side are picked up together). Tap the **sort** control on the list strip to
-   cycle **route → nearest → category → A–Z**. The map shows a dot for each
+   side are picked up together).    Tap the **sort** control on the list strip to
+   cycle **nearest → category → A–Z**. The map shows a dot for each
    item; tap 📍 on an item to pinpoint it with a red pulsing circle.
    On each row you can change **qty** and **rename** inline; tap **⋯** for
    **unit** (each, box, bag, pack…), **price**, note, category, place, or
@@ -50,38 +50,20 @@ re-orders it as you move.
    (or **Move** on the Categories tab) to rename it or put it under a
    different section — e.g. move Nut Butters out of Breakfast & Cereal.
 
-## Build mode: map a store as you shop
+## Mapping as you shop (and Edit map)
 
-Turn on **🛠 Build mode** on the Shop tab. Say where you are (tap the map, or
-use the ← ↑ ↓ → arrows to move a square at a time), then check items off or
-tap 🛒 Cart. The map builds itself around you (`src/core/build.ts`):
+Most of the time you **don’t** draw the store by hand. Add your store from a
+typical layout, then tick items off: when the app has a clear guess it saves
+it (with **Undo** / **Change**); when it isn’t sure it asks “Where was it?”.
+Answers redraw the map (`src/core/generate.ts`). Door and shelf-length
+guesses apply quietly at the end of a trip.
 
-- **On or right beside a shelf** – the item is saved on that shelf, level
-  with you, and its category is added to the shelf.
-- **In an open area** – saved at that spot in the area.
-- **Up to 3 squares past the end of a shelf** (lined up with it) – the shelf
-  is extended to you. Items already on it stay where they physically are.
-- **Lined up with a shelf further away** (a vertical shelf above or below
-  you, or a horizontal one to your left or right, with clear floor between)
-  – the banner asks where the item goes: **Extend Shelf N** for the nearest
-  such shelf in each direction, **New shelf** or **New area**. The item is
-  in your cart either way; **Decide later** leaves its spot unset.
-- **Anywhere else** – a new 3-square shelf is made through your square
-  (trimmed to fit), numbered "Shelf 1", "Shelf 2"…. The banner asks
-  ↕ / ↔ for its direction, and offers **Rename** and **Undo**.
-- An item already saved somewhere else in the store isn't moved without
-  asking (**Keep** / **Move here**).
-- Switch **Build: Shelves | Areas** to make open areas instead: picking up on
-  open floor makes a 3 × 3 area around you (trimmed to fit, numbered "Area 1",
-  "Area 2"…), and picking up within 3 squares outside an area
-  stretches it to include you.
-
-Tap a shelf or area on the map to edit it right there – label, what's on
-it, direction, length, position or delete – just like in the store editor.
-
-Also in Build mode: **+ Area here**, **Turn shelf**, **I'm at the entrance**,
-**I'm at checkout**, and **New store** to start a blank one. Stepping past
-the edge of the map makes the store bigger.
+**🛠 Edit map** (under Shop **⚙** view settings) is for drawing shelves by
+hand while you walk. Check items off or tap 🛒 Cart where you stand; the map
+grows around you (`src/core/build.ts`). Nearby shelves extend automatically;
+only a **Keep / Move here** conflict still asks. Tap a shelf or area to edit
+it. Also: **+ Area here**, **Turn shelf**, entrance / checkout markers, and
+stepping past the edge grows the store.
 
 ## Grocery items and categories
 

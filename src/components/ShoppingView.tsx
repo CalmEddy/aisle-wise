@@ -11,9 +11,8 @@ import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { touchingInLine } from '../core/swap';
-import { pastEnd, type Extension } from '../core/extend';
+import { endKey, pastEnd, type Extension } from '../core/extend';
 import type { HereOption } from '../core/here';
-import { ExtendCard } from './ExtendCard';
 import { TemplatePicker } from './TemplatePicker';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
@@ -30,7 +29,7 @@ import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
-import { WhereBar, type MapSpot } from './WhereBar';
+import { WhereBar, nextAisles, type MapSpot } from './WhereBar';
 import { orderOf } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
@@ -51,7 +50,6 @@ import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves, runsUp, selectionRect } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
-import { DoorCard } from './DoorCard';
 import { DeptWallsSheet } from './DeptWallsSheet';
 import { offerWalls } from '../core/walls';
 import { priceCue } from '../core/prices';
@@ -826,7 +824,6 @@ export function ShoppingView(props: Props) {
   const hereKey = here ? exactKey(here.id, exactSpotAt(here, position.x + 0.5, position.y + 0.5)) : undefined;
   const hereLabel = hereKey ? resolveSpot(hereKey, layout, catalog)?.label : undefined;
 
-
   /** Adds from the add window. Things put in the cart may ask where they are, so those show a toast. */
   function addNames(names: string[], mode: 'list' | 'cart'): QuickAddResult | undefined {
     const targetList = addingFor ?? props.lists.current;
@@ -838,8 +835,7 @@ export function ShoppingView(props: Props) {
     }
     const result = props.quickAddTo(targetList, names, mode, targetList === props.lists.current ? hereKey : undefined);
     if (mode === 'cart') {
-      setToast({ ...result, mode });
-      // Put straight in the cart with no place here: "Where was it?" (the rest wait for later).
+      // Put straight in the cart with no place here: quiet-save a clear guess, else ask.
       const unplaced = result.added.filter((a) => {
         if (!a.itemId || a.savedAt || a.conflict) return false;
         const p = catalog.productById.get(a.productId);
@@ -850,10 +846,21 @@ export function ShoppingView(props: Props) {
         const first = askAtCheckout ? undefined : unplaced[0];
         const rest = askAtCheckout ? unplaced : unplaced.slice(1);
         if (first) {
-          if (whereBarFor) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
-          setWhereBarFor(asItem(first));
+          const item = asItem(first);
+          const auto = autoPlaceFor(item);
+          if (auto) {
+            quietSavePlace(item, auto);
+          } else {
+            setToast({ ...result, mode });
+            if (whereBarFor) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
+            setWhereBarFor(item);
+          }
+        } else {
+          setToast({ ...result, mode });
         }
         if (rest.length) setLaterHere((ids) => [...ids.filter((id) => !rest.some((r) => r.itemId === id)), ...rest.map((r) => r.itemId!)]);
+      } else {
+        setToast({ ...result, mode });
       }
     }
     return result;
@@ -867,8 +874,7 @@ export function ShoppingView(props: Props) {
     }
     setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, done: !i.done } : i)));
     props.where.notePick(item, !item.done);
-    // Nothing saved about where it is in this store yet: ask (when the map already has its kind somewhere,
-    // that's the first, one-tap answer).
+    // Nothing saved about where it is in this store yet: auto-save a clear guess, else ask.
     const ask = needsPlace(item);
     // Only advance the pin to the item when we're not about to ask "Where was it?".
     // Jumping first made "Where I'm standing" save at the item's old/inferred place.
@@ -877,10 +883,67 @@ export function ShoppingView(props: Props) {
     if (!item.done && props.where.ask && ask && askAtCheckout) {
       setLaterHere((ids) => [...ids.filter((id) => id !== item.id), item.id]);
     } else if (!item.done && props.where.ask && ask) {
+      const auto = autoPlaceFor(item);
+      if (auto) {
+        quietSavePlace(item, auto);
+        return;
+      }
       // Not answered the last one? It waits for later; this one takes the bar.
       if (whereBarFor && whereBarFor.id !== item.id) setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
       setWhereBarFor(item);
     }
+  }
+
+  /**
+   * A clear one-tap place: single map spot for this kind, or the aisle the
+   * trail predicts when it matches exactly one map spot. Undefined → ask.
+   */
+  function autoPlaceFor(item: ListItem): MapSpot | undefined {
+    const p = productFor(item, catalog);
+    // Cleared on purpose (testing / "Clear where…"): ask again, don't re-apply the map guess.
+    if (p?.clearedAt?.includes(layout.id) || p?.mapClues?.[layout.id]) return undefined;
+    // Shelf-code stores: keep the one-tap next-shelf chips — don't quiet-save onto a home shelf.
+    if (layout.labels) return undefined;
+    const spots = mapSpotsFor(item);
+    if (spots.length === 1) return spots[0];
+    // One clear home for this kind on the map (e.g. cereal already on aisle 3) — even when
+    // nearby aisles are also offered as chips.
+    if (p?.categoryId) {
+      const home = homeOfKind(p.categoryId);
+      if (home) {
+        const atHome = spots.filter((s) => s.label === home || s.label.startsWith(`${home},`));
+        if (atHome.length === 1) return atHome[0];
+      }
+    }
+    const predicted = nextAisles(aisleTrail)[0];
+    if (!predicted || spots.length < 2) return undefined;
+    const match = spots.filter((s) => s.clue && 'aisle' in s.clue && s.clue.aisle === predicted);
+    return match.length === 1 ? match[0] : undefined;
+  }
+
+  /** Saves a high-confidence place without opening WhereBar; Undo + Change on the toast. */
+  function quietSavePlace(item: ListItem, spot: MapSpot) {
+    if (spot.spot) {
+      const product = productFor(item, catalog);
+      if (!product) return;
+      const snapshot = { items, products: catalog.products };
+      props.setProductLocation(product.id, spot.spot);
+      setToast({
+        snapshot, added: [], mode: 'list',
+        note: `${item.name}: saved at ${spot.label}`,
+        action: { label: 'Change', run: () => setWhereBarFor(item) },
+      });
+      return;
+    }
+    if (!spot.clue) return;
+    const snapshot = props.where.setClue(item, spot.clue);
+    setLastClue(spot.clue);
+    noteTrail(spot.clue);
+    setToast({
+      snapshot, added: [], mode: 'list',
+      note: `${item.name}: saved at ${spot.label}`,
+      action: { label: 'Change', run: () => setWhereBarFor(item) },
+    });
   }
   /** No place of its own here (none saved or answered): worth a "Where was it?", even if the map has its kind. */
   function needsPlace(item: ListItem) {
@@ -908,6 +971,40 @@ export function ShoppingView(props: Props) {
     if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
     if (clue.kind === 'shelf') setShelfTrail((t) => [...t.slice(-5), { section: clue.section, shelf: clue.shelf }]);
   };
+
+  // Trip end: apply clear door / shelf-extend guesses quietly (Undo on the toast).
+  // Wait until the last check-off quiz is done so its toast doesn't overwrite this one.
+  const tripAutoKey = useRef<string>();
+  useEffect(() => {
+    if (!tripDone || whereBarFor) {
+      if (!tripDone) tripAutoKey.current = undefined;
+      return;
+    }
+    const doorGuess = props.where.door?.guess;
+    const due = props.shelves.due[0];
+    const key = `${layout.id}:${doorGuess ?? ''}:${due ? endKey(due.placeId, due.end) : ''}`;
+    if (tripAutoKey.current === key) return;
+    tripAutoKey.current = key;
+    const notes: string[] = [];
+    let snapshot: Snapshot | undefined;
+    if (doorGuess !== undefined) {
+      const s = props.where.setDoor(doorGuess);
+      if (s) {
+        snapshot = s;
+        notes.push('Door set from where trips start');
+      }
+    }
+    if (due) {
+      const s = props.shelves.extend(due);
+      if (s) {
+        snapshot = s;
+        notes.push(`“${due.label}” extended ${due.by} square${due.by === 1 ? '' : 's'} ${due.way}`);
+      }
+    }
+    if (notes.length && snapshot) {
+      setToast({ snapshot, added: [], mode: 'list', note: notes.join(' · ') });
+    }
+  }, [tripDone, whereBarFor, layout.id, props.where, props.shelves]);
   /** The store's sections of labelled shelves (from the map), in order. */
   const storeSections = useMemo(() => [...new Set(layout.places.map((p) => /^g-sec-(.+)-\d+$/.exec(p.id)?.[1]).filter((x): x is string => !!x))].sort(), [layout.places]);
   /** Setting up the store's shelf labels, from a label just typed (and the item it's for). */
@@ -998,11 +1095,6 @@ export function ShoppingView(props: Props) {
   }
 
   const removeWithUndoOne = (item: ListItem) => removeWithUndo([item]);
-  /** Grows a shelf that seems to run further, with Undo. */
-  function extendNow(e: Extension) {
-    const snapshot = props.shelves.extend(e);
-    if (snapshot) setToast({ snapshot, added: [], mode: 'list', note: `“${e.label}” extended ${e.by} square${e.by === 1 ? '' : 's'} ${e.way}.` });
-  }
 
   /**
    * Where the map already has an item's kind of thing (canned goods on 3L, vegetables in Produce): one-tap
@@ -1426,17 +1518,6 @@ export function ShoppingView(props: Props) {
               .filter((l) => l.id !== props.lists.current && (props.lists.counts.get(l.id) ?? 0) > 0)
               .map((l) => ({ id: l.id, name: l.name, toBuy: props.lists.counts.get(l.id) ?? 0 }))}
             onShopList={(id) => props.lists.switchTo(id)}
-            door={props.where.door && (
-              <DoorCard layout={layout} guess={props.where.door.guess}
-                onPick={(f) => {
-                  const snapshot = props.where.setDoor(f);
-                  if (snapshot) setToast({ snapshot, added: [], mode: 'list', note: 'Door moved: the next trip starts there.' });
-                }}
-                onSkip={() => props.where.setDoor(undefined)} />
-            )}
-            extend={props.shelves.due[0] && (
-              <ExtendCard due={props.shelves.due[0]} onExtend={() => extendNow(props.shelves.due[0])} onKeep={() => props.shelves.keep(props.shelves.due[0])} />
-            )}
             walls={offerWalls(layout) ? () => setWallsOpen('trip') : undefined}
           />
         )}
@@ -1513,15 +1594,33 @@ export function ShoppingView(props: Props) {
       )}
 
       {!building && items.length === 0 && (
-        <DisplayToggles display={props.display} setDisplay={props.setDisplay} show={['buildMode']} lead={addButton} />
+        <DisplayToggles
+          display={props.display}
+          setDisplay={props.setDisplay}
+          show={[]}
+          lead={(
+            <>
+              {addButton}
+              <button type="button" className="toggle" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
+                aria-label="Edit map" title="Draw the store map by hand">🛠 Edit map</button>
+            </>
+          )}
+        />
       )}
       {!building && items.length > 0 && (
         <>
-          {layout.places.length > 0 && <div className="map-wrap">{storeMap}</div>}
+          {layout.places.length > 0 && (
+            <div className="map-wrap">
+              {storeMap}
+              {hereLabel && (
+                <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
+              )}
+            </div>
+          )}
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
-            show={['listCategories', 'listQty', 'listPrice', 'listLocation', 'buildMode']}
+            show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
             offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
             lead={(
               <>
@@ -1537,10 +1636,6 @@ export function ShoppingView(props: Props) {
                 )}
                 <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
                   aria-label="View settings" title="View settings">⚙</button>
-                {!building && (
-                  <button type="button" className="toggle icon-only action dev-clear" onClick={clearAllWhere}
-                    aria-label="Clear all locations (testing)" title="Clear where every item on the list is, at this store (testing)">⊘</button>
-                )}
               </>
             )}
           />
@@ -1550,10 +1645,13 @@ export function ShoppingView(props: Props) {
               <DisplayToggles
                 display={props.display}
                 setDisplay={props.setDisplay}
-                show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons', 'buildMode']}
                 offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
               />
-              <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons</span>
+              <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons · 🛠 Edit map</span>
+              <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
+                Clear all locations at this store
+              </button>
             </div>
           )}
         </>
@@ -1906,7 +2004,7 @@ export function ShoppingView(props: Props) {
           onClose={() => setListOpen(false)}
         />
       )}
-      {toast && !drag && !note && !whereBarFor && !(placing && !whereFor && !adding && !listOpen && !menuFor && (!askAtCheckout || tripDone)) && (
+      {toast && !drag && !note && !whereBarFor && !(placing && !tripDone && !whereFor && !adding && !listOpen && !menuFor && !askAtCheckout) && (
         <ToastBar
           toast={toast}
           layout={layout}
