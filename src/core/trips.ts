@@ -23,6 +23,8 @@ export const TRIP_GAP = 3 * 60 * 60 * 1000;
 /** Trips kept per store. */
 export const TRIPS_KEPT = 30;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /** Adds a check-off to the store's current trip, starting a new trip after a long gap. */
 export function recordPick(trips: Trip[], layoutId: string, pick: Pick): Trip[] {
   const mine = trips.filter((t) => t.layoutId === layoutId);
@@ -67,14 +69,27 @@ export interface Usual {
   count: number;
   /** When it was last bought (ms). */
   last: number;
+  /** Median days between buys when bought at least twice. */
+  intervalDays?: number;
+  /** Overdue relative to its usual interval (only when intervalDays is known). */
+  due?: boolean;
+}
+
+/** Median of a non-empty number list. */
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
 }
 
 /**
- * Things bought before, most likely to be wanted again first: how many
- * trips they were on, with a boost for the last few trips (all stores).
+ * Things bought before, most likely to be wanted again first: due soon (from
+ * buy cadence), then how many trips they were on, with a boost for the last
+ * few trips (all stores).
  */
-export function usuals(trips: Trip[], limit = 24): Usual[] {
-  const byName = new Map<string, Usual & { score: number }>();
+export function usuals(trips: Trip[], limit = 24, now = Date.now()): Usual[] {
+  type Acc = Usual & { score: number; tripStarts: number[] };
+  const byName = new Map<string, Acc>();
   const recent = [...trips].sort((a, b) => b.start - a.start);
   recent.forEach((t, rank) => {
     const seen = new Set<string>();
@@ -82,16 +97,47 @@ export function usuals(trips: Trip[], limit = 24): Usual[] {
       const key = p.productId ?? p.name.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      const u = byName.get(key) ?? { ...(p.productId && { productId: p.productId }), name: p.name, count: 0, last: 0, score: 0 };
+      const u = byName.get(key) ?? {
+        ...(p.productId && { productId: p.productId }),
+        name: p.name,
+        count: 0,
+        last: 0,
+        score: 0,
+        tripStarts: [],
+      };
       u.count++;
       u.last = Math.max(u.last, p.at);
+      u.tripStarts.push(t.start);
       // Each trip counts 1; the last three count a bit more.
       u.score += 1 + (rank < 3 ? (3 - rank) * 0.5 : 0);
       byName.set(key, u);
     }
   });
   return [...byName.values()]
-    .sort((a, b) => b.score - a.score || b.last - a.last)
+    .map(({ tripStarts, score, ...u }) => {
+      const starts = [...new Set(tripStarts)].sort((a, b) => a - b);
+      let intervalDays: number | undefined;
+      if (starts.length >= 2) {
+        const gaps: number[] = [];
+        for (let i = 1; i < starts.length; i++) gaps.push((starts[i]! - starts[i - 1]!) / DAY_MS);
+        intervalDays = Math.max(1, Math.round(median(gaps)));
+      }
+      const due = intervalDays !== undefined && now - u.last >= intervalDays * DAY_MS * 0.85;
+      return { ...u, score, ...(intervalDays !== undefined && { intervalDays }), ...(due && { due: true }) };
+    })
+    .sort((a, b) => {
+      const dueA = a.due ? 1 : 0;
+      const dueB = b.due ? 1 : 0;
+      if (dueA !== dueB) return dueB - dueA;
+      return b.score - a.score || b.last - a.last;
+    })
     .slice(0, limit)
     .map(({ score: _score, ...u }) => u);
+}
+
+/** Most recent trip at this store that has at least one pick. */
+export function lastCompletedTrip(trips: Trip[], layoutId: string): Trip | undefined {
+  return [...trips]
+    .filter((t) => t.layoutId === layoutId && t.picks.length > 0)
+    .sort((a, b) => b.start - a.start)[0];
 }

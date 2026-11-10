@@ -950,7 +950,17 @@ main { padding-bottom: 110px; }
 /* ---- Buy again (add window) ---- */
 .buy-again h3 { margin: 0.25rem 0 0.35rem; font-weight: 600; }
 .buy-again .chips { margin-bottom: 0.5rem; flex-wrap: wrap; overflow: visible; }
+.buy-again .last-trip { margin: 0.15rem 0 0.5rem; }
 .chip.again { border-style: dashed; }
+.chip.again .again-cue {
+  margin-left: 0.25rem;
+  font-size: 0.7em;
+  opacity: 0.75;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.chip.again.cue-due { border-color: var(--accent, #2a6f4e); }
 
 /* ---- Trip done ---- */
 .trip-done-card { display: flex; flex-direction: column; gap: 0.5rem; border: 2px solid var(--accent); }
