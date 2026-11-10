@@ -588,17 +588,14 @@ export function pickUp(
   const saved = savedKey ? resolveSpot(savedKey, layout, catalog) : undefined;
   const conflict = !!saved && saved.placeId !== plan.placeId;
   // Between two shelves: auto-pick the nearer (or the one already stocking this kind).
-  // On open floor with lined-up shelves: auto-extend the nearest within reach.
-  // Only conflicts still ask (keep vs move).
+  // Within REACH past a shelf end, planBuild already extends; farther away → new shelf
+  // (no quiz). Only conflicts still ask (keep vs move).
   const sides = !conflict && !saved && reach > 0 && plan.action !== 'inArea' ? shelvesAcross(layout, at, reach) : [];
-  const options = !conflict && !sides.length && (plan.action === 'create' || plan.action === 'createArea') ? extendCandidates(layout, at) : [];
 
   let applied: BuildPlan | undefined;
   if (!conflict && sides.length) {
     const sideId = preferSide(layout, at, sides, category?.id);
     applied = planChoice(layout, at, category, { onShelf: sideId }, double);
-  } else if (!conflict && options.length) {
-    applied = extendTo(layout, options[0], at, category?.id);
   } else if (!conflict && plan.action !== 'blocked') {
     applied = plan;
   }
