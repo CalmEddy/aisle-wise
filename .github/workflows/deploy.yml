@@ -25,12 +25,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - run: npm run build
+      # Prefer GitHub Actions Variables when set; otherwise Vite loads
+      # .env.production. Empty vars must not blank those out.
+      - name: Build
         env:
-          # Live household sharing. Set these under Settings → Secrets and
-          # variables → Actions → Variables. Leave unset to build without it.
-          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          SUPABASE_URL_VAR: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY_VAR: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$SUPABASE_URL_VAR" ] && [ -n "$SUPABASE_ANON_KEY_VAR" ]; then
+            export VITE_SUPABASE_URL="$SUPABASE_URL_VAR"
+            export VITE_SUPABASE_ANON_KEY="$SUPABASE_ANON_KEY_VAR"
+          fi
+          npm run build
       # Browser tests on a phone-sized screen, against the build that's about to go out.
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e

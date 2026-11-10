@@ -160,6 +160,14 @@ or change its data (`supabase/migrations/`).
 
 ### Live sharing setup (one time)
 
+Production builds read the project URL and anon public key from
+`.env.production` (safe to commit: the anon key is meant to be public; the
+database rules protect the data). To rotate without editing that file, set
+GitHub Actions Variables `SUPABASE_URL` and `SUPABASE_ANON_KEY` instead; the
+deploy workflow uses them when both are present.
+
+For a new Supabase project:
+
 1. **Create the tables.** In your Supabase project, open **SQL Editor**,
    paste the contents of
    `supabase/migrations/20261024000000_households.sql`, and run it. It's
@@ -169,15 +177,11 @@ or change its data (`supabase/migrations/`).
    / Providers → Email**, make sure **Email** is enabled and turn **Confirm
    email** off, then save. Accounts are then ready the moment they're
    created, and Supabase never needs to send an email.
-3. **Give the app your project's address and public key.** In Supabase,
-   **Project Settings → API** shows the **Project URL** and the **anon
-   public** key. In GitHub, open the repo's **Settings → Secrets and
-   variables → Actions → Variables** and add:
-   - `SUPABASE_URL` = the Project URL
-   - `SUPABASE_ANON_KEY` = the anon public key
-
-   The anon key is meant to be public; the database rules protect the data.
-4. **Redeploy.** Actions → **Deploy to GitHub Pages** → **Run workflow**.
+3. **Point the app at the project.** Put the **Project URL** and **anon
+   public** key in `.env.production` as `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_ANON_KEY`, or set the GitHub Variables above.
+4. **Redeploy.** Push to `main`, or Actions → **Deploy to GitHub Pages** →
+   **Run workflow**.
 
 For local development, put the same two values in `.env.local` as
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
@@ -240,7 +244,16 @@ supabase/migrations/              Database tables and access rules
   Capacitor), scanning a QR code on each aisle sign, or a store's own API.
   Anything that produces a `Point` can drive the existing re-planning.
 
-## Live app
+## Live app (beta weblink)
 
-Every push to `main` is tested, built and published to GitHub Pages:
+Until a downloadable build is ready, share this GitHub Pages link — anyone
+can open it in a browser or install it to their home screen:
+
 https://calmeddy.github.io/aisle-wise/
+
+- **On your own:** lists and stores stay on that phone/browser (localStorage).
+  Use **Share** to send a one-off copy of a list or map as a link.
+- **With a household:** tap **Share with household**, create an account or
+  sign in, then create or join a household for live sync across phones.
+
+Every push to `main` is tested, built and published to that URL.
