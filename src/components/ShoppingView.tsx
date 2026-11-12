@@ -29,9 +29,9 @@ import { SpotPicker } from './SpotPicker';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { AddItemsSheet, type BuyAgainChip } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
-import { WhereBar, nextAisles, type MapSpot } from './WhereBar';
+import { WhereBar, nextAisles, type MapSpot, type PlaceStart } from './WhereBar';
 import { orderOf } from '../core/taxonomy';
-import { aislesUsed, describeClue, islandKey } from '../core/clues';
+import { aislesUsed, describeClue, islandKey, resolveClue } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
@@ -977,6 +977,25 @@ export function ShoppingView(props: Props) {
 
   // ---- "Where was it?" ----
   const [whereFor, setWhereFor] = useState<ListItem | null>(null);
+  /** Prefill for the visual Place sheet when opened from an aisle/wall chip. */
+  const [whereStart, setWhereStart] = useState<PlaceStart | undefined>();
+  /** Brief map pulse after a place is saved, so the shopper sees where it landed. */
+  const [placeFlash, setPlaceFlash] = useState<{ mark: { x: number; y: number }; placeId: string } | undefined>();
+  const placeFlashTimer = useRef<ReturnType<typeof setTimeout>>();
+  function openWhere(item: ListItem, start?: PlaceStart) {
+    setWhereStart(start);
+    setWhereFor(item);
+    setWhereBarFor(null);
+  }
+  function flashPlace(item: ListItem, clue: Clue) {
+    const product = productFor(item, catalog);
+    const key = resolveClue(clue, layout, product);
+    const spot = key ? resolveSpot(key, layout, catalog) : undefined;
+    if (!spot) return;
+    if (placeFlashTimer.current) clearTimeout(placeFlashTimer.current);
+    setPlaceFlash({ mark: spot.mark, placeId: spot.placeId });
+    placeFlashTimer.current = setTimeout(() => setPlaceFlash(undefined), 1600);
+  }
   /** The item the quick "Where was it?" bar is asking about (at check-off). */
   const [whereBarFor, setWhereBarFor] = useState<ListItem | null>(null);
   // Items to ask about later (per store), and the last answer (for "Same as last").
@@ -992,10 +1011,10 @@ export function ShoppingView(props: Props) {
   };
 
   // Trip end: apply clear door / shelf-extend guesses quietly (Undo on the toast).
-  // Wait until the last check-off quiz is done so its toast doesn't overwrite this one.
+  // Wait until the last check-off quiz (bar or Place panel) is done so its toast doesn't overwrite this one.
   const tripAutoKey = useRef<string>();
   useEffect(() => {
-    if (!tripDone || whereBarFor) {
+    if (!tripDone || whereBarFor || whereFor) {
       if (!tripDone) tripAutoKey.current = undefined;
       return;
     }
@@ -1023,7 +1042,7 @@ export function ShoppingView(props: Props) {
     if (notes.length && snapshot) {
       setToast({ snapshot, added: [], mode: 'list', note: notes.join(' · ') });
     }
-  }, [tripDone, whereBarFor, layout.id, props.where, props.shelves]);
+  }, [tripDone, whereBarFor, whereFor, layout.id, props.where, props.shelves]);
   /** The store's sections of labelled shelves (from the map), in order. */
   const storeSections = useMemo(() => [...new Set(layout.places.map((p) => /^g-sec-(.+)-\d+$/.exec(p.id)?.[1]).filter((x): x is string => !!x))].sort(), [layout.places]);
   /** Setting up the store's shelf labels, from a label just typed (and the item it's for). */
@@ -1077,6 +1096,7 @@ export function ShoppingView(props: Props) {
   function nextWhere(after: ListItem) {
     const rest = laterHere.filter((i) => i.id !== after.id);
     setLaterHere((ids) => ids.filter((id) => id !== after.id));
+    setWhereStart(undefined);
     setWhereFor(reviewing && rest.length ? rest[0] : null);
     if (!rest.length) setReviewing(false);
   }
@@ -1086,6 +1106,8 @@ export function ShoppingView(props: Props) {
     const snapshot = props.where.setClue(item, clue);
     setLastClue(clue);
     noteTrail(clue);
+    setWhereStart(undefined);
+    flashPlace(item, clue);
     // A table, case or stand said like one something else is on: the same one, unless the shopper says another.
     const twin = clue.kind === 'open' && !clue.across ? sameKindOfOpen(item, clue) : undefined;
     setToast({
@@ -1094,6 +1116,7 @@ export function ShoppingView(props: Props) {
       ...(twin && clue.kind === 'open' && { action: { label: 'Another one', run: () => {
         const another: Clue = { ...clue, n: twin.top + 1 };
         props.where.setClue(item, another);
+        flashPlace(item, another);
         setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(another)}` });
       } } }),
     });
@@ -1300,7 +1323,9 @@ export function ShoppingView(props: Props) {
             ghosts={ghosts}
             look={props.mapLook}
             showGrid={building}
-            highlightId={here?.id}
+            highlightId={placeFlash?.placeId ?? here?.id}
+            preview={!building ? placeFlash?.mark : undefined}
+            previewFlash={!!placeFlash}
             selectedId={editing?.id}
             selectedAisleId={editingAisle?.id}
             selectedAisleIds={chosenAisles}
@@ -1586,7 +1611,7 @@ export function ShoppingView(props: Props) {
       )}
       {whereFor && (
         <WherePanel
-          key={whereFor.id}
+          key={`${whereFor.id}-${whereStart?.aisle ?? ''}-${whereStart?.wall ?? ''}`}
           itemName={whereFor.name}
           categoryId={productFor(whereFor, catalog)?.categoryId}
           storeName={layout.name}
@@ -1594,12 +1619,14 @@ export function ShoppingView(props: Props) {
           layout={layout}
           onNeedLabels={(code) => setLabelSetup({ code, item: whereFor })}
           recentAisles={aislesUsed(catalog.products, layout.id)}
+          trail={aisleTrail}
+          start={whereStart}
           lastClue={lastClue}
           queued={reviewing ? Math.max(0, laterHere.filter((i) => i.id !== whereFor.id).length) : undefined}
           onSave={(clue) => saveWhere(whereFor, clue)}
-          onLater={reviewing ? undefined : () => { setLaterHere((ids) => [...ids.filter((id) => id !== whereFor.id), whereFor.id]); setWhereFor(null); }}
-          onSkip={() => nextWhere(whereFor)}
-          onStopAsking={() => { props.where.setAsk(false); setWhereFor(null); setReviewing(false); }}
+          onLater={reviewing ? undefined : () => { setLaterHere((ids) => [...ids.filter((id) => id !== whereFor.id), whereFor.id]); setWhereStart(undefined); setWhereFor(null); }}
+          onSkip={() => { setWhereStart(undefined); nextWhere(whereFor); }}
+          onStopAsking={() => { props.where.setAsk(false); setWhereStart(undefined); setWhereFor(null); setReviewing(false); }}
         />
       )}
       {adding && (
@@ -1927,7 +1954,8 @@ export function ShoppingView(props: Props) {
             setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `At ${layout.name} you’ll be asked at checkout, all in one list.` });
           }}
           onSave={(clue) => saveWhere(whereBarFor, clue)}
-          onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
+          onPlace={(start) => openWhere(whereBarFor, start)}
+          onOther={() => openWhere(whereBarFor)}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
         />
       )}
@@ -1974,7 +2002,7 @@ export function ShoppingView(props: Props) {
             if (item && code && r) {
               const clue: Clue = { kind: 'shelf', code, section: r.section, ...(r.shelf !== undefined && { shelf: r.shelf }) };
               if (whereBarFor?.id === item.id) setWhereBarFor(null);
-              if (whereFor?.id === item.id) setWhereFor(null);
+              if (whereFor?.id === item.id) { setWhereStart(undefined); setWhereFor(null); }
               props.where.setClue(item, clue);
               setLastClue(clue);
               noteTrail(clue);
@@ -2023,7 +2051,8 @@ export function ShoppingView(props: Props) {
             setLaterHere((ids) => ids.filter((id) => id !== item.id));
             setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
           }}
-          onOther={(item) => setWhereFor(item)}
+          onPlace={(item, start) => openWhere(item, start)}
+          onOther={(item) => openWhere(item)}
           onSkip={(item) => setLaterHere((ids) => ids.filter((id) => id !== item.id))}
           onAskAtCheckout={setAskAtCheckout}
           onClose={() => setListOpen(false)}
@@ -2066,7 +2095,7 @@ export function ShoppingView(props: Props) {
             setMenuFor(null);
           }}
           onWhere={() => {
-            setWhereFor(menuFor);
+            openWhere(menuFor);
             setMenuFor(null);
           }}
           onAmount={(patch) => {

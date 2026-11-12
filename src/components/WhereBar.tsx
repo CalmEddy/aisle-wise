@@ -5,6 +5,16 @@ import { aisleNumber, DEPTS, describeClue, guessDept } from '../core/clues';
 import type { Clue, Temp, Wall } from '../core/types';
 import { formatLabel, looksLikeShelfCode, nextShelves, parseLabel, type LabelStyle } from '../core/labels';
 
+/** How the visual Place sheet was opened from the quick bar. */
+export type PlaceStart = {
+  /** Prefill / focus the aisle grid (from a bar chip or typed number). */
+  aisle?: string;
+  /** Prefill wall highlight (from a bar wall chip). */
+  wall?: Wall;
+  /** Temp chosen on the bar before opening Place. */
+  temp?: Temp;
+};
+
 /** Cold or not, as a first guess from the category. */
 export function guessTemp(categoryId?: string): Temp | undefined {
   if (!categoryId) return undefined;
@@ -37,10 +47,9 @@ const WALLS: { wall: Wall; label: string }[] = [
 
 /**
  * The quick "Where was it?" asked at check-off: a bar at the bottom that
- * doesn't block the list. The likely answers are one tap: the department,
- * the aisles you're probably in next, a wall; "# Aisle" types a number on
- * buttons right here; "Other…" opens the full panel; ignoring it (checking
- * the next thing off) asks later.
+ * doesn't block the list. Fast shortcuts (department, map spots, same-as-last)
+ * save in one tap; aisle and wall open the visual Place sheet so the shopper
+ * can tap a region.
  */
 /** A spot on the map that already stocks this kind of thing: one tap to say it was there. */
 export interface MapSpot {
@@ -52,7 +61,7 @@ export interface MapSpot {
   spot?: string;
 }
 
-export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], mapSpots = [], here, onHere, onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onSavePlace, onOther, onLater }: {
+export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail = [], labels, shelfTrail = [], sections = [], mapSpots = [], here, onHere, onNeedLabels, laterLabel = 'Later', onAskAtCheckout, onSave, onSavePlace, onPlace, onOther, onLater }: {
   itemName: string;
   categoryId?: string;
   recentAisles: string[];
@@ -79,6 +88,8 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   /** Offer "ask me at checkout" (stop asking as you go at this store). */
   onAskAtCheckout?: () => void;
   onSave: (clue: Clue) => void;
+  /** Open the visual Place sheet (aisle region or wall), optionally prefilled. */
+  onPlace: (start?: PlaceStart) => void;
   onOther: () => void;
   onLater: () => void;
 }) {
@@ -90,17 +101,16 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   const d = dept && DEPTS.find((x) => x.id === dept);
   const cold = temp === 'frozen' ? '❄ ' : temp === 'chilled' ? '🧊 ' : '';
   const withTemp = temp ? { temp } : {};
-  const aisleClue = (aisle: string): Clue => ({ kind: 'aisle', aisle, ...withTemp });
   const shelfClue = (code: string): Clue | undefined => {
     const r = labels && parseLabel(labels, code);
     return r ? { kind: 'shelf', code: code.trim().toUpperCase(), section: r.section, ...(r.shelf !== undefined && { shelf: r.shelf }), ...withTemp } : undefined;
   };
-  /** Saves what was typed on the buttons: a shelf label, an aisle, or (a label in a store not set up for them) set up labels first. */
+  /** Typed pad: shelf codes save; aisle numbers open the visual region picker. */
   function saveTyped(v: string) {
     const shelf = shelfClue(v);
     if (shelf) onSave(shelf);
     else if (looksLikeShelfCode(v) && onNeedLabels) onNeedLabels(v.trim().toUpperCase());
-    else onSave(aisleClue(v));
+    else onPlace({ aisle: v.trim(), ...(temp && { temp }) });
   }
   // Sections to offer as one-tap keys: the ones answered this trip first, then the rest of the store's.
   // Plus the letters either side of them (a new section is usually next door: A or C after B).
@@ -113,11 +123,22 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
     return { key: `s-${code}`, label: `${cold}${code}`, clue: shelfClue(code)!, primary: !d && i === 0 };
   }).filter((x) => x.clue) : [];
 
-  const quick: { key: string; label: string; clue: Clue; primary?: boolean }[] = [];
+  type Quick =
+    | { key: string; label: string; primary?: boolean; clue: Clue }
+    | { key: string; label: string; primary?: boolean; place: PlaceStart };
+
+  const quick: Quick[] = [];
   const predicted = nextAisles(trail);
   const aisles = [...predicted, ...recentAisles.filter((a) => !predicted.includes(a)).slice(0, Math.max(0, 3 - predicted.length))];
-  const aisleChips = aisles.map((a, i) => ({ key: `a-${a}`, label: `${cold}Aisle ${a}`, clue: aisleClue(a), primary: !d && i === 0 }));
-  const wallChips = (d || temp) ? WALLS.map((w) => ({ key: `w-${w.wall}`, label: `${cold}${w.label}`, clue: { kind: 'wall', wall: w.wall, ...withTemp } as Clue })) : [];
+  const aisleChips: Quick[] = aisles.map((a, i) => ({
+    key: `a-${a}`,
+    label: `${cold}Aisle ${a}`,
+    place: { aisle: a, ...(temp && { temp }) },
+    primary: !d && i === 0,
+  }));
+  const wallChips: Quick[] = (d || temp)
+    ? WALLS.map((w) => ({ key: `w-${w.wall}`, label: `${cold}${w.label}`, place: { wall: w.wall, ...(temp && { temp }) } }))
+    : [];
   // Where the map already has its kind of thing: first, the first one the likeliest.
   const spotChips = mapSpots.slice(0, 4);
   const spotHasDept = !!d && spotChips.some((x) => x.clue?.kind === 'dept' && x.clue.dept === d.id);
@@ -125,7 +146,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   if (d) quick.push(...wallChips, ...shelfChips, ...aisleChips.map((a) => ({ ...a, primary: false })));
   else quick.push(...shelfChips, ...aisleChips.map((a) => ({ ...a, primary: a.primary && !shelfChips.length })), ...wallChips);
   if (spotChips.length) quick.forEach((q) => { q.primary = false; });
-  const lastIsListed = lastClue && quick.some((q) => describeClue(q.clue) === describeClue(lastClue));
+  const lastIsListed = lastClue && quick.some((q) => 'clue' in q && describeClue(q.clue) === describeClue(lastClue));
   if (lastClue && !lastIsListed) quick.push({ key: 'last', label: `Same as last: ${describeClue(lastClue)}`, clue: lastClue });
 
   return (
@@ -156,12 +177,17 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
               onClick={() => (x.clue ? onSave(x.clue) : x.spot && onSavePlace?.(x.spot))}>📍 {x.label}</button>
           ))}
           {quick.map((q) => (
-            <button key={q.key} className={`btn${q.primary ? ' primary' : ''}`} onClick={() => onSave(q.clue)}>{q.label}</button>
+            <button
+              key={q.key}
+              className={`btn${q.primary ? ' primary' : ''}`}
+              onClick={() => ('place' in q ? onPlace(q.place) : onSave(q.clue))}
+            >{q.label}</button>
           ))}
           <button className="btn" onClick={() => {
             // A shelf label: start with the section you're in ("B"), so it's just the number.
-            const here = shelfTrail[shelfTrail.length - 1]?.section;
-            setTyping(labels && here ? formatLabel(labels, here) : '');
+            // An aisle number: open the pad, then the visual region picker.
+            const hereSec = shelfTrail[shelfTrail.length - 1]?.section;
+            setTyping(labels && hereSec ? formatLabel(labels, hereSec) : '');
           }}>{labels ? '# Shelf…' : '# Aisle…'}</button>
           {here && here.length > 0 && onHere && <button className="btn" onClick={() => setStanding(true)}>🧍 Where I’m standing</button>}
           <button className="btn" onClick={onOther}>Other…</button>
@@ -172,7 +198,9 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
           <div className="where-bar-pad-head">
             <button className="link" onClick={() => setTyping(undefined)} aria-label="Back">‹</button>
             <span className="where-bar-pad-value" aria-live="polite">{cold}{labels ? 'Shelf' : 'Aisle'} <b>{typing || '_'}</b></span>
-            <button className="btn primary" disabled={!typing} onClick={() => typing && saveTyped(typing)}>Save</button>
+            <button className="btn primary" disabled={!typing} onClick={() => typing && saveTyped(typing)}>
+              {labels ? 'Save' : 'Place…'}
+            </button>
           </div>
           {labels && knownSections.length > 0 && (
             <div className="where-bar-sections" role="group" aria-label="Section">

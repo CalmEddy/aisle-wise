@@ -33,6 +33,8 @@ interface Props {
   pins?: { x: number; y: number }[];
   /** A pin showing a spot being chosen. */
   preview?: { x: number; y: number };
+  /** Pulse the preview briefly (e.g. after a “Where was it?” save). */
+  previewFlash?: boolean;
   /** Shelves that could be built, drawn faint and dashed. */
   ghosts?: MapGhost[];
   /** Tapping an aisle label (build mode); without it labels can't be tapped. */
@@ -138,7 +140,7 @@ function aisleLabelSpot(a: AisleLabel, places: Place[]): { cx: number; cy: numbe
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, previewFlash, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -250,7 +252,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
       ))}
 
       {preview && (
-        <g className="map-preview">
+        <g className={`map-preview${previewFlash ? ' flash' : ''}`}>
           <circle cx={preview.x} cy={preview.y} r={1.1} />
           <circle cx={preview.x} cy={preview.y} r={0.35} className="core" />
         </g>

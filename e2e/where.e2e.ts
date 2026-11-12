@@ -1,10 +1,59 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { addItems, enterBuildMode, fresh, newStore, noPageErrors, row, saved, tapMap, tick } from './helpers';
 
-const clues = async (page: import('@playwright/test').Page) => {
+const clues = async (page: Page) => {
   const products = await saved<{ name: string; clues?: Record<string, unknown> }[]>(page, 'products');
   return Object.fromEntries(products.filter((p) => p.clues).map((p) => [p.name, Object.values(p.clues!)[0]]));
 };
+
+type Region = 'TL' | 'TR' | 'ML' | 'MR' | 'BL' | 'BR';
+const REGION_NAME: Record<Region, RegExp> = {
+  TL: /Top left/,
+  TR: /Top right/,
+  ML: /Middle left/,
+  MR: /Middle right/,
+  BL: /Bottom left/,
+  BR: /Bottom right/,
+};
+
+/** Tap a cell on the visual aisle grid (top = back of store). */
+async function tapAisleRegion(page: Page, region: Region = 'ML') {
+  await page.locator('.where-panel').getByRole('button', { name: REGION_NAME[region] }).click();
+}
+
+/** Tap a wall segment on the visual wall outline. */
+async function tapWallSegment(page: Page, name: RegExp) {
+  await page.locator('.where-panel').getByRole('button', { name }).click();
+}
+
+/** # Aisle… pad → Place… → region on the Place sheet. */
+async function placeAisleFromPad(page: Page, aisle: string, region: Region = 'ML') {
+  const bar = page.locator('.where-bar').last();
+  await bar.getByRole('button', { name: '# Aisle…' }).click();
+  for (const d of aisle) await bar.getByRole('button', { name: d, exact: true }).click();
+  await bar.getByRole('button', { name: 'Place…' }).click();
+  await tapAisleRegion(page, region);
+}
+
+/** Aisle chip on the bar → region on the Place sheet. */
+async function placeAisleFromChip(page: Page, chip: string | RegExp, region: Region = 'ML') {
+  await page.locator('.where-bar').last().getByRole('button', { name: chip }).click();
+  await tapAisleRegion(page, region);
+}
+
+/** Wall chip on the bar → segment on the Place sheet. */
+async function placeWallFromChip(page: Page, chip: string | RegExp, segment: RegExp) {
+  await page.locator('.where-bar').last().getByRole('button', { name: chip }).click();
+  await tapWallSegment(page, segment);
+}
+
+/** Open floor / end-cap / front wall live under More…. */
+async function openMore(page: Page, summary: string | RegExp) {
+  await page.getByRole('tab', { name: 'More…' }).click();
+  const details = page.locator('.where-more-section', { has: page.locator('summary', { hasText: summary }) });
+  await details.locator('summary').click();
+  return details;
+}
 
 test.beforeEach(async ({ page }) => {
   await fresh(page);
@@ -35,24 +84,22 @@ test('Aisle, Wall and Open answers, with the fridge/freezer switch', async ({ pa
     await page.locator('.where-bar').getByRole('button', { name: /Other|Aisle \/ department/ }).click();
   };
   await other('Milk');
-  // Milk starts as Fridge (from its category).
-  await page.getByRole('tab', { name: 'Aisle' }).click();
+  // Milk’s category opens Department; switch to Place for the aisle grid.
+  await page.getByRole('tab', { name: 'Place' }).click();
+  await expect(page.getByRole('button', { name: '🧊 Fridge' })).toHaveAttribute('aria-pressed', 'true');
   await page.getByLabel('Aisle number').fill('12');
-  await page.getByRole('button', { name: 'Right →' }).click();
-  await page.getByRole('button', { name: /^Save · Fridge, aisle 12/ }).click();
+  await tapAisleRegion(page, 'MR'); // right, middle
   await other('Bread');
-  await page.getByRole('tab', { name: 'Wall' }).click();
-  await page.getByRole('button', { name: 'Right →' }).click();
-  await page.getByRole('button', { name: 'Back', exact: true }).click();
-  await page.getByRole('button', { name: /^Save · Right wall · back/ }).click();
+  await page.getByRole('tab', { name: 'Place' }).click();
+  await tapWallSegment(page, /Right wall · top/); // top = back of store
   await other('Peas');
-  await page.getByRole('tab', { name: 'Open' }).click();
-  await page.getByRole('button', { name: 'Case' }).click();
-  await page.getByRole('button', { name: 'Near the door' }).click();
+  const open = await openMore(page, 'Open floor');
+  await open.getByRole('button', { name: 'Case' }).click();
+  await open.getByRole('button', { name: 'Near the door' }).click();
   await page.getByRole('button', { name: '❄ Freezer' }).click();
   await page.getByRole('button', { name: /^Save · Freezer, case near the door/ }).click();
   expect(await clues(page)).toMatchObject({
-    Milk: { kind: 'aisle', aisle: '12', side: 'R', temp: 'chilled' },
+    Milk: { kind: 'aisle', aisle: '12', side: 'R', pos: 'middle', temp: 'chilled' },
     Bread: { kind: 'wall', wall: 'right', part: 'back' },
     'Frozen peas': { kind: 'open', near: 'entrance', fixture: 'case', temp: 'frozen' }, // "Peas" is another name for it
   });
@@ -74,9 +121,9 @@ test('ask later, then review before you go', async ({ page }) => {
   await list.locator('.where-bar', { hasText: 'Bread' }).locator('.btn.primary').click(); // Bakery
   // Other… opens the full panel for that one, then comes back to the list.
   await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: 'Other…' }).click();
-  await page.getByRole('tab', { name: 'End-cap' }).click();
-  await page.getByLabel('Aisle number').fill('4');
-  await page.getByRole('button', { name: 'Front end' }).click();
+  const endcap = await openMore(page, 'End-cap');
+  await endcap.getByLabel('Aisle number').fill('4');
+  await endcap.getByRole('button', { name: 'Front end' }).click();
   await expect(list).toContainText('All placed');
 });
 
@@ -114,7 +161,7 @@ test('the row shows where an answered item is', async ({ page }) => {
   await tick(page, 'Jam');
   await page.locator('.where-bar').getByRole('button', { name: /Other|Aisle \/ department/ }).click();
   await page.getByLabel('Aisle number').fill('7');
-  await page.getByRole('button', { name: /^Save · Aisle 7/ }).click();
+  await tapAisleRegion(page, 'ML');
   await page.locator('details.done summary').click();
   await tick(page, 'Jam'); // back on the list
   await expect(row(page, 'Jam')).toContainText('7');
@@ -128,46 +175,51 @@ test('answers change the map straight away, with no outlines', async ({ page }) 
   await tick(page, 'Cereal');
   await page.locator('.where-bar').getByRole('button', { name: /Other|Aisle \/ department/ }).click();
   await page.getByLabel('Aisle number').fill('4');
-  await page.getByRole('button', { name: /^Save · Aisle 4/ }).click();
+  await tapAisleRegion(page, 'ML');
   // Aisle 4 is on the map straight away; nothing is outlined.
   await expect(page.locator('svg.map .aisle-label', { hasText: /AISLE 4/i })).toHaveCount(1);
   await expect(page.locator('svg.map .change-frame')).toHaveCount(0);
   await expect(page.locator('svg.map .changed')).toHaveCount(0);
 });
 
-test('quick bar: next aisles in one tap, number buttons, walls, fridge/freezer', async ({ page }) => {
+test('quick bar: next aisles open the region picker, walls too, fridge/freezer', async ({ page }) => {
   await addItems(page, 'Cereal, Pasta, Chips, Bread, Ice cream, Hummus');
   const bar = page.locator('.where-bar');
-  // A first aisle on the number buttons (no keyboard).
+  // A first aisle on the number buttons → visual Place sheet.
   await tick(page, 'Cereal');
   await bar.getByRole('button', { name: '# Aisle…' }).click();
   await bar.getByRole('button', { name: '1', exact: true }).click();
   await bar.getByRole('button', { name: 'Delete' }).click();
   await bar.getByRole('button', { name: '3', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
-  // Then the next aisles are offered: one tap.
+  await bar.getByRole('button', { name: 'Place…' }).click();
+  await tapAisleRegion(page, 'ML');
+  // Then the next aisles are offered: chip opens Place, then a region.
   await tick(page, 'Pasta');
   await expect(bar.locator('.btn').first()).toHaveText('Aisle 3');
-  await bar.getByRole('button', { name: 'Aisle 5', exact: true }).click();
+  await placeAisleFromChip(page, 'Aisle 5', 'ML');
   await tick(page, 'Chips');
   await expect(bar.getByRole('button', { name: 'Aisle 7', exact: true })).toBeVisible(); // going up by 2
-  await bar.getByRole('button', { name: 'Aisle 7', exact: true }).click();
-  // A wall in one tap.
+  await placeAisleFromChip(page, 'Aisle 7', 'MR');
+  // A wall chip opens the wall outline.
   await tick(page, 'Bread');
-  await bar.getByRole('button', { name: 'Right wall →' }).click();
+  await placeWallFromChip(page, 'Right wall →', /Right wall · middle/);
   // Freezer switched on by the category; the aisle chips carry it.
   await tick(page, 'Ice cream');
   await expect(bar.getByRole('button', { name: 'In a freezer' })).toHaveAttribute('aria-pressed', 'true');
-  await bar.getByRole('button', { name: '❄ Aisle 9', exact: true }).click();
+  await placeAisleFromChip(page, '❄ Aisle 9', 'ML');
   // Fridge chosen by hand, on a wall.
   await tick(page, 'Hummus');
   await bar.getByRole('button', { name: 'In a fridge' }).click();
-  await bar.getByRole('button', { name: '🧊 ← Left wall' }).click();
+  await placeWallFromChip(page, '🧊 ← Left wall', /Left wall · middle/);
   const products = await saved<any[]>(page, 'products');
   const clue = (n: string) => Object.values(products.find((p) => p.name === n).clues)[0];
   expect([clue('Cereal'), clue('Pasta'), clue('Potato chips'), clue('Bread'), clue('Ice cream'), clue('Hummus')]).toEqual([
-    { kind: 'aisle', aisle: '3' }, { kind: 'aisle', aisle: '5' }, { kind: 'aisle', aisle: '7' },
-    { kind: 'wall', wall: 'right' }, { kind: 'aisle', aisle: '9', temp: 'frozen' }, { kind: 'wall', wall: 'left', temp: 'chilled' },
+    { kind: 'aisle', aisle: '3', side: 'L', pos: 'middle' },
+    { kind: 'aisle', aisle: '5', side: 'L', pos: 'middle' },
+    { kind: 'aisle', aisle: '7', side: 'R', pos: 'middle' },
+    { kind: 'wall', wall: 'right', part: 'middle' },
+    { kind: 'aisle', aisle: '9', side: 'L', pos: 'middle', temp: 'frozen' },
+    { kind: 'wall', wall: 'left', part: 'middle', temp: 'chilled' },
   ]);
 });
 
@@ -190,8 +242,9 @@ test('the map already has its kind: quiet-saves the spot; or all at checkout in 
   await expect(list.locator('.where-bar')).toHaveCount(3);
   await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: '# Aisle…' }).click();
   await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: '6', exact: true }).click();
-  await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: 'Save' }).click();
-  await list.locator('.where-bar', { hasText: 'Tea' }).getByRole('button', { name: 'Aisle 7', exact: true }).click();
+  await list.locator('.where-bar', { hasText: 'Jam' }).getByRole('button', { name: 'Place…' }).click();
+  await tapAisleRegion(page, 'ML');
+  await placeAisleFromChip(page, 'Aisle 7', 'ML');
   await expect(list.locator('.where-bar')).toHaveCount(1);
   await expect(list.getByRole('checkbox')).toBeChecked();
 });
@@ -207,18 +260,17 @@ test('the map knows its kind, but it was on a display; the front wall is an answ
   await page.locator('.toast').getByRole('button', { name: 'Change' }).click();
   const bar = page.locator('.where-bar');
   await bar.getByRole('button', { name: /Other/ }).click();
-  await page.getByRole('tab', { name: 'Open' }).click();
-  await page.getByRole('button', { name: 'Stand / display' }).click();
-  await page.getByRole('button', { name: 'Near the door' }).click();
+  const openStand = await openMore(page, 'Open floor');
+  await openStand.getByRole('button', { name: 'Stand / display' }).click();
+  await openStand.getByRole('button', { name: 'Near the door' }).click();
   await page.getByRole('button', { name: /^Save · / }).click();
   expect((await clues(page)).Melon).toMatchObject({ kind: 'open', fixture: 'stand', near: 'entrance' });
   await page.getByRole('group', { name: 'Where’s Produce stand?' }).getByRole('button', { name: /Not sure/ }).click();
   // Greeting cards on the front wall, left of the door.
   await tick(page, 'Cards');
   await page.locator('.where-bar').getByRole('button', { name: 'Other…' }).click();
-  await page.getByRole('tab', { name: 'Wall' }).click();
-  await page.getByRole('button', { name: '↓ Front' }).click();
-  await page.getByRole('button', { name: 'Left of the door' }).click();
+  const front = await openMore(page, 'Front wall');
+  await front.getByRole('button', { name: 'Left of the door' }).click();
   await page.getByRole('button', { name: 'Save · Front wall · left of the door' }).click();
   const corner = async () => (await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner');
   await expect.poll(async () => (await corner()).places.some((p: any) => p.id === 'g-wall-front-left-shelf')).toBe(true);
@@ -236,11 +288,10 @@ test('a second table said like the first: "Another one" keeps them apart', async
   const onTable = async (name: string) => {
     await tick(page, name);
     await page.locator('.where-bar').getByRole('button', { name: /Other/ }).click();
-    await page.getByRole('tab', { name: 'Open' }).click();
-    const panel = page.locator('.where-panel');
-    await panel.getByRole('button', { name: 'Table', exact: true }).click();
-    await panel.getByRole('button', { name: 'Near the door', exact: true }).click();
-    await panel.getByRole('button', { name: /^Save · / }).click();
+    const open = await openMore(page, 'Open floor');
+    await open.getByRole('button', { name: 'Table', exact: true }).click();
+    await open.getByRole('button', { name: 'Near the door', exact: true }).click();
+    await page.locator('.where-panel').getByRole('button', { name: /^Save · / }).click();
   };
   await onTable('Grapes');
   // The first table is new: where is it? (Wait for the card: it covers the confirmation.)
@@ -262,9 +313,7 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   await addItems(page, 'Cereal, Pasta, Chips, Granola');
   for (const [name, n] of [['Cereal', '1'], ['Pasta', '2']] as const) {
     await tick(page, name);
-    await page.locator('.where-bar').getByRole('button', { name: '# Aisle…' }).click();
-    await page.locator('.where-bar').getByRole('button', { name: n, exact: true }).click();
-    await page.locator('.where-bar').getByRole('button', { name: 'Save' }).click();
+    await placeAisleFromPad(page, n);
   }
   expect(Object.keys(await clues(page)).sort()).toEqual(['Cereal', 'Pasta']);
   // One tap on a row.
@@ -308,9 +357,7 @@ test('put straight in the cart with no place here: clear map match auto-saves (C
   const ok = noPageErrors(page);
   await addItems(page, 'Cereal');
   await tick(page, 'Cereal');
-  await page.locator('.where-bar').getByRole('button', { name: '# Aisle…' }).click();
-  await page.locator('.where-bar').getByRole('button', { name: '3', exact: true }).click();
-  await page.locator('.where-bar').getByRole('button', { name: 'Save' }).click();
+  await placeAisleFromPad(page, '3');
   // Oatmeal straight into the cart from the add window.
   await page.getByRole('button', { name: 'Add items' }).first().click();
   await page.getByLabel('Item to add').fill('Oatmeal');
@@ -319,7 +366,7 @@ test('put straight in the cart with no place here: clear map match auto-saves (C
   // Same kind already on aisle 3 → quiet save, not a quiz.
   await expect(page.locator('.toast')).toContainText(/Oatmeal: saved at/i);
   await expect(page.locator('.where-bar')).toHaveCount(0);
-  await expect.poll(async () => (await clues(page)).Oatmeal).toEqual({ kind: 'aisle', aisle: '3' });
+  await expect.poll(async () => (await clues(page)).Oatmeal).toMatchObject({ kind: 'aisle', aisle: '3' });
   ok();
 });
 
@@ -363,11 +410,8 @@ test('answered "Aisle 1" in a store drawn by hand: the shelf there holds the ite
   });
   await addItems(page, 'Spaghetti');
   await tick(page, 'Spaghetti');
-  const bar = page.locator('.where-bar');
-  await bar.getByRole('button', { name: '# Aisle…' }).click();
-  await bar.getByRole('button', { name: '1', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
-  // The shelf it landed on (the answer gave no side) holds pasta now: more pasta goes there. Nothing saved on the shelves.
+  await placeAisleFromPad(page, '1', 'ML');
+  // The shelf it landed on holds pasta now: more pasta goes there. Nothing saved on the shelves.
   await addItems(page, 'Penne pasta');
   await expect(row(page, 'Penne pasta')).toContainText(/Shelf [AB]/);
   expect((await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => p.categories)).toEqual([[], []]);
@@ -377,7 +421,7 @@ test('departments set out along the walls: drag one, tap-to-place another', asyn
   const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');
   await tick(page, 'Apples');
-  await page.locator('.where-bar').getByRole('button', { name: 'Right wall →' }).click();
+  await placeWallFromChip(page, 'Right wall →', /Right wall · middle/);
   await tick(page, 'Bread');
   await page.locator('.where-bar .btn.primary').click(); // Bakery: a department, but where? Not asked one by one any more.
   await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toHaveCount(0);
@@ -425,7 +469,7 @@ test('a store that labels shelves like B12: set up by example, one-tap next shel
   await bar.getByRole('button', { name: '123' }).click();
   await bar.getByRole('button', { name: '1', exact: true }).click();
   await bar.getByRole('button', { name: '2', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
+  await bar.getByRole('button', { name: 'Place…' }).click();
   // Not set up yet: teach it with this label.
   const sheet = page.getByRole('dialog', { name: 'Shelf labels' });
   await expect(sheet.getByLabel('Example label')).toHaveValue('B12');
@@ -473,14 +517,12 @@ test('a stand across aisles 2–3 at the front: the map puts it there and the sh
   await addItems(page, 'Cereal, Promo crisps');
   const bar = page.locator('.where-bar');
   await tick(page, 'Cereal');
-  await bar.getByRole('button', { name: '# Aisle…' }).click();
-  await bar.getByRole('button', { name: '4', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
+  await placeAisleFromPad(page, '4');
   await tick(page, 'Promo crisps');
   await bar.getByRole('button', { name: 'Other…' }).click();
-  await page.getByRole('tab', { name: 'Open' }).click();
-  await page.getByRole('button', { name: 'Stand / display' }).click();
-  await page.getByRole('button', { name: 'Across aisles…' }).click();
+  const across = await openMore(page, 'Open floor');
+  await across.getByRole('button', { name: 'Stand / display' }).click();
+  await across.getByRole('button', { name: 'Across aisles…' }).click();
   await page.getByLabel('From aisle or section').fill('2');
   await page.getByLabel('To aisle or section').fill('3');
   await page.getByRole('button', { name: 'Front', exact: true }).click();
@@ -503,7 +545,7 @@ test('shelf codes in 2–3 taps: the section is already in, known sections are o
   await bar.getByRole('button', { name: 'B', exact: true }).click();
   await bar.getByRole('button', { name: '123' }).click();
   await bar.getByRole('button', { name: '4', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
+  await bar.getByRole('button', { name: 'Place…' }).click();
   await page.getByRole('dialog', { name: 'Shelf labels' }).getByRole('button', { name: 'Save' }).click();
   // B7: "# Shelf…" opens with B already in → 7 → Save.
   await tick(page, 'Cereal');
@@ -528,15 +570,12 @@ test('shelf codes in 2–3 taps: the section is already in, known sections are o
 
 test('where’s the door? applied quietly at the end of a trip from trip starts', async ({ page }) => {
   await addItems(page, 'Apples, Cereal, Milk');
-  const bar = page.locator('.where-bar');
   await tick(page, 'Apples');
-  await bar.getByRole('button', { name: 'Right wall →' }).click();
+  await placeWallFromChip(page, 'Right wall →', /Right wall · middle/);
   await tick(page, 'Cereal');
-  await bar.getByRole('button', { name: '# Aisle…' }).click();
-  await bar.getByRole('button', { name: '3', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
+  await placeAisleFromPad(page, '3');
   await tick(page, 'Milk');
-  await bar.getByRole('button', { name: '← Left wall' }).first().click();
+  await placeWallFromChip(page, /← Left wall/, /Left wall · middle/);
   await expect(page.locator('.toast')).toContainText(/Door set from where trips start/i);
   await expect(page.getByRole('group', { name: 'Where’s the door?' })).toHaveCount(0);
   await expect.poll(async () => {
@@ -549,13 +588,11 @@ test('across aisles picked on the mini-map, with a preview of where it goes', as
   await addItems(page, 'Cereal, Promo crisps');
   const bar = page.locator('.where-bar');
   await tick(page, 'Cereal');
-  await bar.getByRole('button', { name: '# Aisle…' }).click();
-  await bar.getByRole('button', { name: '4', exact: true }).click();
-  await bar.getByRole('button', { name: 'Save' }).click();
+  await placeAisleFromPad(page, '4');
   await tick(page, 'Promo crisps');
   await bar.getByRole('button', { name: 'Other…' }).click();
-  await page.getByRole('tab', { name: 'Open' }).click();
-  await page.getByRole('button', { name: 'Across aisles…' }).click();
+  const across = await openMore(page, 'Open floor');
+  await across.getByRole('button', { name: 'Across aisles…' }).click();
   const map = page.locator('.where-panel .across-map svg.map');
   await map.locator('.aisle-label', { hasText: /AISLE 2/i }).locator('text').click({ force: true });
   await map.locator('.aisle-label', { hasText: /AISLE 3/i }).locator('text').click({ force: true });
