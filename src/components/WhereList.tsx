@@ -1,5 +1,5 @@
 import type { Clue, ListItem } from '../core/types';
-import { WhereBar, type MapSpot } from './WhereBar';
+import { WhereBar, type MapSpot, type PlaceStart } from './WhereBar';
 import type { LabelStyle } from '../core/labels';
 
 /**
@@ -7,7 +7,7 @@ import type { LabelStyle } from '../core/labels';
  * with the quick bar's one-tap answers. Used at checkout (or whenever the
  * shopper reviews what they left for later).
  */
-export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, sections = [], mapSpotsOf, onSavePlace, onNeedLabels, askAtCheckout, onSave, onOther, onSkip, onAskAtCheckout, onClose }: {
+export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, labels, shelfTrail, sections = [], mapSpotsOf, onSavePlace, onNeedLabels, askAtCheckout, onSave, onPlace, onOther, onSkip, onAskAtCheckout, onClose }: {
   items: ListItem[];
   categoryOf: (item: ListItem) => string | undefined;
   recentAisles: string[];
@@ -23,6 +23,8 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, la
   /** This store asks at checkout instead of at each check-off. */
   askAtCheckout: boolean;
   onSave: (item: ListItem, clue: Clue) => void;
+  /** Open the visual Place sheet for this item. */
+  onPlace: (item: ListItem, start?: PlaceStart) => void;
   onOther: (item: ListItem) => void;
   /** Not now: drop it from the list. */
   onSkip: (item: ListItem) => void;
@@ -54,6 +56,7 @@ export function WhereList({ items, categoryOf, recentAisles, lastClue, trail, la
             onNeedLabels={(code) => onNeedLabels(item, code)}
             laterLabel="Skip"
             onSave={(clue) => onSave(item, clue)}
+            onPlace={(start) => onPlace(item, start)}
             onOther={() => onOther(item)}
             onLater={() => onSkip(item)}
           />
