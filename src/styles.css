@@ -740,27 +740,24 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .toast.over-windows { z-index: 45; }
 .add-backdrop { background: #0004; }
 .add-sheet {
-  height: min(52vh, 28rem); max-height: 70vh; display: flex; flex-direction: column;
+  height: auto; max-height: 70vh; display: flex; flex-direction: column;
   border-top: 1px solid var(--line);
 }
-.add-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.add-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
 .add-sheet-head h2 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 1.05rem; }
 .add-sheet .add-row input { padding: 12px 14px; }
-.add-sheet-hint { margin: 4px 0; }
+.add-sheet-hint { margin: 2px 0 4px; }
 .add-sheet .suggestions.in-sheet { flex: 1; min-height: 0; overflow-y: auto; }
-.buy-again .chips.again-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 0.35rem; }
+.buy-again .chips.again-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 0; }
 .buy-again .chips.again-scroll::-webkit-scrollbar { display: none; }
 .suggestions.in-sheet { position: static; box-shadow: none; border: 0; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
 .suggestion.new { background: var(--accent-soft); }
 .add-icon-cat { width: 1.5em; text-align: center; flex: none; }
-.add-cats { flex-wrap: wrap; overflow: visible; padding-bottom: 8px; }
-.add-cats .chip { font-size: 0.82rem; padding: 5px 9px; }
-.added-strip { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding-top: 8px; margin-top: 6px; border-top: 1px solid var(--line); flex: none; }
+.added-strip { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding-top: 6px; margin-top: 4px; border-top: 1px solid var(--line); flex: none; }
 .added-strip .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .added-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); font-size: 0.85rem; }
 .added-chip .link { padding: 0 6px; font-size: 0.8rem; }
 .empty .btn.primary { margin: 6px 0; }
-.add-cats.one-line { flex-wrap: nowrap; overflow-x: auto; }
 .route-list { margin-top: 6px; }
 .route-list .visit.next-card { border: 0; border-left: 4px solid var(--accent); }
 .brush-side .cat-picker input { padding: 6px 8px; font-size: 14px; margin-top: 4px; }
@@ -948,9 +945,10 @@ main { padding-bottom: 110px; }
 .price-preview { padding-bottom: 10px; }
 
 /* ---- Buy again (add window) ---- */
-.buy-again h3 { margin: 0.25rem 0 0.35rem; font-weight: 600; }
-.buy-again .chips { margin-bottom: 0.5rem; flex-wrap: wrap; overflow: visible; }
-.buy-again .last-trip { margin: 0.15rem 0 0.5rem; }
+.buy-again { min-height: 0; overflow-y: auto; }
+.buy-again h3 { margin: 0.15rem 0 0.25rem; font-weight: 600; }
+.buy-again .chips { margin-bottom: 0.25rem; flex-wrap: wrap; overflow: visible; }
+.buy-again .last-trip { margin: 0 0 0.35rem; }
 .chip.again { border-style: dashed; }
 .chip.again .again-cue {
   margin-left: 0.25rem;
@@ -1003,7 +1001,6 @@ main { padding-bottom: 110px; }
 .map-wrap { position: relative; }
 .you-at { margin: 4px 2px 0; font-weight: 600; }
 .danger-link { color: var(--danger); align-self: flex-start; margin-top: 6px; padding: 4px 0; }
-.add-sheet-hint-extra { display: block; }
 .map-tools {
   position: absolute; z-index: 5; display: flex; flex-direction: column; gap: 4px; align-items: stretch;
   padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);

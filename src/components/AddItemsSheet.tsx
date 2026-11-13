@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState } from 'react';
-import { inWalkingOrder } from '../core/taxonomy';
 import { guessCategory } from '../core/guess';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
@@ -12,7 +11,7 @@ import { useVoiceMic } from './useVoiceMic';
 export type BuyAgainChip = { product: Product; cue?: 'due' | 'often' };
 
 /**
- * Compact add composer: search (commas for several), or browse by category.
+ * Compact add composer: type or speak (commas for several).
  * Docks at the bottom so the shopping list stays visible and updates as you add.
  * Stays open for more; Undo last undoes the most recent add.
  * Mic fills the box for review; matching catalog rows (and “On your list”)
@@ -42,7 +41,6 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
     return !p || !onList.has(p.id);
   });
   const [text, setText] = useState('');
-  const [browse, setBrowse] = useState<string>();
   const [lastAdd, setLastAdd] = useState<{ names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }>();
   const onAddRef = useRef(onAdd);
   onAddRef.current = onAdd;
@@ -55,15 +53,6 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
   const suggestions = useMemo(() => catalog.suggest(query, 12), [catalog, query]);
   const isNew = query.length > 0 && !catalog.exact(query);
   const guess = isNew ? guessCategory(query, catalog)?.categoryId : undefined;
-  // Browsing: the categories (not subcategories) that have items, in walking order; the most common items first.
-  const categories = useMemo(
-    () => inWalkingOrder(catalog.tops().filter((c) => catalog.products.some((p) => p.categoryId && catalog.topOf(p.categoryId) === c.id))),
-    [catalog],
-  );
-  const browsing = browse !== undefined
-    ? [...catalog.products].filter((p) => p.categoryId && catalog.topOf(p.categoryId) === browse)
-      .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999) || a.name.localeCompare(b.name))
-    : [];
 
   function add(names: string[], mode: 'list' | 'cart') {
     const clean = names.map((n) => n.trim()).filter(Boolean);
@@ -84,11 +73,9 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
       const names = splitSpokenItems(transcript);
       if (!names.length) return;
       setText(names.join(', '));
-      setBrowse(undefined);
     },
     onInterim: (transcript) => {
       setText(transcript.trim());
-      setBrowse(undefined);
     },
   });
 
@@ -103,15 +90,15 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
       <li key={p.id} className="suggestion">
         <span className="add-icon-cat" aria-hidden="true">{iconOf(p.categoryId) ?? '·'}</span>
         <div className="s-text">
-          <span>{p.name}{browse === undefined && (amount.qty || amount.note) ? <span className="muted small"> · {amountText(amount)}</span> : null}</span>
+          <span>{p.name}{(amount.qty || amount.note) ? <span className="muted small"> · {amountText(amount)}</span> : null}</span>
           <span className="muted small">{waiting ? 'On your list' : whereText(p)}</span>
         </div>
         {(!waiting || amount.qty || amount.note) && (
-          <button type="button" className="s-btn" onClick={() => (browse !== undefined ? add([p.name], 'list') : addFromBox(withAmount(p.name, amount), 'list'))}>
+          <button type="button" className="s-btn" onClick={() => addFromBox(withAmount(p.name, amount), 'list')}>
             {waiting ? 'Update' : '+ List'}
           </button>
         )}
-        <button type="button" className="s-btn cart" onClick={() => (browse !== undefined ? add([p.name], 'cart') : addFromBox(withAmount(p.name, amount), 'cart'))}>🛒</button>
+        <button type="button" className="s-btn cart" onClick={() => addFromBox(withAmount(p.name, amount), 'cart')}>🛒</button>
       </li>
     );
   };
@@ -126,7 +113,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
         <form className="add-row" onSubmit={(e) => { e.preventDefault(); addFromBox(typed, 'list'); }}>
           <input
             value={text}
-            onChange={(e) => { setText(e.target.value); if (e.target.value) setBrowse(undefined); voice.setError(undefined); }}
+            onChange={(e) => { setText(e.target.value); voice.setError(undefined); }}
             placeholder="Type or speak an item"
             aria-label="Item to add"
             autoComplete="off"
@@ -138,7 +125,7 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
             className={voice.listening ? 'mic listening' : 'mic'}
             aria-label={voice.listening ? 'Stop listening' : 'Add by voice'}
             aria-pressed={voice.listening}
-            onClick={() => { setBrowse(undefined); voice.toggle(); }}
+            onClick={() => voice.toggle()}
           >
             {voice.listening ? '⏹' : '🎤'}
           </button>
@@ -148,12 +135,10 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
           {voice.error
             ? voice.error
             : voice.listening
-              ? <>Listening… say an item, then pause to review.</>
+              ? <>Listening… say an item, then pause.</>
               : typed
-                ? <>Pick a match below, or Enter adds to the list · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
-                : (again.length > 0 || tripRestock.length > 0) && browse === undefined
-                  ? <span className="add-sheet-hint-extra">＋ List queues it · 🛒 means you’re holding it (checked off).</span>
-                  : <>Browse by category, or type / speak above. ＋ List queues it · 🛒 means you’re holding it. The list updates behind this panel.</>}
+                ? <>Pick below, or Enter · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
+                : <>＋ List queues it · 🛒 means you’re holding it.</>}
         </p>
 
         {typed ? (
@@ -171,43 +156,29 @@ export function AddItemsSheet({ listName, catalog, onList, hereLabel, whereText,
             )}
             {suggestions.map(row)}
           </ul>
-        ) : (
-          <>
-            {(tripRestock.length > 0 || again.length > 0) && browse === undefined && (
-              <section className="buy-again" aria-label="Buy again">
-                {tripRestock.length > 0 && (
-                  <button type="button" className="btn wide last-trip" onClick={() => add(tripRestock, 'list')}>
-                    Last trip · add all ({tripRestock.length})
-                  </button>
-                )}
-                {again.length > 0 && (
-                  <>
-                    <h3 className="muted small">Buy again · tap to add</h3>
-                    <div className="chips again-scroll">
-                      {again.map(({ product: p, cue }) => (
-                        <button key={p.id} className={`chip again${cue ? ` cue-${cue}` : ''}`} onClick={() => add([p.name], 'list')}>
-                          <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
-                          {cue === 'due' && <span className="again-cue">due</span>}
-                          {cue === 'often' && <span className="again-cue">often</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-                <h3 className="muted small">Browse by category</h3>
-              </section>
+        ) : (tripRestock.length > 0 || again.length > 0) ? (
+          <section className="buy-again" aria-label="Buy again">
+            {tripRestock.length > 0 && (
+              <button type="button" className="btn wide last-trip" onClick={() => add(tripRestock, 'list')}>
+                Last trip · add all ({tripRestock.length})
+              </button>
             )}
-            <div className={`chips add-cats${browse !== undefined ? ' one-line' : ''}`} role="group" aria-label="Categories">
-              {categories.map((c) => (
-                <button key={c.id} className={browse === c.id ? 'chip active' : 'chip'} aria-pressed={browse === c.id}
-                  onClick={() => setBrowse(browse === c.id ? undefined : c.id)}>
-                  <span aria-hidden="true">{iconOf(c.id)}</span> {c.name}
-                </button>
-              ))}
-            </div>
-            {browse !== undefined && <ul className="suggestions in-sheet" aria-label="Items in this category">{browsing.map(row)}</ul>}
-          </>
-        )}
+            {again.length > 0 && (
+              <>
+                <h3 className="muted small">Buy again · tap to add</h3>
+                <div className="chips again-scroll">
+                  {again.map(({ product: p, cue }) => (
+                    <button key={p.id} className={`chip again${cue ? ` cue-${cue}` : ''}`} onClick={() => add([p.name], 'list')}>
+                      <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
+                      {cue === 'due' && <span className="again-cue">due</span>}
+                      {cue === 'often' && <span className="again-cue">often</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        ) : null}
 
         {lastAdd && (
           <div className="added-strip" aria-label="Added just now">
