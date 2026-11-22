@@ -83,5 +83,5 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   await tick(page, 'Milk');
   // Template dairy home is a clear guess → quiet save (Change opens the bar).
   await expect(page.locator('.toast')).toContainText(/Milk: saved at/i);
-  await expect(page.locator('.where-bar')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: /Where was / })).toHaveCount(0);
 });

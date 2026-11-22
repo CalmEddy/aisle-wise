@@ -96,6 +96,51 @@ export function noPageErrors(page: Page) {
   return () => expect(errors).toEqual([]);
 }
 
+/** The map-first "Where was it?" sheet for an item. */
+export const placeSheet = (page: Page, name?: string) =>
+  page.getByRole('dialog', { name: name ? `Where was ${name}?` : /Where was / });
+
+/** Opens Describe… on the current place sheet (WherePanel). */
+export async function openDescribe(page: Page, itemName?: string) {
+  await placeSheet(page, itemName).getByRole('button', { name: 'Describe…' }).click();
+}
+
+/** Answer via Describe… → Aisle tab (number + optional side/temp). */
+export async function describeAisle(page: Page, aisle: string, opts: { side?: 'L' | 'R'; temp?: 'chilled' | 'frozen' | 'shelf'; pos?: 'front' | 'middle' | 'back' } = {}) {
+  await openDescribe(page);
+  const panel = page.locator('.where-panel');
+  await panel.getByRole('tab', { name: 'Aisle' }).click();
+  if (opts.temp === 'frozen') await panel.getByRole('button', { name: '❄ Freezer' }).click();
+  else if (opts.temp === 'chilled') await panel.getByRole('button', { name: '🧊 Fridge' }).click();
+  else if (opts.temp === 'shelf') await panel.getByRole('button', { name: 'Shelf', exact: true }).click();
+  await panel.getByLabel('Aisle number').fill(aisle);
+  if (opts.side === 'R') await panel.getByRole('button', { name: 'Right →' }).click();
+  if (opts.side === 'L') await panel.getByRole('button', { name: '← Left' }).click();
+  if (opts.pos) await panel.getByRole('button', { name: opts.pos[0].toUpperCase() + opts.pos.slice(1), exact: true }).click();
+  await panel.getByRole('button', { name: /^Save/ }).click();
+}
+
+/** Answer via Describe… → Department. */
+export async function describeDept(page: Page, dept: string | RegExp) {
+  await openDescribe(page);
+  const panel = page.locator('.where-panel');
+  await panel.getByRole('tab', { name: 'Department' }).click();
+  await panel.getByRole('button', { name: dept }).click();
+}
+
+/** Answer via Describe… → Wall. */
+export async function describeWall(page: Page, wall: 'Left' | 'Back' | 'Right' | 'Front', part?: string, temp?: 'chilled' | 'frozen') {
+  await openDescribe(page);
+  const panel = page.locator('.where-panel');
+  await panel.getByRole('tab', { name: 'Wall' }).click();
+  const wallLabel = wall === 'Left' ? '← Left' : wall === 'Back' ? '↑ Back' : wall === 'Right' ? 'Right →' : '↓ Front';
+  await panel.getByRole('button', { name: wallLabel }).click();
+  if (part) await panel.getByRole('button', { name: part, exact: true }).click();
+  if (temp === 'frozen') await panel.getByRole('button', { name: '❄ Freezer' }).click();
+  if (temp === 'chilled') await panel.getByRole('button', { name: '🧊 Fridge' }).click();
+  await panel.getByRole('button', { name: /^Save/ }).click();
+}
+
 /** A store built only from "Where was it?" answers: the example corner store (entrance front right). */
 export function cornerStore() {
   const c = (name: string, categoryId: string | undefined, clue: object) => ({ id: name, name, ...(categoryId && { categoryId }), clues: { s1: clue } });

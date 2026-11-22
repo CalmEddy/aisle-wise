@@ -26,10 +26,11 @@ import { contains } from '../core/geometry';
 import { PlacePanel, clamp, handlePoint } from './PlacePanel';
 import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
+import { PlaceOnMap } from './PlaceOnMap';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { AddItemsSheet, type BuyAgainChip } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
-import { WhereBar, nextAisles, type MapSpot } from './WhereBar';
+import { nextAisles, type MapSpot } from './WhereBar';
 import { orderOf } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
@@ -984,11 +985,8 @@ export function ShoppingView(props: Props) {
   const [lastClue, setLastClue] = useState<Clue>();
   /** Aisle numbers answered this trip, in order (to guess the next one). */
   const [aisleTrail, setAisleTrail] = useState<string[]>([]);
-  /** Shelves answered this trip ("B12" → section B, shelf 12), to guess the next. */
-  const [shelfTrail, setShelfTrail] = useState<{ section: string; shelf?: number }[]>([]);
   const noteTrail = (clue: Clue) => {
     if ('aisle' in clue && clue.aisle) setAisleTrail((t) => [...t.slice(-5), clue.aisle!]);
-    if (clue.kind === 'shelf') setShelfTrail((t) => [...t.slice(-5), { section: clue.section, shelf: clue.shelf }]);
   };
 
   // Trip end: apply clear door / shelf-extend guesses quietly (Undo on the toast).
@@ -1024,8 +1022,6 @@ export function ShoppingView(props: Props) {
       setToast({ snapshot, added: [], mode: 'list', note: notes.join(' · ') });
     }
   }, [tripDone, whereBarFor, layout.id, props.where, props.shelves]);
-  /** The store's sections of labelled shelves (from the map), in order. */
-  const storeSections = useMemo(() => [...new Set(layout.places.map((p) => /^g-sec-(.+)-\d+$/.exec(p.id)?.[1]).filter((x): x is string => !!x))].sort(), [layout.places]);
   /** Setting up the store's shelf labels, from a label just typed (and the item it's for). */
   /** The departments screen is open (from the trip-done card: closing it means don't offer again). */
   const [wallsOpen, setWallsOpen] = useState<'trip' | 'settings' | null>(null);
@@ -1174,7 +1170,11 @@ export function ShoppingView(props: Props) {
     if (!product) return;
     const snapshot = { items, products: catalog.products };
     props.setProductLocation(product.id, spotKey);
-    setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${layout.places.find((p) => spotKey.startsWith(`${p.id}:`))?.label || 'saved'}` });
+    const placeId = spotKey.split(/[:@]/)[0];
+    const label = layout.places.find((p) => p.id === placeId)?.label
+      || resolveSpot(spotKey, layout, catalog)?.label
+      || 'saved';
+    setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${label}` });
     nextWhere(item);
   }
 
@@ -1210,7 +1210,6 @@ export function ShoppingView(props: Props) {
     props.where.newTrip();
     setWhereBarFor(null); // its item is leaving with the cart
     setAisleTrail([]);
-    setShelfTrail([]);
     setItems((prev) => prev.filter((i) => !i.done));
     setPosition(layout.entrance);
     setToast({ snapshot, added: [], mode: 'list', note: `Cart cleared (${n} item${n === 1 ? '' : 's'}). Ready for next time.` });
@@ -1905,29 +1904,23 @@ export function ShoppingView(props: Props) {
       )}
 
       {whereBarFor && !whereFor && !drag && !note && (
-        <WhereBar
+        <PlaceOnMap
           key={whereBarFor.id}
           itemName={whereBarFor.name}
-          categoryId={productFor(whereBarFor, catalog)?.categoryId}
-          labels={layout.labels}
-          shelfTrail={shelfTrail}
-          sections={storeSections}
+          layout={layout}
+          look={props.mapLook}
           mapSpots={mapSpotsFor(whereBarFor)}
-          onSavePlace={(key) => savePlace(whereBarFor, key)}
           here={productFor(whereBarFor, catalog) ? props.here.options : undefined}
           onHere={(o) => placeHereFor(whereBarFor, o)}
-          onNeedLabels={(code) => setLabelSetup({ code, item: whereBarFor })}
-          recentAisles={aislesUsed(catalog.products, layout.id)}
-          lastClue={lastClue}
-          trail={aisleTrail}
           onAskAtCheckout={() => {
             setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
             setWhereBarFor(null);
             setAskAtCheckout(true);
             setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `At ${layout.name} you’ll be asked at checkout, all in one list.` });
           }}
-          onSave={(clue) => saveWhere(whereBarFor, clue)}
-          onOther={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
+          onSavePlace={(key) => savePlace(whereBarFor, key)}
+          onSaveClue={(clue) => saveWhere(whereBarFor, clue)}
+          onDescribe={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
         />
       )}
@@ -2005,25 +1998,19 @@ export function ShoppingView(props: Props) {
       {listOpen && !whereFor && (
         <WhereList
           items={laterHere}
-          categoryOf={(i) => productFor(i, catalog)?.categoryId}
-          recentAisles={aislesUsed(catalog.products, layout.id)}
-          lastClue={lastClue}
-          trail={aisleTrail}
-          labels={layout.labels}
-          shelfTrail={shelfTrail}
-          sections={storeSections}
+          layout={layout}
+          look={props.mapLook}
           mapSpotsOf={mapSpotsFor}
-          onSavePlace={(item, key) => { savePlace(item, key); setLaterHere((ids) => ids.filter((id) => id !== item.id)); }}
-          onNeedLabels={(item, code) => setLabelSetup({ code, item })}
           askAtCheckout={askAtCheckout}
-          onSave={(item, clue) => {
+          onSavePlace={(item, key) => { savePlace(item, key); setLaterHere((ids) => ids.filter((id) => id !== item.id)); }}
+          onSaveClue={(item, clue) => {
             const snapshot = props.where.setClue(item, clue);
             setLastClue(clue);
             noteTrail(clue);
             setLaterHere((ids) => ids.filter((id) => id !== item.id));
             setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
           }}
-          onOther={(item) => setWhereFor(item)}
+          onDescribe={(item) => setWhereFor(item)}
           onSkip={(item) => setLaterHere((ids) => ids.filter((id) => id !== item.id))}
           onAskAtCheckout={setAskAtCheckout}
           onClose={() => setListOpen(false)}
