@@ -18,9 +18,11 @@ async function blankStore(page: Page) {
   await openSheet(page, 'Store');
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'New store' }).click();
-  await page.getByRole('button', { name: 'Other layouts or blank…' }).click();
+  await page.getByRole('button', { name: 'More layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+  if (await skip.count()) await skip.click();
   await page.locator('.toast .icon').click().catch(() => {});
 }
 
@@ -342,10 +344,11 @@ test('a new store in the editor starts from a default map too', async ({ page })
   await page.locator('.store-settings summary').click();
   await page.getByRole('button', { name: 'New store' }).click();
   const sheet = page.getByRole('dialog', { name: 'Start the map' });
-  await sheet.getByRole('button', { name: 'Other layouts or blank…' }).click();
-  await sheet.getByRole('radio', { name: /Discount store/ }).click();
+  await sheet.getByRole('radio', { name: /Hard discount|Discount/ }).click();
   await sheet.getByRole('button', { name: 'Less Aisles' }).click();
   await sheet.getByRole('button', { name: 'Create store' }).click();
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+  if (await skip.count()) await skip.click();
   await expect.poll(async () => (await layout(page, 'New store'))?.gen?.template).toBe('discount');
   const l = await layout(page, 'New store');
   expect(l.gen.template).toBe('discount');

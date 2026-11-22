@@ -1243,6 +1243,61 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 /* New store: what it starts as. */
 .template-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .template-preview { max-height: 40vh; overflow: hidden; }
+.template-gallery { max-height: min(92vh, 720px); overflow: auto; }
+.template-gallery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 10px 0;
+}
+.template-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 2px solid var(--border, #ccc);
+  border-radius: 10px;
+  background: var(--card, #fff);
+  text-align: left;
+  cursor: pointer;
+}
+.template-card.active { border-color: var(--accent, #2a6); box-shadow: 0 0 0 1px var(--accent, #2a6); }
+.template-card-map {
+  height: 22vw;
+  max-height: 140px;
+  min-height: 96px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #f6f7f5;
+}
+.template-card-map .map { width: 100%; height: 100%; }
+.template-card-blank {
+  display: grid;
+  place-items: center;
+  height: 22vw;
+  max-height: 140px;
+  min-height: 96px;
+  border-radius: 6px;
+  background: repeating-linear-gradient(-45deg, #f0f0f0, #f0f0f0 6px, #fafafa 6px, #fafafa 12px);
+  font-size: 1.6rem;
+}
+.template-card-label { font-size: 0.92rem; line-height: 1.25; }
+.mirror-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 0.92rem;
+}
+.setup-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 12px 10px;
+}
+.setup-card p { margin: 0; flex: 1 1 auto; }
+.map-wrap.setup-map { max-height: 42vh; overflow: hidden; margin: 0 0 4px; }
 .visit .likely { margin-left: 4px; }
 /* Long place names: the item's name gets the room; the line under it stays one line, cut short with "…". */
 .row label, .row .name { min-width: 0; }

@@ -53,6 +53,7 @@ import { aisleShelves, runsUp, selectionRect } from '../core/aisles';
 import { TripDoneCard } from './TripDoneCard';
 import { DeptWallsSheet } from './DeptWallsSheet';
 import { offerWalls } from '../core/walls';
+import { DOOR_SPOTS } from '../core/door';
 import { priceCue } from '../core/prices';
 import type { ItemUnit } from '../core/types';
 
@@ -138,6 +139,8 @@ interface Props {
     door?: { guess: number };
     /** The door's spot along the front (0 left – 1 right), or undefined for not sure. Returns what Undo restores. */
     setDoor: (f: number | undefined) => Snapshot | undefined;
+    /** Clears first-time setup (door / blank guide) on this store. */
+    clearSetup: () => void;
     /** Sets how this store labels its shelves ("B12"), or back to aisle numbers. Returns what Undo restores. */
     setLabels: (style: LabelStyle | undefined) => Snapshot;
   };
@@ -164,7 +167,9 @@ export interface BuildApi {
   stepTo: (dir: Direction) => void;
   markHere: (which: 'entrance' | 'checkout') => Snapshot;
   /** A new store in the editor, from a default map (or 'blank'). */
-  startBlankStore: (templateId: string, aisles?: number) => void;
+  startBlankStore: (templateId: string, aisles?: number, opts?: { mirror?: boolean }) => void;
+  /** Clears first-time setup on the active store. */
+  clearSetup: () => void;
   updatePlace: (placeId: string, patch: Partial<Place>) => boolean;
   /** Swaps a piece with the next one along its line; false if they can't swap. */
   swapPlace: (placeId: string, dx: number, dy: number) => boolean;
@@ -212,6 +217,15 @@ export function ShoppingView(props: Props) {
   const [picking, setPicking] = useState<{ productId?: string; item?: ListItem; name: string } | null>(null);
   const [menuFor, setMenuFor] = useState<ListItem | null>(null);
   const [note, setNote] = useState<BuildNote | null>(null);
+  const setupKind = layout.gen?.setup;
+  const [blankStep, setBlankStep] = useState<'entrance' | 'shelf' | 'area'>('entrance');
+  useEffect(() => {
+    if (setupKind === 'blank') setBlankStep('entrance');
+  }, [layout.id, setupKind]);
+  useEffect(() => {
+    if (setupKind) props.setDisplay((d) => (d.mapFull ? d : { ...d, mapFull: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout.id, setupKind]);
   const building = props.display.buildMode;
   // Build-mode banners belong to build mode: leaving it clears them.
   useEffect(() => {
@@ -604,7 +618,54 @@ export function ShoppingView(props: Props) {
   }
 
   const ghosts: MapGhost[] = [];
-  if (building && tool === 'brush') {
+  if (!building && setupKind === 'entrance') {
+    for (const [i, f] of DOOR_SPOTS.entries()) {
+      ghosts.push({
+        rect: { x: Math.round(f * (layout.width - 1)) - 1, y: layout.height - 2.4, w: 2.2, h: 2.2 },
+        kind: 'next',
+        label: String(i + 1),
+        onTap: () => props.where.setDoor(f),
+      });
+    }
+  } else if (!building && setupKind === 'blank') {
+    if (blankStep === 'entrance') {
+      for (const [i, f] of DOOR_SPOTS.entries()) {
+        const x = Math.round(f * (layout.width - 1));
+        ghosts.push({
+          rect: { x: x - 1, y: layout.height - 2.4, w: 2.2, h: 2.2 },
+          kind: 'next',
+          label: String(i + 1),
+          onTap: () => {
+            props.build.markAt('entrance', { x, y: layout.height - 1 });
+            setPosition({ x, y: layout.height - 1 });
+            setBlankStep('shelf');
+          },
+        });
+      }
+    } else if (blankStep === 'shelf') {
+      const at = { x: Math.floor(layout.width / 2), y: Math.floor(layout.height / 2) };
+      ghosts.push({
+        rect: { x: at.x - 1, y: at.y - 3, w: 2, h: 6 },
+        kind: 'preview',
+        label: '▮',
+        onTap: () => {
+          props.build.addPlaceAt('shelf-v', at);
+          setBlankStep('area');
+        },
+      });
+    } else {
+      const at = { x: 4, y: Math.floor(layout.height / 2) - 1 };
+      ghosts.push({
+        rect: { x: at.x, y: at.y, w: 3, h: 3 },
+        kind: 'next',
+        label: '▦',
+        onTap: () => {
+          props.build.addPlaceAt('area', at);
+          props.where.clearSetup();
+        },
+      });
+    }
+  } else if (building && tool === 'brush') {
     // The next step's walkway and what it will paint.
     const a = brushArea(position, brushDir, brush.width);
     ghosts.push({ rect: a.orientation === 'vertical'
@@ -1278,7 +1339,7 @@ export function ShoppingView(props: Props) {
   const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
   // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
   // While placing an item, always show the whole map (same view as 🗺).
-  const mapStrip = !building && !props.display.mapFull && !whereBarFor;
+  const mapStrip = !building && !props.display.mapFull && !whereBarFor && !setupKind;
   const [viewOpen, setViewOpen] = useState(false);
   const addButton = (
     <button type="button" className="toggle add-toggle" onClick={() => setAddingFor(props.lists.current)} aria-label="Add items" title="Add items">＋</button>
@@ -1624,6 +1685,28 @@ export function ShoppingView(props: Props) {
         />
       )}
 
+      {!building && (items.length > 0 || !!setupKind) && (layout.places.length > 0 || !!setupKind) && (
+        <div className={`map-wrap${setupKind ? ' setup-map' : ''}`}>
+          {storeMap}
+          {hereLabel && items.length > 0 && (
+            <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
+          )}
+        </div>
+      )}
+      {!building && setupKind && (
+        <section className="card setup-card" aria-label="Set up the map">
+          <p>
+            {setupKind === 'entrance'
+              ? <><span aria-hidden="true">🚪 </span>Tap where the door is on the map</>
+              : blankStep === 'entrance'
+                ? <><span aria-hidden="true">🚪 </span>Tap where you came in</>
+                : blankStep === 'shelf'
+                  ? <><span aria-hidden="true">▮ </span>Tap the ghost shelf to place your first aisle</>
+                  : <><span aria-hidden="true">▦ </span>Tap to place an open area (produce, endcap…)</>}
+          </p>
+          <button type="button" className="link" onClick={() => props.where.clearSetup()}>Skip for now</button>
+        </section>
+      )}
       {!building && items.length === 0 && (
         <DisplayToggles
           display={props.display}
@@ -1640,14 +1723,6 @@ export function ShoppingView(props: Props) {
       )}
       {!building && items.length > 0 && (
         <>
-          {layout.places.length > 0 && (
-            <div className="map-wrap">
-              {storeMap}
-              {hereLabel && (
-                <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
-              )}
-            </div>
-          )}
           <DisplayToggles
             display={props.display}
             setDisplay={props.setDisplay}
@@ -1933,10 +2008,15 @@ export function ShoppingView(props: Props) {
         />
       )}
       {newStoreOpen && (
-        <TemplatePicker name="the new store" onClose={() => setNewStoreOpen(false)} onCreate={(id, aisles) => {
-          props.build.startBlankStore(id, aisles);
+        <TemplatePicker name="the new store" onClose={() => setNewStoreOpen(false)} onCreate={(id, aisles, opts) => {
+          props.build.startBlankStore(id, aisles, opts);
           setEditingId(undefined);
-          setNote({ kind: 'message', text: id === 'blank' ? 'New blank store started. Tap “I’m at the entrance” where you came in.' : 'New store started from a default map: dashed parts are guesses until you say where things are.' });
+          setNote({
+            kind: 'message',
+            text: id === 'blank'
+              ? 'Blank store started — tap the door ghosts on the map to begin.'
+              : 'Store started from a default map. Tap the door on the map, then shop: dashed parts are guesses.',
+          });
         }} />
       )}
       {wallsOpen && (
