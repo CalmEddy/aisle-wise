@@ -26,7 +26,7 @@ import { contains } from '../core/geometry';
 import { PlacePanel, clamp, handlePoint } from './PlacePanel';
 import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
-import { PlaceOnMap } from './PlaceOnMap';
+import { PlaceOnMap, type PlaceMapController } from './PlaceOnMap';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { AddItemsSheet, type BuyAgainChip } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
@@ -980,6 +980,8 @@ export function ShoppingView(props: Props) {
   const [whereFor, setWhereFor] = useState<ListItem | null>(null);
   /** The item the quick "Where was it?" bar is asking about (at check-off). */
   const [whereBarFor, setWhereBarFor] = useState<ListItem | null>(null);
+  /** Main-map tap/highlight while PlaceOnMap is open (same map as 🗺). */
+  const [placeMap, setPlaceMap] = useState<PlaceMapController | null>(null);
   // Items to ask about later (per store), and the last answer (for "Same as last").
   const [askLater, setAskLater] = usePersistentState<Record<string, string[]>>('aw.askLater', {});
   const [lastClue, setLastClue] = useState<Clue>();
@@ -1275,7 +1277,8 @@ export function ShoppingView(props: Props) {
 
   const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
   // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
-  const mapStrip = !building && !props.display.mapFull;
+  // While placing an item, always show the whole map (same view as 🗺).
+  const mapStrip = !building && !props.display.mapFull && !whereBarFor;
   const [viewOpen, setViewOpen] = useState(false);
   const addButton = (
     <button type="button" className="toggle add-toggle" onClick={() => setAddingFor(props.lists.current)} aria-label="Add items" title="Add items">＋</button>
@@ -1299,13 +1302,16 @@ export function ShoppingView(props: Props) {
             ghosts={ghosts}
             look={props.mapLook}
             showGrid={building}
-            highlightId={here?.id}
+            highlightId={whereBarFor ? placeMap?.highlightId : here?.id}
             selectedId={editing?.id}
             selectedAisleId={editingAisle?.id}
             selectedAisleIds={chosenAisles}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
-            onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+            onMapTap={blocking || cutting || selecting ? undefined
+              : whereBarFor && placeMap ? (_x, _y, place) => placeMap.tapPlace(place)
+                : building ? buildTap
+                  : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
               if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
             } : undefined}
@@ -1321,7 +1327,8 @@ export function ShoppingView(props: Props) {
               onPointerMove: onMapDragMove,
               onPointerUp: endMapDrag,
               onPointerCancel: endMapDrag,
-            } : mapStrip ? { className: 'map strip tappable' } : undefined}
+            } : whereBarFor || !mapStrip ? { className: 'map tappable' }
+              : { className: 'map strip tappable' }}
           >
             {selecting && selectDrag.rect && (
               <rect className="map-select-outline" x={selectDrag.rect.x} y={selectDrag.rect.y} width={selectDrag.rect.w} height={selectDrag.rect.h} />
@@ -1912,6 +1919,7 @@ export function ShoppingView(props: Props) {
           mapSpots={mapSpotsFor(whereBarFor)}
           here={productFor(whereBarFor, catalog) ? props.here.options : undefined}
           onHere={(o) => placeHereFor(whereBarFor, o)}
+          onMapController={setPlaceMap}
           onAskAtCheckout={() => {
             setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]);
             setWhereBarFor(null);

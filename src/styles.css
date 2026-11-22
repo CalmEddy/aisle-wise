@@ -905,6 +905,9 @@ main { padding-bottom: min(48vh, 22rem); }
   background: var(--surface);
   box-shadow: 0 -6px 24px rgb(0 0 0 / 18%);
 }
+.place-on-map.main-map {
+  max-height: none;
+}
 .place-on-map.embedded {
   position: static;
   transform: none;
