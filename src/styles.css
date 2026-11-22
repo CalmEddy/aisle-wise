@@ -868,17 +868,119 @@ button.store-pick { border: 0; background: none; padding: 0; color: var(--muted)
 .best-price-hint { margin: 0 0 8px; }
 .new-store { margin-top: 4px; }
 
-/* Quick "Where was it?" bar: at the bottom, doesn't block the list */
-.where-bar, .placement-card {
+/* Placement card (layout subjects) and legacy where-bar helpers */
+.placement-card {
   position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 10px); z-index: 36;
   width: calc(100% - 20px); max-width: 540px; padding: 10px 12px; border-radius: 16px;
   background: var(--surface); border: 1px solid var(--accent); box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
+  max-height: 72vh; overflow-y: auto;
 }
-.placement-card .where-bar-head, .where-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
-.where-bar-head .link { padding: 0 4px; }
-.where-bar-choices { display: flex; gap: 6px; flex-wrap: wrap; }
-.where-bar-choices .btn { flex: none; padding: 9px 12px; white-space: nowrap; }
-main { padding-bottom: 110px; }
+.placement-card .where-bar-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.placement-card .where-bar-choices { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.placement-card .where-bar-choices .btn { flex: none; padding: 9px 12px; white-space: nowrap; }
+main { padding-bottom: min(48vh, 22rem); }
+
+/* Map-first "Where was it?" — docks at the bottom; list stays usable underneath */
+.place-on-map-dock {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0;
+  z-index: 36;
+  width: 100%;
+  max-width: 560px;
+  pointer-events: none;
+}
+.place-on-map-dock .place-on-map { pointer-events: auto; }
+.place-on-map {
+  max-height: min(52vh, 24rem);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px);
+  border-radius: 18px 18px 0 0;
+  border: 1px solid var(--accent);
+  border-bottom: 0;
+  background: var(--surface);
+  box-shadow: 0 -6px 24px rgb(0 0 0 / 18%);
+}
+.place-on-map.embedded {
+  position: static;
+  transform: none;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0 0 10px;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.place-on-map-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.place-on-map-title { min-width: 0; flex: 1; }
+.place-on-map-title h2 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.place-on-map-title h2 b { font-weight: 800; }
+.place-on-map-hint { margin: 0; }
+.place-on-map-map {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 2px 0;
+}
+.place-on-map-map .map {
+  width: 100%;
+  height: min(28vh, 12rem);
+  max-height: 30vh;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.place-on-map-shortcuts {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 2px 0 4px;
+  -webkit-overflow-scrolling: touch;
+}
+.place-on-map-shortcuts::-webkit-scrollbar { display: none; }
+.place-on-map-shortcuts .btn {
+  flex: none;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+.place-on-map-checkout { flex: none; font-size: 0.85rem; padding: 4px 2px; white-space: nowrap; }
+.place-on-map-standing {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.where-list-queue {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.where-list-queue li {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
 
 /* ---- One question about the store's layout ---- */
 .layout-question {
