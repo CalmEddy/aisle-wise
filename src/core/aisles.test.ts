@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addAisle, clipAisles, nextAisleLabel, paintAisle, walkwayAt } from './aisles';
+import { addAisle, clipAisles, isAisleFloor, nextAisleLabel, paintAisle, walkwayAt } from './aisles';
 import { paintStep } from './brush';
 import { growStore } from './build';
 import type { Shelf, StoreLayout } from './types';
@@ -13,6 +13,15 @@ describe('aisle labels', () => {
     const l = store([v('a', 3), v('b', 6, 6, 10)]);
     expect(walkwayAt(l, { x: 4, y: 8 })).toEqual({ x: 4, y: 6, w: 2, h: 8 });
     expect(walkwayAt(l, { x: 10, y: 8 })).toBeUndefined();
+    expect(isAisleFloor(l, { x: 4, y: 8 })).toBe(true);
+    expect(isAisleFloor(l, { x: 10, y: 8 })).toBe(false);
+  });
+
+  it('counts a labeled aisle as aisle floor', () => {
+    let l = store([v('a', 3), v('b', 6)]);
+    l = addAisle(l, { x: 4, y: 4, w: 2, h: 10 }, 'Aisle 1').layout;
+    expect(isAisleFloor(l, { x: 4, y: 8 })).toBe(true);
+    expect(isAisleFloor(l, { x: 15, y: 15 })).toBe(false);
   });
 
   it('numbers new aisles and replaces a label on the same floor', () => {

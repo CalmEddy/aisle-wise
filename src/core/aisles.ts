@@ -1,5 +1,6 @@
 import { shelvesAcross } from './build';
-import type { AisleLabel, Place, Rect, Shelf, StoreLayout } from './types';
+import { contains } from './geometry';
+import type { AisleLabel, Place, Point, Rect, Shelf, StoreLayout } from './types';
 
 /**
  * Aisle labels: names for walkways ("Aisle 5"), drawn along the floor
@@ -33,6 +34,12 @@ export function walkwayAt(l: StoreLayout, p: { x: number; y: number }, maxWidth 
   const hi = (v ? b.x : b.y) - 1;
   if (to < from || hi < lo) return undefined;
   return v ? { x: lo, y: from, w: hi - lo + 1, h: to - from + 1 } : { x: from, y: lo, w: to - from + 1, h: hi - lo + 1 };
+}
+
+/** True when `p` is in a labeled aisle or the walkway between facing shelves. */
+export function isAisleFloor(l: StoreLayout, p: Point): boolean {
+  if ((l.aisles ?? []).some((a) => contains(a, p))) return true;
+  return !!walkwayAt(l, p);
 }
 
 /** Adds an aisle label over `rect`, replacing any label already on that floor. */

@@ -563,7 +563,7 @@ test('things put just past a shelf’s end: the shelf is offered longer at the e
     products: [{ id: 'jam', name: 'Jam', categoryId: 'breakfast_spreads', locations: { s1: 'sh1@0.5,0.5' } }],
   });
   await addItems(page, 'Zorbo, Quibble');
-  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  await page.getByRole('button', { name: 'Show map' }).click();
   const dropPast = async (name: string, gy: number) => {
     const handle = page.getByLabel(new RegExp(`^Drag ${name}`)).first();
     const from = (await handle.boundingBox())!;
@@ -625,7 +625,7 @@ test('“Where I’m standing” keeps the pin and moves the item to where you a
   const ok = noPageErrors(page);
   await fresh(page);
   await addItems(page, 'milk');
-  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  await page.getByRole('button', { name: 'Show map' }).click();
   await tapMap(page, 6, 20);
   const before = await saved<{ layoutId: string; point: { x: number; y: number } }>(page, 'position.v2');
   expect(before.point).toEqual({ x: 6, y: 20 });
@@ -655,7 +655,7 @@ test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carr
     activeLayout: 's1',
   });
   await addItems(page, 'Pickles');
-  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  await page.getByRole('button', { name: 'Show map' }).click();
   await tapMap(page, 8, 15);
   await tick(page, 'Pickles');
   const sheet = placeSheet(page, 'Pickles');
@@ -671,29 +671,39 @@ test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carr
   ok();
 });
 
-test('tap open floor: move there and offer creating via the editor', async ({ page }) => {
+test('phone hides the map until place or Show map; aisle tap is not open floor', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page, {
     layouts: [{ id: 's1', name: 'Drawn', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
       places: [
-        { kind: 'shelf', id: 'dairy', label: 'Dairy', orientation: 'horizontal', x: 2, y: 2, length: 8, categories: [] },
-      ] }],
+        { kind: 'shelf', id: 'a', label: '3L', orientation: 'vertical', x: 3, y: 4, length: 10, categories: [] },
+        { kind: 'shelf', id: 'b', label: '3R', orientation: 'vertical', x: 6, y: 4, length: 10, categories: [] },
+      ],
+      aisles: [{ id: 'aisle3', label: 'Aisle 3', x: 4, y: 4, w: 2, h: 10 }],
+    }],
     activeLayout: 's1',
-    display: { mapFull: true },
   });
-  await addItems(page, 'Milk');
-  // Open floor below the dairy shelf.
-  await tapMap(page, 10, 10);
-  const create = page.getByRole('region', { name: 'Add to the map here' });
-  await expect(create).toBeVisible();
-  await expect(create).toContainText(/You’re here/);
-  // List stays below the map wrap (not painted over open floor).
-  const mapBottom = await page.locator('.map-wrap.shop-map').boundingBox();
-  const listTop = await page.locator('main').boundingBox();
-  expect(mapBottom && listTop && listTop.y >= mapBottom.y - 1).toBeTruthy();
-  await create.getByRole('button', { name: /Area/ }).click();
-  await expect(page.getByRole('region', { name: 'Edit map' })).toBeVisible();
-  const places = (await saved<any[]>(page, 'layouts'))[0].places;
-  expect(places.some((p: any) => p.kind === 'area')).toBe(true);
+  await addItems(page, 'Crackers');
+  // Browsing: map slot is not open on phone.
+  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'Add to the map here' })).toHaveCount(0);
+  // Remove from list is visible on the row.
+  await expect(page.getByRole('button', { name: 'Remove Crackers from list' })).toBeVisible();
+
+  await tick(page, 'Crackers');
+  const sheet = placeSheet(page, 'Crackers');
+  await expect(sheet).toBeVisible();
+  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(1);
+  // Tap the labeled aisle walkway: move only — no open-floor pending pulse.
+  const tapAisle = () => page.locator('.map-wrap svg.map').evaluate((svg, pt) => {
+    const q = svg.createSVGPoint();
+    q.x = pt[0] + 0.5; q.y = pt[1] + 0.5;
+    const r = q.matrixTransform(svg.getScreenCTM());
+    svg.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x, clientY: r.y }));
+  }, [4, 8]);
+  await tapAisle();
+  await expect(sheet).not.toContainText(/Selected this spot/i);
+  await expect(page.locator('.map-wrap .floor-pending')).toHaveCount(0);
+  await expect(sheet).toBeVisible();
   ok();
 });
