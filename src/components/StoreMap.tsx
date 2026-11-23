@@ -52,6 +52,8 @@ interface Props {
   onMapTap?: (x: number, y: number, place: Place | undefined) => void;
   /** Place to outline, e.g. the current drop target. */
   highlightId?: string;
+  /** Place selected for two-tap confirm (pulsing red). */
+  pendingId?: string;
   selectedId?: string;
   showGrid?: boolean;
   onPlaceTap?: (place: Place) => void;
@@ -138,7 +140,7 @@ function aisleLabelSpot(a: AisleLabel, places: Place[]): { cx: number; cy: numbe
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, pendingId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -179,6 +181,7 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
           place={place}
           backs={place.kind === 'shelf' ? shelfBacks(layout, place) : []}
           highlighted={highlightId === place.id}
+          pending={pendingId === place.id}
           selected={selectedId === place.id || aisleShelfIds.has(place.id) || chosen.has(place.id)}
           changed={changed.has(place.id)}
           look={look}
@@ -267,13 +270,15 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
   );
 });
 
-function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap, onPointerDown }: {
+function PlaceShape({ place, backs, highlighted, pending, selected, changed, look, onTap, onPointerDown }: {
   place: Place;
   /** Just added or changed by the map: outlined. */
   changed?: boolean;
   /** Edges backed by another shelf (drawn just inside this shelf). */
   backs: Segment[];
   highlighted: boolean;
+  /** Two-tap place selection: pulsing red outline. */
+  pending?: boolean;
   selected: boolean;
   look?: SectionLook;
   onTap?: (p: Place) => void;
@@ -287,7 +292,7 @@ function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap,
   // The label's size (drawn by PlaceLabel), so section icons can keep clear of it.
   const size = isShelf ? Math.min(0.78, ((vertical ? f.h : f.w) / Math.max(1, place.label.length)) * 1.6) : 0;
   const noCat = isUncategorizedPlace(place);
-  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, changed && 'changed', place.guess && 'guess', noCat && 'uncategorized', highlighted && 'drop-over', selected && 'selected'].filter(Boolean).join(' ');
+  const cls = ['place', place.kind, isShelf && place.back && 'wall', place.temp, changed && 'changed', place.guess && 'guess', noCat && 'uncategorized', highlighted && 'drop-over', pending && 'place-pending', selected && 'selected'].filter(Boolean).join(' ');
   const sections = look?.colorOf || look?.iconOf ? sectionShapes(place) : [];
   const pad = 0.6; // easier to tap a thin shelf
 
@@ -334,6 +339,12 @@ function PlaceShape({ place, backs, highlighted, selected, changed, look, onTap,
         </>
       )}
       {changed && <rect className="change-frame" x={f.x - 0.35} y={f.y - 0.35} width={f.w + 0.7} height={f.h + 0.7} rx={isShelf ? 0.45 : 0.8} />}
+      {pending && (
+        <>
+          <rect className="pending-frame" x={f.x - 0.4} y={f.y - 0.4} width={f.w + 0.8} height={f.h + 0.8} rx={isShelf ? 0.5 : 0.85} />
+          <rect className="pending-frame ring" x={f.x - 0.4} y={f.y - 0.4} width={f.w + 0.8} height={f.h + 0.8} rx={isShelf ? 0.5 : 0.85} />
+        </>
+      )}
       {look?.iconOf && sections.map((sec, i) => {
         const icon = look.iconOf!(sec.categoryId);
         if (!icon) return null;
