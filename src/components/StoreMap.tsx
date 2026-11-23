@@ -54,6 +54,8 @@ interface Props {
   highlightId?: string;
   /** Place selected for two-tap confirm (pulsing red). */
   pendingId?: string;
+  /** Open-floor cell selected for two-tap confirm (pulsing red). */
+  pendingAt?: Point;
   selectedId?: string;
   showGrid?: boolean;
   onPlaceTap?: (place: Place) => void;
@@ -140,7 +142,7 @@ function aisleLabelSpot(a: AisleLabel, places: Place[]): { cx: number; cy: numbe
 
 /** Bird's-eye store map in grid units. Drop targets carry `data-drop`. */
 export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
-  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, pendingId, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
+  { layout, you, dots = [], pins = [], ghosts = [], onAisleTap, selectedAisleId, selectedAisleIds, changedIds, view, preview, focus, look, onMapTap, highlightId, pendingId, pendingAt, selectedId, showGrid, onPlaceTap, onPlacePointerDown, children, svgProps },
   ref,
 ) {
   const pad = focus ? 1.5 : 0.5;
@@ -256,6 +258,13 @@ export const StoreMap = forwardRef<SVGSVGElement, Props>(function StoreMap(
         <g className="map-preview">
           <circle cx={preview.x} cy={preview.y} r={1.1} />
           <circle cx={preview.x} cy={preview.y} r={0.35} className="core" />
+        </g>
+      )}
+
+      {pendingAt && (
+        <g className="place place-pending floor-pending" pointerEvents="none" aria-hidden="true">
+          <rect className="pending-frame" x={pendingAt.x - 0.15} y={pendingAt.y - 0.15} width={1.3} height={1.3} rx={0.35} />
+          <rect className="pending-frame ring" x={pendingAt.x - 0.15} y={pendingAt.y - 0.15} width={1.3} height={1.3} rx={0.35} />
         </g>
       )}
 

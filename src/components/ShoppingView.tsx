@@ -12,7 +12,7 @@ import { Floor } from '../core/floor';
 import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { touchingInLine } from '../core/swap';
 import { endKey, pastEnd, type Extension } from '../core/extend';
-import type { HereOption } from '../core/here';
+import { hereOptions, type HereOption } from '../core/here';
 import { TemplatePicker } from './TemplatePicker';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
@@ -89,8 +89,8 @@ interface Props {
   /** "Where was it?" → where I'm standing: what can be chosen or built there. */
   here: {
     options: HereOption[];
-    /** Builds the choice and saves the item there; returns what Undo restores and what was done. */
-    place: (productId: string, o: HereOption) => { snapshot: Snapshot; note: string } | undefined;
+    /** Builds the choice and saves the item there (or at `at`); returns what Undo restores and what was done. */
+    place: (productId: string, o: HereOption, at?: Point) => { snapshot: Snapshot; note: string } | undefined;
   };
   /** Shelves that seem to run further than the map shows. */
   shelves: {
@@ -1222,14 +1222,21 @@ export function ShoppingView(props: Props) {
     return out;
   }
   /** "Where I'm standing": builds the choice there (straight away, with Undo) and saves the item on it. */
-  function placeHereFor(item: ListItem, o: HereOption) {
+  function placeHereFor(item: ListItem, o: HereOption, at?: Point) {
     const product = productFor(item, catalog);
     if (!product) return;
-    const r = props.here.place(product.id, o);
+    const r = props.here.place(product.id, o, at);
     if (!r) { setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: 'No room for that here.' }); return; }
     if (whereBarFor?.id === item.id) setWhereBarFor(null);
     setToast({ snapshot: r.snapshot, added: [], mode: 'list', note: `${item.name}: ${r.note}` });
     nextWhere(item);
+  }
+  /** Open-floor confirm: build the best choice at that cell and save the item there. */
+  function saveFloorAt(item: ListItem, at: Point) {
+    setPosition(at);
+    const opts = hereOptions(layout, at).filter((o) => o.kind !== 'turn');
+    const choice = opts[0] ?? ({ kind: 'area', label: 'New area' } as HereOption);
+    placeHereFor(item, choice, at);
   }
   /** Saves a place drawn by hand as where an item is here; stocks the place with the item’s category. */
   function savePlace(item: ListItem, spotKey: string) {
@@ -1376,13 +1383,19 @@ export function ShoppingView(props: Props) {
             showGrid={building}
             highlightId={here?.id}
             pendingId={whereBarFor ? placeMap?.pendingId : undefined}
+            pendingAt={whereBarFor ? placeMap?.pendingAt : undefined}
             selectedId={editing?.id}
             selectedAisleId={editingAisle?.id}
             selectedAisleIds={chosenAisles}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
             onMapTap={blocking || cutting || selecting ? undefined
-              : whereBarFor && placeMap ? (_x, _y, place) => { setFloorCreate(null); placeMap.tapPlace(place); }
+              : whereBarFor && placeMap ? (x, y, place) => {
+                  const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
+                  setFloorCreate(null);
+                  setPosition(cell);
+                  placeMap.tapPlace(place, cell);
+                }
                 : building ? buildTap
                   : (x, y, place) => {
                       const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
@@ -2056,6 +2069,7 @@ export function ShoppingView(props: Props) {
           }}
           onSavePlace={(key) => savePlace(whereBarFor, key)}
           onSaveClue={(clue) => saveWhere(whereBarFor, clue)}
+          onSaveFloor={(at) => saveFloorAt(whereBarFor, at)}
           onDescribe={() => { setWhereFor(whereBarFor); setWhereBarFor(null); }}
           onLater={() => { setLaterHere((ids) => [...ids.filter((id) => id !== whereBarFor.id), whereBarFor.id]); setWhereBarFor(null); }}
         />
@@ -2150,6 +2164,10 @@ export function ShoppingView(props: Props) {
             noteTrail(clue);
             setLaterHere((ids) => ids.filter((id) => id !== item.id));
             setToast({ snapshot, added: [], mode: 'list', note: `${item.name}: ${describeClue(clue)}` });
+          }}
+          onSaveFloor={(item, at) => {
+            saveFloorAt(item, at);
+            setLaterHere((ids) => ids.filter((id) => id !== item.id));
           }}
           onDescribe={(item) => setWhereFor(item)}
           onSkip={(item) => setLaterHere((ids) => ids.filter((id) => id !== item.id))}
