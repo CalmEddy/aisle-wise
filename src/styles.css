@@ -871,6 +871,43 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 
 /* Map strip while shopping, and the view-settings menu */
 .map.strip { max-height: 150px; height: 150px; }
+/* Full / placing map: keep the list below the map (don’t paint over open floor). */
+.map-wrap.shop-map {
+  max-height: min(46vh, 22rem);
+  overflow: hidden;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  background: var(--floor);
+}
+.map-wrap.shop-map:has(.map.strip) {
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+}
+.map-wrap.shop-map .map:not(.strip) {
+  width: 100%;
+  height: 100%;
+  max-height: min(46vh, 22rem);
+  min-height: 12rem;
+}
+.floor-create {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 8px;
+  padding: 10px 12px;
+}
+.floor-create p { margin: 0; }
+.floor-create-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.floor-create-actions .btn {
+  min-height: 44px;
+  padding: 10px 12px;
+  flex: 1 1 calc(50% - 8px);
+}
 .view-menu { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .view-menu-lead { margin: 2px 0 4px; font-weight: 600; }
 .view-menu > .muted.small { overflow-wrap: anywhere; line-height: 1.35; }
@@ -937,9 +974,14 @@ main { padding-bottom: min(48vh, 22rem); }
   min-height: 44px;
   padding: 10px 14px;
 }
-.map-wrap:has(.placing-map) {
-  max-height: min(58vh, 28rem);
-  min-height: 42vh;
+.map-wrap.shop-map:has(.placing-map) {
+  max-height: min(56vh, 26rem);
+  min-height: 38vh;
+  overflow: hidden;
+}
+.map-wrap.shop-map:has(.placing-map) .map {
+  max-height: min(56vh, 26rem);
+  min-height: 38vh;
 }
 .place-on-map.embedded {
   position: static;

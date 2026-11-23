@@ -635,3 +635,30 @@ test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carr
   await expect.poll(async () => (await places()).length).toBe(2);
   ok();
 });
+
+test('tap open floor: move there and offer creating via the editor', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Drawn', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
+      places: [
+        { kind: 'shelf', id: 'dairy', label: 'Dairy', orientation: 'horizontal', x: 2, y: 2, length: 8, categories: [] },
+      ] }],
+    activeLayout: 's1',
+    display: { mapFull: true },
+  });
+  await addItems(page, 'Milk');
+  // Open floor below the dairy shelf.
+  await tapMap(page, 10, 10);
+  const create = page.getByRole('region', { name: 'Add to the map here' });
+  await expect(create).toBeVisible();
+  await expect(create).toContainText(/You’re here/);
+  // List stays below the map wrap (not painted over open floor).
+  const mapBottom = await page.locator('.map-wrap.shop-map').boundingBox();
+  const listTop = await page.locator('main').boundingBox();
+  expect(mapBottom && listTop && listTop.y >= mapBottom.y - 1).toBeTruthy();
+  await create.getByRole('button', { name: /Area/ }).click();
+  await expect(page.getByRole('region', { name: 'Edit map' })).toBeVisible();
+  const places = (await saved<any[]>(page, 'layouts'))[0].places;
+  expect(places.some((p: any) => p.kind === 'area')).toBe(true);
+  ok();
+});

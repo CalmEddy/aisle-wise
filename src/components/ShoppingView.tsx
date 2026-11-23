@@ -1043,6 +1043,11 @@ export function ShoppingView(props: Props) {
   const [whereBarFor, setWhereBarFor] = useState<ListItem | null>(null);
   /** Main-map taps / pulsing selection while PlaceOnMap is open (large 🗺 view). */
   const [placeMap, setPlaceMap] = useState<PlaceMapController | null>(null);
+  /** Empty floor just tapped: offer creating a shelf/area or opening the editor. */
+  const [floorCreate, setFloorCreate] = useState<Point | null>(null);
+  useEffect(() => {
+    if (building || whereBarFor || setupKind) setFloorCreate(null);
+  }, [building, whereBarFor, setupKind]);
   // Items to ask about later (per store), and the last answer (for "Same as last").
   const [askLater, setAskLater] = usePersistentState<Record<string, string[]>>('aw.askLater', {});
   const [lastClue, setLastClue] = useState<Clue>();
@@ -1377,9 +1382,13 @@ export function ShoppingView(props: Props) {
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
             onMapTap={blocking || cutting || selecting ? undefined
-              : whereBarFor && placeMap ? (_x, _y, place) => placeMap.tapPlace(place)
+              : whereBarFor && placeMap ? (_x, _y, place) => { setFloorCreate(null); placeMap.tapPlace(place); }
                 : building ? buildTap
-                  : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+                  : (x, y, place) => {
+                      const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
+                      setPosition(cell);
+                      setFloorCreate(place ? null : cell);
+                    }}
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
               if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
             } : undefined}
@@ -1694,12 +1703,48 @@ export function ShoppingView(props: Props) {
       )}
 
       {!building && (items.length > 0 || !!setupKind) && (layout.places.length > 0 || !!setupKind) && (
-        <div className={`map-wrap${setupKind ? ' setup-map' : ''}`}>
+        <div className={`map-wrap shop-map${setupKind ? ' setup-map' : ''}`}>
           {storeMap}
           {hereLabel && items.length > 0 && (
             <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
           )}
         </div>
+      )}
+      {!building && floorCreate && !whereBarFor && !setupKind && (
+        <section className="card floor-create" aria-label="Add to the map here">
+          <p><span aria-hidden="true">📍 </span>You’re here — add something on the map?</p>
+          <div className="floor-create-actions">
+            <button type="button" className="btn" onClick={() => {
+              const at = floorCreate;
+              const r = props.build.addPlaceAt('shelf-v', at);
+              setFloorCreate(null);
+              props.setDisplay((d) => ({ ...d, buildMode: true }));
+              setEditingId(r.placeId);
+              setToolState('walk');
+              setNote({ kind: 'message', text: `Added “${r.label}”. Drag it to move it, or change it below.`, snapshot: r.snapshot });
+            }}>▮ Shelf</button>
+            <button type="button" className="btn" onClick={() => {
+              const at = floorCreate;
+              const r = props.build.addPlaceAt('area', at);
+              setFloorCreate(null);
+              props.setDisplay((d) => ({ ...d, buildMode: true }));
+              setEditingId(r.placeId);
+              setToolState('walk');
+              setNote({ kind: 'message', text: `Added “${r.label}”. Drag it to move it, or change it below.`, snapshot: r.snapshot });
+            }}>▦ Area</button>
+            <button type="button" className="btn" onClick={() => {
+              setFloorCreate(null);
+              setToolState('brush');
+              props.setDisplay((d) => ({ ...d, buildMode: true }));
+            }}>🖌 Aisle block</button>
+            <button type="button" className="btn" onClick={() => {
+              setFloorCreate(null);
+              setToolState('block');
+              props.setDisplay((d) => ({ ...d, buildMode: true }));
+            }}>▤ Shelf block</button>
+          </div>
+          <button type="button" className="link" onClick={() => setFloorCreate(null)}>Not now</button>
+        </section>
       )}
       {!building && setupKind && (
         <section className="card setup-card" aria-label="Set up the map">
