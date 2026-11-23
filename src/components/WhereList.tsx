@@ -1,4 +1,4 @@
-import type { Clue, ListItem, StoreLayout } from '../core/types';
+import type { Clue, ListItem, Point, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { PlaceOnMap } from './PlaceOnMap';
 import type { MapSpot } from './WhereBar';
@@ -15,6 +15,7 @@ export function WhereList({
   askAtCheckout,
   onSavePlace,
   onSaveClue,
+  onSaveFloor,
   onDescribe,
   onSkip,
   onAskAtCheckout,
@@ -27,6 +28,7 @@ export function WhereList({
   askAtCheckout: boolean;
   onSavePlace: (item: ListItem, spotKey: string) => void;
   onSaveClue: (item: ListItem, clue: Clue) => void;
+  onSaveFloor?: (item: ListItem, at: Point) => void;
   onDescribe: (item: ListItem) => void;
   onSkip: (item: ListItem) => void;
   onAskAtCheckout: (on: boolean) => void;
@@ -42,7 +44,7 @@ export function WhereList({
           <h2>Where were these?</h2>
           <button type="button" className="btn primary" onClick={onClose}>Done</button>
         </div>
-        <p className="muted small">Tap the shelf or area. It builds the map so next time they’re in walking order.</p>
+        <p className="muted small">Tap a shelf, area, or open floor. It builds the map so next time they’re in walking order.</p>
         {items.length === 0 && <p className="muted">All placed. Thanks!</p>}
         {current && (
           <PlaceOnMap
@@ -58,6 +60,7 @@ export function WhereList({
             onDescribe={() => onDescribe(current)}
             onSavePlace={(key) => onSavePlace(current, key)}
             onSaveClue={(clue) => onSaveClue(current, clue)}
+            onSaveFloor={onSaveFloor ? (at) => onSaveFloor(current, at) : undefined}
           />
         )}
         {rest.length > 0 && (

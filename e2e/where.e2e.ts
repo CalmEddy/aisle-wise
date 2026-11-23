@@ -384,6 +384,41 @@ test('tap a shelf on the map to place an item', async ({ page }) => {
   ok();
 });
 
+test('tap open floor on the map to place an item there', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, {
+    layouts: [{ id: 's1', name: 'Drawn', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
+      places: [
+        { kind: 'shelf', id: 'dairy', label: 'Dairy', orientation: 'horizontal', x: 2, y: 2, length: 8, categories: [] },
+      ] }],
+    activeLayout: 's1',
+  });
+  await addItems(page, 'Crackers');
+  await tick(page, 'Crackers');
+  const sheet = placeSheet(page, 'Crackers');
+  await expect(sheet).toBeVisible();
+  const tapFloor = () => page.locator('.map-wrap svg.map').evaluate((svg, pt) => {
+    const q = svg.createSVGPoint();
+    q.x = pt[0] + 0.5; q.y = pt[1] + 0.5;
+    const r = q.matrixTransform(svg.getScreenCTM());
+    svg.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x, clientY: r.y }));
+  }, [10, 10]);
+  await tapFloor();
+  // You move to the tapped cell; pulsing red selects the open square.
+  await expect(sheet).toContainText(/Selected this spot/i);
+  await expect(page.locator('.map-wrap .floor-pending')).toHaveCount(1);
+  const you = await page.locator('.map-wrap .map-you').boundingBox();
+  expect(you).toBeTruthy();
+  await tapFloor();
+  await expect(sheet).toHaveCount(0);
+  const crackers = (await saved<{ name: string; locations?: Record<string, string> }[]>(page, 'products')).find((p) => p.name === 'Crackers')!;
+  expect(crackers.locations?.s1).toBeTruthy();
+  // A place was built or extended so the item has a home on the map.
+  const places = (await saved<any[]>(page, 'layouts'))[0].places;
+  expect(places.length).toBeGreaterThan(1);
+  ok();
+});
+
 test('departments set out along the walls: drag one, tap-to-place another', async ({ page }) => {
   const ok = noPageErrors(page);
   await addItems(page, 'Apples, Bread');

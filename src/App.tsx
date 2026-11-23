@@ -708,12 +708,12 @@ export default function App() {
   // ---- "Where was it?" → where I'm standing ----
   /** What can be built or chosen where the shopper is standing. */
   const hereChoices = useMemo(() => hereOptions(layout, position), [layout, position]);
-  /** Builds the choice where the shopper stands and saves the item there. Returns what Undo restores and what was done. */
-  function placeHere(productId: string, o: HereOption): { snapshot: Snapshot; note: string } | undefined {
+  /** Builds the choice where the shopper stands (or at `at`) and saves the item there. Returns what Undo restores and what was done. */
+  function placeHere(productId: string, o: HereOption, at?: Point): { snapshot: Snapshot; note: string } | undefined {
     const product = catalog.productById.get(productId);
     if (!product) return undefined;
     const category = product.categoryId ? catalog.categoryById.get(product.categoryId) : undefined;
-    const r = buildHere(layout, position, o, category);
+    const r = buildHere(layout, at ?? position, o, category);
     if (!r) return undefined;
     const snapshot = snapshotNow();
     if (r.layout !== layout) replaceLayout(r.layout);
