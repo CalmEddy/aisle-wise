@@ -337,9 +337,18 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                 {onPatch && !item.done && showPrice && <InlinePrice item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
                 {clearBtn(item)}
-                {onMenu
-                  ? <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
-                  : <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>}
+                {!item.done && (
+                  <button
+                    type="button"
+                    className="icon remove-from-list"
+                    onClick={() => onRemove(item)}
+                    aria-label={`Remove ${item.name} from list`}
+                    title="Remove from list"
+                  >×</button>
+                )}
+                {onMenu && (
+                  <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+                )}
               </div>
             </SwipeRow>
           ) : (<>

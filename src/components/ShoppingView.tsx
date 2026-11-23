@@ -1043,11 +1043,6 @@ export function ShoppingView(props: Props) {
   const [whereBarFor, setWhereBarFor] = useState<ListItem | null>(null);
   /** Main-map taps / pulsing selection while PlaceOnMap is open (large 🗺 view). */
   const [placeMap, setPlaceMap] = useState<PlaceMapController | null>(null);
-  /** Empty floor just tapped: offer creating a shelf/area or opening the editor. */
-  const [floorCreate, setFloorCreate] = useState<Point | null>(null);
-  useEffect(() => {
-    if (building || whereBarFor || setupKind) setFloorCreate(null);
-  }, [building, whereBarFor, setupKind]);
   // Items to ask about later (per store), and the last answer (for "Same as last").
   const [askLater, setAskLater] = usePersistentState<Record<string, string[]>>('aw.askLater', {});
   const [lastClue, setLastClue] = useState<Clue>();
@@ -1355,9 +1350,21 @@ export function ShoppingView(props: Props) {
   });
 
   const overSpot = drag?.over ? resolveSpot(drag.over, layout, catalog) : undefined;
+  // Wide layout always shows the map in a side column; phones hide it until place/setup/🗺.
+  const [wideShop, setWideShop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 640px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)');
+    const sync = () => setWideShop(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+  const mapForced = !!whereBarFor || !!setupKind;
+  const mapOpen = mapForced || !!props.display.mapFull || wideShop;
   // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
   // While placing an item, always show the whole map so taps hit shelves clearly on a phone.
-  const mapStrip = !building && !props.display.mapFull && !whereBarFor && !setupKind;
+  // Wide side-by-side uses the full map in the map column (strip is phone-only when map is shown).
+  const mapStrip = !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
   const [viewOpen, setViewOpen] = useState(false);
   const addButton = (
     <button type="button" className="toggle add-toggle" onClick={() => setAddingFor(props.lists.current)} aria-label="Add items" title="Add items">＋</button>
@@ -1392,15 +1399,13 @@ export function ShoppingView(props: Props) {
             onMapTap={blocking || cutting || selecting ? undefined
               : whereBarFor && placeMap ? (x, y, place) => {
                   const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
-                  setFloorCreate(null);
                   setPosition(cell);
                   placeMap.tapPlace(place, cell);
                 }
                 : building ? buildTap
-                  : (x, y, place) => {
+                  : (x, y) => {
                       const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
                       setPosition(cell);
-                      setFloorCreate(place ? null : cell);
                     }}
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
               if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
@@ -1715,118 +1720,95 @@ export function ShoppingView(props: Props) {
         />
       )}
 
-      {!building && (items.length > 0 || !!setupKind) && (layout.places.length > 0 || !!setupKind) && (
-        <div className={`map-wrap shop-map${setupKind ? ' setup-map' : ''}`}>
-          {storeMap}
-          {hereLabel && items.length > 0 && (
-            <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
-          )}
-        </div>
-      )}
-      {!building && floorCreate && !whereBarFor && !setupKind && (
-        <section className="card floor-create" aria-label="Add to the map here">
-          <p><span aria-hidden="true">📍 </span>You’re here — add something on the map?</p>
-          <div className="floor-create-actions">
-            <button type="button" className="btn" onClick={() => {
-              const at = floorCreate;
-              const r = props.build.addPlaceAt('shelf-v', at);
-              setFloorCreate(null);
-              props.setDisplay((d) => ({ ...d, buildMode: true }));
-              setEditingId(r.placeId);
-              setToolState('walk');
-              setNote({ kind: 'message', text: `Added “${r.label}”. Drag it to move it, or change it below.`, snapshot: r.snapshot });
-            }}>▮ Shelf</button>
-            <button type="button" className="btn" onClick={() => {
-              const at = floorCreate;
-              const r = props.build.addPlaceAt('area', at);
-              setFloorCreate(null);
-              props.setDisplay((d) => ({ ...d, buildMode: true }));
-              setEditingId(r.placeId);
-              setToolState('walk');
-              setNote({ kind: 'message', text: `Added “${r.label}”. Drag it to move it, or change it below.`, snapshot: r.snapshot });
-            }}>▦ Area</button>
-            <button type="button" className="btn" onClick={() => {
-              setFloorCreate(null);
-              setToolState('brush');
-              props.setDisplay((d) => ({ ...d, buildMode: true }));
-            }}>🖌 Aisle block</button>
-            <button type="button" className="btn" onClick={() => {
-              setFloorCreate(null);
-              setToolState('block');
-              props.setDisplay((d) => ({ ...d, buildMode: true }));
-            }}>▤ Shelf block</button>
-          </div>
-          <button type="button" className="link" onClick={() => setFloorCreate(null)}>Not now</button>
-        </section>
-      )}
-      {!building && setupKind && (
-        <section className="card setup-card" aria-label="Set up the map">
-          <p>
-            {setupKind === 'entrance'
-              ? <><span aria-hidden="true">🚪 </span>Tap where the door is on the map</>
-              : blankStep === 'entrance'
-                ? <><span aria-hidden="true">🚪 </span>Tap where you came in</>
-                : blankStep === 'shelf'
-                  ? <><span aria-hidden="true">▮ </span>Tap the ghost shelf to place your first aisle</>
-                  : <><span aria-hidden="true">▦ </span>Tap to place an open area (produce, endcap…)</>}
-          </p>
-          <button type="button" className="link" onClick={() => props.where.clearSetup()}>Skip for now</button>
-        </section>
-      )}
-      {!building && items.length === 0 && (
-        <DisplayToggles
-          display={props.display}
-          setDisplay={props.setDisplay}
-          show={[]}
-          lead={(
-            <>
-              {addButton}
-              <button type="button" className="toggle" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
-                aria-label="Edit map" title="Draw the store map by hand">🛠 Edit map</button>
-            </>
-          )}
-        />
-      )}
-      {!building && items.length > 0 && (
-        <>
-          <DisplayToggles
-            display={props.display}
-            setDisplay={props.setDisplay}
-            show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
-            offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
-            lead={(
-              <>
-                {addButton}
-                <ListSortToggle display={props.display} setDisplay={props.setDisplay} />
-              </>
-            )}
-            extra={(
-              <>
-                {!building && (
-                  <button type="button" className="toggle icon-only action" aria-pressed={!mapStrip} onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
-                    aria-label={mapStrip ? 'Show the whole map' : 'Smaller map'} title={mapStrip ? 'Show the whole map' : 'Smaller map'}>🗺</button>
+      {!building && (
+        <div className="shop-columns">
+          <div className={`shop-map-slot${mapOpen ? ' is-open' : ''}`}>
+            {(items.length > 0 || !!setupKind) && (layout.places.length > 0 || !!setupKind) && (
+              <div className={`map-wrap shop-map${setupKind ? ' setup-map' : ''}`}>
+                {storeMap}
+                {hereLabel && items.length > 0 && (
+                  <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
                 )}
-                <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
-                  aria-label="View settings" title="View settings">⚙</button>
-              </>
+              </div>
             )}
-          />
-          {viewOpen && (
-            <div className="view-menu" role="group" aria-label="View settings">
-              <p className="muted small view-menu-lead">List shows</p>
+            {setupKind && (
+              <section className="card setup-card" aria-label="Set up the map">
+                <p>
+                  {setupKind === 'entrance'
+                    ? <><span aria-hidden="true">🚪 </span>Tap where the door is on the map</>
+                    : blankStep === 'entrance'
+                      ? <><span aria-hidden="true">🚪 </span>Tap where you came in</>
+                      : blankStep === 'shelf'
+                        ? <><span aria-hidden="true">▮ </span>Tap the ghost shelf to place your first aisle</>
+                        : <><span aria-hidden="true">▦ </span>Tap to place an open area (produce, endcap…)</>}
+                </p>
+                <button type="button" className="link" onClick={() => props.where.clearSetup()}>Skip for now</button>
+              </section>
+            )}
+          </div>
+          <div className="shop-list-col">
+            {items.length === 0 && (
               <DisplayToggles
                 display={props.display}
                 setDisplay={props.setDisplay}
-                show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons', 'buildMode']}
-                offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
+                show={[]}
+                lead={(
+                  <>
+                    {addButton}
+                    <button type="button" className="toggle" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
+                      aria-label="Edit map" title="Draw the store map by hand">🛠 Edit map</button>
+                  </>
+                )}
               />
-              <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons · 🛠 Edit map</span>
-              <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
-                Clear all locations at this store
-              </button>
-            </div>
-          )}
-        </>
+            )}
+            {items.length > 0 && (
+              <>
+                <DisplayToggles
+                  display={props.display}
+                  setDisplay={props.setDisplay}
+                  show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
+                  offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
+                  lead={(
+                    <>
+                      {addButton}
+                      <ListSortToggle display={props.display} setDisplay={props.setDisplay} />
+                    </>
+                  )}
+                  extra={(
+                    <>
+                      <button
+                        type="button"
+                        className="toggle icon-only action"
+                        aria-pressed={mapOpen}
+                        onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
+                        aria-label={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
+                        title={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
+                      >🗺</button>
+                      <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
+                        aria-label="View settings" title="View settings">⚙</button>
+                    </>
+                  )}
+                />
+                {viewOpen && (
+                  <div className="view-menu" role="group" aria-label="View settings">
+                    <p className="muted small view-menu-lead">List shows</p>
+                    <DisplayToggles
+                      display={props.display}
+                      setDisplay={props.setDisplay}
+                      show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons', 'buildMode']}
+                      offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
+                    />
+                    <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons · 🛠 Edit map</span>
+                    <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
+                      Clear all locations at this store
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            {listMain}
+          </div>
+        </div>
       )}
       {building && (
         <div className="build-screen" role="region" aria-label="Edit map">
@@ -2035,8 +2017,6 @@ export function ShoppingView(props: Props) {
           </section>
         </div>
       )}
-      {!building && listMain}
-
       {note && !drag && (
         <BuildBanner
           note={note}

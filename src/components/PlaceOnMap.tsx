@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isAisleFloor } from '../core/aisles';
 import type { HereOption } from '../core/here';
 import type { Clue, Place, Point, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
@@ -88,6 +89,12 @@ export function PlaceOnMap({
       setPendingId(place.id);
       return;
     }
+    // Aisle / walkway: caller moves you there; do not treat as open floor.
+    if (isAisleFloor(layout, at)) {
+      setPendingId(undefined);
+      setPendingAt(undefined);
+      return;
+    }
     // Open floor: first tap selects the square; second confirms and saves there.
     setPendingId(undefined);
     if (sameCell(pendingAtRef.current, at)) {
@@ -96,7 +103,7 @@ export function PlaceOnMap({
       return;
     }
     setPendingAt(at);
-  }, []);
+  }, [layout]);
 
   useEffect(() => {
     setPendingId(undefined);

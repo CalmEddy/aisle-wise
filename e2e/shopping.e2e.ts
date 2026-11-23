@@ -154,13 +154,15 @@ test('empty list: Shop last trip restocks with Undo', async ({ page }) => {
   ok();
 });
 
-test('the toggle strip is usable, and the map can be shown whole', async ({ page }) => {
+test('the toggle strip is usable, and the map can be shown when needed', async ({ page }) => {
   await addItems(page, 'apples, bread, milk');
   await expect(page.locator('.toggles')).toBeVisible();
   // Horizontal scroll is OK on a phone; the strip itself must stay one row tall.
   expect(await page.locator('.toggles').evaluate((e) => e.clientHeight < 64)).toBe(true);
-  const strip = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
-  await page.getByRole('button', { name: 'Show the whole map' }).click();
-  const whole = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
-  expect(whole).toBeGreaterThan(strip);
+  // Phone keeps the map hidden until Show map (or item placement).
+  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show map' }).click();
+  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(1);
+  const shown = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
+  expect(shown).toBeGreaterThan(100);
 });
