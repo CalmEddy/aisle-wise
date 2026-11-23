@@ -25,8 +25,8 @@ test('the map sheet asks at check-off without a chip bar', async ({ page }) => {
   await describeDept(page, /Produce/);
   // Ignoring the sheet (checking the next thing off) moves it to "ask later".
   await tick(page, 'Bread');
-  // The place dock covers the lower list; force the check-off that queues Bread.
-  await row(page, 'Pasta').getByRole('checkbox').click({ force: true });
+  // The place dock (with its own map) covers the lower list — click the checkbox directly.
+  await row(page, 'Pasta').getByRole('checkbox').evaluate((el) => (el as HTMLInputElement).click());
   await expect(placeSheet(page, 'Pasta')).toBeVisible();
   await expect(page.locator('.later-chip')).toContainText('1 to place');
   expect((await clues(page)).Apples).toEqual({ kind: 'dept', dept: 'produce' });
@@ -343,20 +343,15 @@ test('tap a shelf on the map to place an item', async ({ page }) => {
   await addItems(page, 'Batteries');
   await tick(page, 'Batteries');
   const sheet = placeSheet(page, 'Batteries');
-  await expect(sheet).toBeVisible();
-  // Uses the main shopping map (same as 🗺), not a nested mini-map.
-  await expect(sheet.locator('.place-on-map-map')).toHaveCount(0);
-  await expect(page.locator('.map-wrap svg.map')).toBeVisible();
-  const tapHousehold = () => page.locator('.map-wrap svg.map').evaluate((svg, pt) => {
-    const q = svg.createSVGPoint();
-    q.x = pt[0] + 0.5; q.y = pt[1] + 0.5;
-    const r = q.matrixTransform(svg.getScreenCTM());
-    svg.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x, clientY: r.y }));
+  await expect(sheet.locator('.place-on-map-map svg.map')).toBeVisible();
+  // Tap Household on the place sheet map (grid ~15,5).
+  await sheet.locator('svg.map').evaluate((svg, [gx, gy]) => {
+    const el = svg as SVGSVGElement;
+    const q = el.createSVGPoint();
+    q.x = gx + 0.5; q.y = gy + 0.5;
+    const r = q.matrixTransform(el.getScreenCTM()!);
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x, clientY: r.y }));
   }, [15, 5]);
-  // First tap selects; second confirms.
-  await tapHousehold();
-  await expect(sheet).toContainText(/Selected.*Household/i);
-  await tapHousehold();
   await expect(sheet).toHaveCount(0);
   const batteries = (await saved<{ name: string; locations?: Record<string, string> }[]>(page, 'products')).find((p) => p.name === 'Batteries')!;
   expect(batteries.locations?.s1).toBe('hw');
