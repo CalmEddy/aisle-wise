@@ -96,10 +96,10 @@ export const STORE_TEMPLATES: StoreTemplate[] = [
   },
   {
     id: 'small',
-    name: 'Small store',
-    description: 'A neighbourhood or city store: the same pattern squeezed into a few aisles.',
+    name: 'Urban / neighborhood',
+    description: 'A city market or Trader Joe’s–style store: same departments, a few short aisles.',
     icon: '🏪',
-    aisles: 7,
+    aisles: 6,
     aisleRange: [3, 10],
     gen: { wallOrder: { right: ['produce', 'bakery'], back: ['dairy', 'meat'], left: ['frozen'] } },
     seeds: [
@@ -131,8 +131,8 @@ export const STORE_TEMPLATES: StoreTemplate[] = [
   },
   {
     id: 'discount',
-    name: 'Discount store',
-    description: 'Aldi or Lidl style: a few long aisles, coolers along the back, no service counters.',
+    name: 'Hard discount',
+    description: 'Aldi or Lidl style: a few wide aisles, coolers along the back, no service counters.',
     icon: '🏷️',
     aisles: 6,
     aisleRange: [4, 8],
@@ -203,7 +203,7 @@ export const STORE_TEMPLATES: StoreTemplate[] = [
   {
     id: 'warehouse',
     name: 'Warehouse club',
-    description: 'Costco or Sam’s Club style: lettered sections like B12, fresh food across the back.',
+    description: 'Costco or Sam’s Club style: wide lettered zones, fresh food clustered across the back.',
     icon: '📦',
     aisles: 0,
     aisleRange: [0, 0],
@@ -239,5 +239,8 @@ export const STORE_TEMPLATES: StoreTemplate[] = [
 ];
 
 export const DEFAULT_TEMPLATE_ID = 'conventional';
+
+/** Shown as large map cards in the picker; everything else sits under “More”. */
+export const FEATURED_TEMPLATE_IDS = ['conventional', 'discount', 'small', 'warehouse'] as const;
 
 export const templateById = (id?: string) => STORE_TEMPLATES.find((t) => t.id === id);

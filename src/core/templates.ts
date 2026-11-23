@@ -66,15 +66,33 @@ export const onlyFromTemplate = (kinds: ReadonlySet<string>, category?: string) 
 /** The template's settings, but its wall order: that's read from the template as the map is built (see regenerate). */
 const withoutWalls = ({ wallOrder: _, ...rest }: StoreTemplate['gen']) => rest;
 
+/** Options when creating from a template. */
+export type FromTemplateOpts = {
+  /** Flip left/right (aisle 1 and produce on the far side). */
+  mirror?: boolean;
+};
+
 /** A new store from a template, with this many aisles (or 'blank': just the entrance and checkout). */
-export function storeFromTemplate(name: string, templateId: string, aisles?: number): StoreLayout {
+export function storeFromTemplate(name: string, templateId: string, aisles?: number, opts?: FromTemplateOpts): StoreLayout {
   const base = blankStore(name);
   const t: StoreTemplate | undefined = templateById(templateId);
-  if (!t) return base;
+  if (!t) {
+    // Blank: ask the shopper to tap the entrance on the map next.
+    return { ...base, gen: { enabled: false, entrance: 'left', locked: [], setup: 'blank' } };
+  }
   const layout: StoreLayout = {
     ...base,
     ...(t.labels && { labels: t.labels }),
-    gen: { enabled: true, entrance: 'left', locked: [], ...withoutWalls(t.gen), template: t.id, ...(t.aisles > 0 && { aisleCount: aisles ?? t.aisles }) },
+    gen: {
+      enabled: true,
+      entrance: 'left',
+      locked: [],
+      ...withoutWalls(t.gen),
+      template: t.id,
+      ...(t.aisles > 0 && { aisleCount: aisles ?? t.aisles }),
+      ...(opts?.mirror && { aisleOne: 'far', produce: 'far' }),
+      setup: 'entrance',
+    },
   };
   return regenerate(layout, storeModel(layout, []));
 }

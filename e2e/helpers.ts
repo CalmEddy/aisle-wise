@@ -49,9 +49,12 @@ export async function newStore(page: Page, name: string) {
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill(name);
   await page.getByRole('button', { name: '＋ Here' }).click();
-  await page.getByRole('button', { name: 'Other layouts or blank…' }).click();
+  await page.getByRole('button', { name: 'More layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
+  // Skip first-time door/blank setup so later steps start on a clean map.
+  const skip = page.getByRole('button', { name: 'Skip for now' });
+  if (await skip.count()) await skip.click();
 }
 
 /** The text of the toasts showing. */

@@ -371,7 +371,7 @@ test('departments set out along the walls: drag one, tap-to-place another', asyn
   await tick(page, 'Bread');
   await describeDept(page, /Bakery/);
   await expect(page.getByRole('group', { name: 'Where’s Bakery?' })).toHaveCount(0);
-  await page.getByRole('button', { name: /departments are along the walls/ }).click();
+  await page.getByRole('button', { name: /Fine-tune departments on the map/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Departments on the walls' });
   const left = sheet.getByRole('group', { name: 'Left wall' });
   const back = sheet.getByRole('group', { name: 'Back wall' });

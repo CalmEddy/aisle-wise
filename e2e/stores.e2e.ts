@@ -9,6 +9,8 @@ test('a new store where you stand is picked again when you come back', async ({ 
   await page.getByLabel('New store name').fill('Kroger Main St');
   await page.getByRole('button', { name: '＋ Here' }).click();
   await page.getByRole('button', { name: 'Create typical store' }).click();
+  const skipSetup = page.getByRole('button', { name: 'Skip for now' });
+  if (await skipSetup.count()) await skipSetup.click();
   await expect(page.locator('.store-pick')).toContainText('Kroger Main St');
   const kroger = (await saved<any[]>(page, 'layouts')).find((l) => l.name === 'Kroger Main St');
   expect(kroger.geo).toEqual({ lat: 39.1, lon: -84.5 });
@@ -34,9 +36,11 @@ test('store picker shows list price totals and marks the cheapest store', async 
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill('Aldi');
   await page.getByRole('button', { name: '＋ Here' }).click();
-  await page.getByRole('button', { name: 'Other layouts or blank…' }).click();
+  await page.getByRole('button', { name: 'More layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
+  const skipAldi = page.getByRole('button', { name: 'Skip for now' });
+  if (await skipAldi.count()) await skipAldi.click();
   await expect(page.locator('.store-pick')).toContainText('Aldi');
 
   // Remember Milk cheaper at Demo than Aldi.
@@ -65,9 +69,9 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   await page.getByRole('button', { name: '＋ Here' }).click();
   const sheet = page.getByRole('dialog', { name: 'Start the map' });
   await expect(sheet.getByRole('radio', { name: /Typical supermarket/ })).toHaveAttribute('aria-checked', 'true');
-  await sheet.getByRole('button', { name: 'Other layouts or blank…' }).click();
-  await sheet.getByRole('radio', { name: /Small store/ }).click();
-  await expect(sheet.locator('input[type=number]')).toHaveValue('7');
+  await sheet.getByRole('radio', { name: /Urban/ }).click();
+  await expect(sheet.locator('input[type=number]')).toHaveValue('6');
+  await sheet.getByRole('button', { name: 'More Aisles' }).click();
   await sheet.getByRole('button', { name: 'More Aisles' }).click();
   await expect(sheet.getByLabel('Preview').locator('svg.map')).toBeVisible();
   await sheet.getByRole('button', { name: 'Create store' }).click();
@@ -75,6 +79,8 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   await expect.poll(async () => (await corner())?.gen?.template).toBe('small');
   const l = await corner();
   expect(l.gen.aisleCount).toBe(8);
+  const skipCorner = page.getByRole('button', { name: 'Skip for now' });
+  if (await skipCorner.count()) await skipCorner.click();
   expect(l.aisles).toHaveLength(8);
   // Milk goes where the default map has dairy (dashed guess shelves); checked off, it's asked about.
   await addItems(page, 'Milk');

@@ -21,7 +21,7 @@ export function StoreSheet({ layouts, activeId, here, locating, listTotals, onPi
   listTotals?: StoreListTotal[];
   onPick: (id: string) => void;
   /** A new store: its name, the default map it starts from ('blank': just the door and checkout) and how many aisles. */
-  onNew: (name: string, templateId: string, aisles?: number) => void;
+  onNew: (name: string, templateId: string, aisles?: number, opts?: { mirror?: boolean }) => void;
   onSaveHere: () => void;
   onClose: () => void;
 }) {
@@ -29,7 +29,7 @@ export function StoreSheet({ layouts, activeId, here, locating, listTotals, onPi
   /** Naming a new store: then choosing what it starts as. */
   const [naming, setNaming] = useState<string>();
   if (naming !== undefined) {
-    return <TemplatePicker name={naming} onCreate={(id, aisles) => onNew(naming, id, aisles)} onBack={() => setNaming(undefined)} onClose={onClose} />;
+    return <TemplatePicker name={naming} onCreate={(id, aisles, opts) => onNew(naming, id, aisles, opts)} onBack={() => setNaming(undefined)} onClose={onClose} />;
   }
   const rows = storesByDistance(layouts, here);
   const active = layouts.find((l) => l.id === activeId);

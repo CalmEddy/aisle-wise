@@ -975,8 +975,8 @@ export default function App() {
   activeIdRef.current = activeId;
 
   /** A new, empty store where you're standing (it learns its layout as you shop). */
-  function newStoreHere(name: string, templateId = 'blank', aisles?: number) {
-    const fresh = { ...storeFromTemplate(name, templateId, aisles), ...(here && { geo: here }) };
+  function newStoreHere(name: string, templateId = 'blank', aisles?: number, opts?: { mirror?: boolean }) {
+    const fresh = { ...storeFromTemplate(name, templateId, aisles, opts), ...(here && { geo: here }) };
     setLayouts((prev) => [...prev, fresh]);
     setActiveId(fresh.id);
     setPos({ layoutId: fresh.id, point: fresh.entrance });
@@ -989,11 +989,24 @@ export default function App() {
     setNotice(`${layout.name} will be picked when you’re here.`);
   }
 
-  function startBlankStore(templateId = 'blank', aisles?: number) {
-    const fresh = storeFromTemplate(`New store ${layouts.length + 1}`, templateId, aisles);
+  function startBlankStore(templateId = 'blank', aisles?: number, opts?: { mirror?: boolean }) {
+    const fresh = storeFromTemplate(`New store ${layouts.length + 1}`, templateId, aisles, opts);
     setLayouts((prev) => [...prev, fresh]);
     setActiveId(fresh.id);
     setPos({ layoutId: fresh.id, point: fresh.entrance });
+  }
+
+  /** Clears first-time setup on the active store (door / blank guide). */
+  function clearSetup() {
+    setLayouts((prev) => prev.map((l) => {
+      if (l.id !== layout.id || !l.gen?.setup) return l;
+      if (!l.gen.enabled) {
+        const { gen: _, ...rest } = l;
+        return rest;
+      }
+      const { setup: __, ...gen } = l.gen;
+      return { ...l, gen };
+    }));
   }
 
   /** Sets (or clears, with `null`) where a master-list item is in the current store. */
@@ -1408,7 +1421,7 @@ export default function App() {
           quickAdd={quickAdd}
           build={{
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
-            startBlankStore, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
+            startBlankStore, clearSetup, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
             store: {
               layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => openShare({ list: false, map: true }), resetDemo, isDemo: layout.id === demoLayout.id,
               gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,
@@ -1427,9 +1440,19 @@ export default function App() {
             setDoor: (f) => {
               const gen = layout.gen;
               if (!gen) return undefined;
-              if (f === undefined) { setGen({ skipped: [...(gen.skipped ?? []), 'entrance'] }); return undefined; }
-              return setGen({ door: f, sure: [...(gen.sure ?? []), 'entrance'], locked: gen.locked.filter((id) => id !== 'g-entrance' && id !== 'g-checkout-point') });
-            } }}
+              if (f === undefined) {
+                setGen({ skipped: [...(gen.skipped ?? []), 'entrance'], setup: undefined });
+                return undefined;
+              }
+              return setGen({
+                door: f,
+                sure: [...(gen.sure ?? []), 'entrance'],
+                locked: gen.locked.filter((id) => id !== 'g-entrance' && id !== 'g-checkout-point'),
+                setup: undefined,
+              });
+            },
+            clearSetup,
+          }}
           undo={undo}
           shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
           here={{ options: hereChoices, place: placeHere }}

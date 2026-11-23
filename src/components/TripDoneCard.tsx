@@ -44,7 +44,7 @@ export function TripDoneCard({ inCart, minutes, elsewhere, toPlace, onReview, qu
       {question && <LayoutQuestionCard compact question={question} onAnswer={onAnswer} />}
       {door}
       {extend}
-      {walls && <button className="btn wide" onClick={walls}>🧱 Show where the departments are along the walls</button>}
+      {walls && <button className="btn wide" onClick={walls}>🗺 Fine-tune departments on the map</button>}
       <button className="btn primary wide" onClick={onClear}>Clear cart · start next trip</button>
       {elsewhere.length > 0 && <p className="muted small">Things to get elsewhere stay on your list.</p>}
       {otherLists.length > 0 && onShopList && (

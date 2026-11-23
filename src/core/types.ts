@@ -155,6 +155,11 @@ export interface GeneratedMap extends Arrangement {
   wallOrder?: Record<MainWall, string[]>;
   /** The shopper's been offered the departments screen and closed it: not offered again. */
   wallsOffered?: boolean;
+  /**
+   * First-time setup after creating a store: ask for the door on the map
+   * ('entrance'), or guide tapping shelves on a blank map ('blank'). Cleared once done or skipped.
+   */
+  setup?: 'entrance' | 'blank';
   /** Where the door is along the front, 0 (left) to 1 (right); unset: the middle. */
   door?: number;
   /** Which way each block's shelves run ("block:C", "aisles:7"); unset: up and down (aisle groups: side to side). */
