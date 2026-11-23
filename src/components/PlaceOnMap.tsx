@@ -1,13 +1,20 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HereOption } from '../core/here';
 import type { Clue, Place, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { StoreMap } from './StoreMap';
 import type { MapSpot } from './WhereBar';
 
+/** Lets ShoppingView drive the main store map while this dock is open. */
+export type PlaceMapController = {
+  /** Place outlined with the pulsing red selection. */
+  pendingId?: string;
+  tapPlace: (place: Place | undefined) => void;
+};
+
 /**
- * Map-first "Where was it?": show the whole store and tap a shelf or area.
- * Slim shortcuts for known map spots, standing, and Describe… for rare clues.
+ * Map-first "Where was it?": first tap selects (pulsing red), second confirms.
+ * Check-off uses the main shopping map (large 🗺 view); review list keeps its own map.
  */
 export function PlaceOnMap({
   itemName,
@@ -24,6 +31,7 @@ export function PlaceOnMap({
   onSaveClue,
   queueHint,
   embedded,
+  onMapController,
 }: {
   itemName: string;
   layout: StoreLayout;
@@ -39,26 +47,50 @@ export function PlaceOnMap({
   onSaveClue?: (clue: Clue) => void;
   /** e.g. "2 more" while reviewing a queue */
   queueHint?: string;
-  /** Render without the dock (nested in WhereList). */
+  /** Nested in WhereList: show an in-sheet map. */
   embedded?: boolean;
+  /** When set (check-off dock), register taps/selection on the main StoreMap. */
+  onMapController?: (ctl: PlaceMapController | null) => void;
 }) {
   const [standing, setStanding] = useState(false);
-  const [highlightId, setHighlightId] = useState<string>();
+  const [pendingId, setPendingId] = useState<string>();
   const spots = mapSpots.slice(0, 3);
   const hasPlaces = layout.places.length > 0;
+  const useMainMap = !embedded && !!onMapController;
+  const pending = pendingId ? layout.places.find((p) => p.id === pendingId) : undefined;
 
-  function pickPlace(place: Place) {
-    setHighlightId(place.id);
-    onSavePlace(place.id);
-  }
+  const pendingRef = useRef(pendingId);
+  pendingRef.current = pendingId;
+  const saveRef = useRef(onSavePlace);
+  saveRef.current = onSavePlace;
 
-  function tapMap(_x: number, _y: number, place: Place | undefined) {
-    if (place) pickPlace(place);
-  }
+  const tapPlace = useCallback((place: Place | undefined) => {
+    if (!place) {
+      setPendingId(undefined);
+      return;
+    }
+    if (pendingRef.current === place.id) {
+      saveRef.current(place.id);
+      setPendingId(undefined);
+      return;
+    }
+    setPendingId(place.id);
+  }, []);
+
+  useEffect(() => {
+    setPendingId(undefined);
+    setStanding(false);
+  }, [itemName]);
+
+  useEffect(() => {
+    if (!useMainMap || !onMapController) return;
+    onMapController({ pendingId, tapPlace });
+    return () => onMapController(null);
+  }, [useMainMap, onMapController, pendingId, tapPlace]);
 
   const body = (
     <div
-      className={`place-on-map${embedded ? ' embedded' : ''}`}
+      className={`place-on-map${embedded ? ' embedded' : ''}${useMainMap ? ' main-map' : ''}`}
       role="dialog"
       aria-label={`Where was ${itemName}?`}
       onClick={embedded ? undefined : (e) => e.stopPropagation()}
@@ -74,9 +106,13 @@ export function PlaceOnMap({
       <p className="muted small place-on-map-hint">
         {standing
           ? 'Pick what to build or save where you’re standing.'
-          : hasPlaces
-            ? 'Tap the shelf or area on the map.'
-            : 'No shelves on the map yet — use Describe… or a shortcut below.'}
+          : !hasPlaces
+            ? 'No shelves on the map yet — use Describe… or a shortcut below.'
+            : pending
+              ? <>Selected <b>{pending.label || 'this place'}</b> — tap again to confirm.</>
+              : useMainMap
+                ? 'Tap a shelf or area on the map above, then tap again to confirm.'
+                : 'Tap a shelf or area, then tap again to confirm.'}
       </p>
 
       {standing && here && onHere ? (
@@ -90,13 +126,13 @@ export function PlaceOnMap({
         </div>
       ) : (
         <>
-          {hasPlaces && (
+          {hasPlaces && !useMainMap && (
             <div className="place-on-map-map">
               <StoreMap
                 layout={layout}
                 look={look}
-                highlightId={highlightId}
-                onMapTap={tapMap}
+                pendingId={pendingId}
+                onMapTap={(_x, _y, place) => tapPlace(place)}
               />
             </div>
           )}
@@ -136,8 +172,6 @@ export function PlaceOnMap({
   );
 
   if (embedded) return body;
-  // Dock at the bottom without a blocking backdrop so the list stays tappable
-  // (checking the next item off queues this one for later, same as the old bar).
   return (
     <div className="place-on-map-dock" onClick={(e) => e.stopPropagation()}>
       {body}

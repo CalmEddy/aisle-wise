@@ -77,6 +77,28 @@ button { cursor: pointer; }
 .place-label { fill: var(--muted); font-weight: 600; pointer-events: none; user-select: none; }
 .place.drop-over .place-bg { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 0.35; }
 .place.selected .place-bg { stroke: var(--you); stroke-width: 0.35; stroke-dasharray: 0.8 0.5; }
+/* Two-tap place selection: pulsing red around the shelf/area */
+.place.place-pending .place-bg {
+  fill: color-mix(in srgb, #e5383b 22%, transparent);
+  stroke: #e5383b;
+  stroke-width: 0.4;
+}
+.place.place-pending .pending-frame {
+  fill: none;
+  stroke: #e5383b;
+  stroke-width: 0.35;
+  pointer-events: none;
+}
+.place.place-pending .pending-frame.ring {
+  stroke-width: 0.45;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: place-pending-pulse 1.15s ease-out infinite;
+}
+@keyframes place-pending-pulse {
+  from { transform: scale(1); stroke-opacity: 1; }
+  to { transform: scale(1.12); stroke-opacity: 0; }
+}
 .map-marker rect { fill: var(--surface); stroke: var(--muted); stroke-width: 0.15; }
 .map-marker text { font-size: 1.05px; font-weight: 700; fill: var(--muted); pointer-events: none; }
 .map-stop circle { fill: var(--surface); stroke: var(--accent); stroke-width: 0.3; }
@@ -904,6 +926,20 @@ main { padding-bottom: min(48vh, 22rem); }
   border-bottom: 0;
   background: var(--surface);
   box-shadow: 0 -6px 24px rgb(0 0 0 / 18%);
+}
+/* Check-off uses the large map above: keep the dock compact for thumbs */
+.place-on-map.main-map {
+  max-height: none;
+  gap: 8px;
+  padding-top: 12px;
+}
+.place-on-map.main-map .place-on-map-shortcuts .btn {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+.map-wrap:has(.placing-map) {
+  max-height: min(58vh, 28rem);
+  min-height: 42vh;
 }
 .place-on-map.embedded {
   position: static;
