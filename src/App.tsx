@@ -45,6 +45,7 @@ import {
 } from './core/lists';
 import { clearFor, expandKeepingWalls } from './core/expand';
 import { clampPlace, footprint } from './core/geometry';
+import { groupPlaces, pruneGroups, ungroupPlaces } from './core/groups';
 import { renumberSelection } from './core/renumber';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
@@ -439,6 +440,8 @@ export default function App() {
       next = { ...next, places: [...next.places, shelf] };
       placeIds.push(shelf.id);
     }
+    // A multi-shelf stamp is one block: keep them grouped for later moves.
+    if (placeIds.length > 1) next = groupPlaces(next, placeIds);
     replaceLayout(next);
     return {
       placeIds,
@@ -873,7 +876,19 @@ export default function App() {
     /** Deletes aisles with their shelves (keeping shelves another aisle still uses). */
     deleteMany(ids: string[]): Snapshot {
       const snapshot = snapshotNow();
-      replaceLayout(deleteAisles(layout, ids));
+      replaceLayout(pruneGroups(deleteAisles(layout, ids)));
+      return snapshot;
+    },
+    /** Groups the selection so it moves as one. */
+    group(ids: string[]): Snapshot {
+      const snapshot = snapshotNow();
+      replaceLayout(groupPlaces(layout, ids));
+      return snapshot;
+    },
+    /** Ungroups the selection. */
+    ungroup(ids: string[]): Snapshot {
+      const snapshot = snapshotNow();
+      replaceLayout(ungroupPlaces(layout, ids));
       return snapshot;
     },
     /** What a dragged box touches: aisles and places. */
@@ -993,7 +1008,7 @@ export default function App() {
   }
 
   function deletePlace(placeId: string) {
-    replaceLayout({ ...layout, places: layout.places.filter((p) => p.id !== placeId) });
+    replaceLayout(pruneGroups({ ...layout, places: layout.places.filter((p) => p.id !== placeId) }));
   }
 
   function renamePlace(placeId: string, label: string) {

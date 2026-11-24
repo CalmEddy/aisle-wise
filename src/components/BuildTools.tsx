@@ -14,11 +14,11 @@ export type BuildTool = 'walk' | 'select' | 'brush' | 'shelf-v' | 'shelf-h' | 'b
 
 export const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
   { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
-  { id: 'select', icon: '⬚', label: 'Select', hint: 'Drag a box over aisles, shelves or areas to select them all, or tap one to add it or take it out. Then turn, move or delete them together.' },
+  { id: 'select', icon: '⬚', label: 'Select', hint: 'Drag a box or tap to select. Drag the selection to move it. Group so things move together.' },
   { id: 'brush', icon: '🖌', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
   { id: 'shelf-v', icon: '▮↕', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
   { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
-  { id: 'block', icon: '▤', label: 'Shelf block', hint: 'Drag across the map to fill it with shelves.' },
+  { id: 'block', icon: '▤', label: 'Shelf block', hint: 'Drag a rectangle once. Tap inside to move; drag corners to resize (along = length, across = how many shelves).' },
   { id: 'cut', icon: '✂', label: 'Cut aisles', hint: 'Drag a box across a block of aisles to make a cross aisle through them.' },
   { id: 'area', icon: '▦', label: 'Open area', hint: 'Tap the map to add an open area, like Produce.' },
   { id: 'entrance', icon: 'IN', label: 'Entrance', hint: 'Tap where shoppers come in (or drag IN in Walk).' },

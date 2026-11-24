@@ -183,6 +183,10 @@ button { cursor: pointer; }
 /* Layout editor */
 .marker-hit { fill: transparent; cursor: move; }
 .resize-handle { fill: var(--you); stroke: var(--surface); stroke-width: 0.3; cursor: nwse-resize; }
+.block-corner-handle {
+  fill: var(--you); stroke: var(--surface); stroke-width: 0.25; cursor: nwse-resize;
+  pointer-events: auto;
+}
 .toolbar { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 6px; scrollbar-width: none; }
 .field { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; font-size: 0.85rem; color: var(--muted); }
 .field input:not([type='number']), .field select {
