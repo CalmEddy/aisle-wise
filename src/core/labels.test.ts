@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildModel, regenerate } from './generate';
-import { formatLabel, guessRoles, looksLikeShelfCode, nextShelves, parseLabel, shelfOffsets, tokenize, type LabelStyle } from './labels';
+import { formatLabel, guessRoles, looksLikeShelfCode, nextBlockStart, nextShelves, parseLabel, sequenceLabels, shelfOffsets, tokenize, type LabelStyle } from './labels';
 import { resolveClue } from './clues';
 import type { Product, Shelf, StoreLayout } from './types';
 
@@ -41,6 +41,19 @@ describe('shelf labels taught by example', () => {
     expect(shelfOffsets('single', 4)).toEqual([0, 3, 6, 9]);
     expect(shelfOffsets('backToBack', 4)).toEqual([0, 1, 4, 5]); // 1|2 · 3|4
     expect(shelfOffsets('facing', 5)).toEqual([0, 3, 4, 7, 8]); // 1 · 2|3 · 4|5
+  });
+
+  it('sequences labels from a start code', () => {
+    expect(sequenceLabels('B1', 4, b12)).toEqual(['B1', 'B2', 'B3', 'B4']);
+    expect(sequenceLabels('Shelf 3', 3)).toEqual(['Shelf 3', 'Shelf 4', 'Shelf 5']);
+    expect(sequenceLabels('Aisle 2', 2)).toEqual(['Aisle 2', 'Aisle 3']);
+    expect(sequenceLabels('B1', 3)).toEqual(['B1', 'B2', 'B3']);
+  });
+
+  it('picks the next free block start from existing labels', () => {
+    expect(nextBlockStart(['B1', 'B2', 'B3'], b12)).toBe('B4');
+    expect(nextBlockStart([])).toBe('B1');
+    expect(nextBlockStart(['Shelf 1', 'Shelf 4'])).toBe('Shelf 5');
   });
 });
 

@@ -54,7 +54,7 @@ export function MapTools({ svgRef, anchor, title, rows, viewKey = '' }: {
       const h = el.offsetHeight;
       const gap = 6;
       // The visible part of the map, leaving the tool column on the left alone.
-      const vis = { left: Math.max(map.left, box.left) + 52, right: Math.min(map.right, box.right) - 4, top: Math.max(map.top, box.top) + 4, bottom: Math.min(map.bottom, box.bottom) - 4 };
+      const vis = { left: Math.max(map.left, box.left) + 56, right: Math.min(map.right, box.right) - 4, top: Math.max(map.top, box.top) + 4, bottom: Math.min(map.bottom, box.bottom) - 4 };
       // Above the selection if there's room, else below, else along the top or bottom of the view.
       let top: number;
       if (a.y - h - gap >= vis.top) top = a.y - h - gap;

@@ -30,8 +30,9 @@ const at = (o: Orientation, acrossV: number, alongV: number): Point =>
 
 const shelves = (l: StoreLayout) => l.places.filter((p): p is Shelf => p.kind === 'shelf');
 
-function free(l: StoreLayout, p: Point): boolean {
-  return p.x >= 0 && p.y >= 0 && p.x < l.width && p.y < l.height && !l.places.some((pl) => contains(footprint(pl), p));
+function free(l: StoreLayout, p: Point, open = false): boolean {
+  if (!open && (p.x < 0 || p.y < 0 || p.x >= l.width || p.y >= l.height)) return false;
+  return !l.places.some((pl) => contains(footprint(pl), p));
 }
 
 /** Squares two parallel shelves have side by side (0 if none). */
@@ -60,10 +61,10 @@ export function learnPattern(l: StoreLayout, s: Shelf): RowPattern {
 }
 
 /** A copy of `template` (same direction, start and length) at another position across the row; undefined if it doesn't fit. */
-export function shelfLike(l: StoreLayout, template: Shelf, acrossAt: number): Shelf | undefined {
+export function shelfLike(l: StoreLayout, template: Shelf, acrossAt: number, open = false): Shelf | undefined {
   const start = alongStart(template);
   for (let i = 0; i < template.length; i++) {
-    if (!free(l, at(template.orientation, acrossAt, start + i))) return undefined;
+    if (!free(l, at(template.orientation, acrossAt, start + i), open)) return undefined;
   }
   const v = vertical(template);
   return {
@@ -174,6 +175,14 @@ export interface BlockOptions {
   double: boolean;
   /** Walkway width between shelves (squares). */
   lane: number;
+  /**
+   * Allow shelves past the current store edge (the stamp step expands the
+   * map). Overlaps with existing places are still skipped unless `overlap`
+   * is also set — the UI clears those on stamp via clearFor.
+   */
+  open?: boolean;
+  /** Include shelves even when they hit existing places (preview / stamp will clear). */
+  overlap?: boolean;
 }
 
 /** Which way shelves should run in a dragged-out block: along its longer side. */
@@ -201,10 +210,20 @@ export function fillBlock(l: StoreLayout, r: Rect, o: BlockOptions): Shelf[] {
   let c = (v ? r.x : r.y) + Math.floor((span - used) / 2);
   const template: Shelf = { kind: 'shelf', id: '', label: '', orientation: o.orientation, length, categories: [], x: v ? 0 : start, y: v ? start : 0 };
   const out: Shelf[] = [];
+  const open = !!o.open;
   for (let i = 0; i < k; i++) {
     for (let j = 0; j < unit; j++) {
-      const s = shelfLike(l, template, c + j);
-      if (s) out.push(s);
+      const acrossAt = c + j;
+      if (o.overlap) {
+        const s: Shelf = {
+          kind: 'shelf', id: '', label: '', orientation: o.orientation, length, categories: [],
+          x: v ? acrossAt : start, y: v ? start : acrossAt,
+        };
+        out.push(s);
+      } else {
+        const s = shelfLike(l, template, acrossAt, open);
+        if (s) out.push(s);
+      }
     }
     c += unit + lane;
   }
