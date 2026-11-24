@@ -43,7 +43,9 @@ import {
   itemsOn, listOf, moveItem, moveListOrder, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
   updateList, type ClearMode,
 } from './core/lists';
-import { clampPlace } from './core/geometry';
+import { clearFor } from './core/expand';
+import { clampPlace, footprint } from './core/geometry';
+import { renumberSelection } from './core/renumber';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
@@ -410,20 +412,40 @@ export default function App() {
   }
 
   /**
-   * Adds shelves (from "next shelf" or the skipped-shelves suggestion),
-   * numbered in the order given. Returns their ids and what Undo restores.
+   * Adds shelves (from "next shelf", a shelf block, or skipped-shelves).
+   * Clears overlapping places (pushing them aside / expanding the map) and
+   * keeps a non-empty label on each shelf; otherwise numbers them "Shelf N".
    */
-  function addShelves(shelves: Shelf[]): { placeIds: string[]; snapshot: Snapshot } {
+  function addShelves(shelves: Shelf[]): { placeIds: string[]; snapshot: Snapshot; moved: number; grown: boolean } {
     const snapshot: Snapshot = { items, products, layouts };
-    let next = layout;
+    if (!shelves.length) return { placeIds: [], snapshot, moved: 0, grown: false };
+    const reserved = shelves.map((s) => footprint(s));
+    const preferAcross = shelves[0].orientation === 'vertical' ? 'x' as const : 'y' as const;
+    const cleared = clearFor(layout, reserved, { preferAcross });
+    let next = cleared.layout;
+    const sx = cleared.shift.x;
+    const sy = cleared.shift.y;
     const placeIds: string[] = [];
     for (const s of shelves) {
-      const shelf: Shelf = { ...s, id: `s-${newId()}`, label: nextLabel(next, 'shelf'), categories: [] };
+      const label = s.label.trim() || nextLabel(next, 'shelf');
+      const shelf: Shelf = {
+        ...s,
+        id: `s-${newId()}`,
+        label,
+        x: s.x + sx,
+        y: s.y + sy,
+        categories: s.categories ?? [],
+      };
       next = { ...next, places: [...next.places, shelf] };
       placeIds.push(shelf.id);
     }
     replaceLayout(next);
-    return { placeIds, snapshot };
+    return {
+      placeIds,
+      snapshot,
+      moved: Object.keys(cleared.shiftById).length,
+      grown: Object.keys(cleared.grown).length > 0 || !!sx || !!sy,
+    };
   }
 
   // ---- Aisle brush ----
@@ -650,14 +672,28 @@ export default function App() {
   function updatePlace(placeId: string, patch: Partial<Place>): boolean {
     const place = layout.places.find((p) => p.id === placeId);
     if (!place) return false;
-    const geometry = ['x', 'y', 'length', 'orientation'].some((k) => k in patch);
-    if (place.kind === 'shelf' && geometry) {
-      const next = clampPlace({ ...place, ...patch } as Place, layout);
-      const r = moveShelf(layout, placeId, next as Partial<Shelf>);
-      if (r.ok) replaceLayout(r.layout);
-      return r.ok;
+    const geometry = ['x', 'y', 'length', 'orientation', 'w', 'h'].some((k) => k in patch);
+    if (!geometry) {
+      replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? { ...p, ...patch } as Place : p)) });
+      return true;
     }
-    replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? clampPlace({ ...p, ...patch } as Place, layout) : p)) });
+    // Apply the patch, then push neighbours / expand so it fits (no silent stacking).
+    const next = { ...place, ...patch } as Place;
+    if (place.kind === 'shelf') {
+      const r = moveShelf(layout, placeId, next as Partial<Shelf>);
+      if (r.ok) {
+        replaceLayout(r.layout);
+        return true;
+      }
+    }
+    const draft: StoreLayout = {
+      ...layout,
+      places: layout.places.map((p) => (p.id === placeId ? next : p)),
+    };
+    const preferAcross = next.kind === 'shelf' && next.orientation === 'vertical' ? 'x' as const
+      : next.kind === 'shelf' ? 'y' as const : undefined;
+    const cleared = clearFor(draft, [footprint(next)], { exceptIds: [placeId], preferAcross });
+    replaceLayout(cleared.layout);
     return true;
   }
 
@@ -730,7 +766,7 @@ export default function App() {
   const snapshotNow = (): Snapshot => ({ items, products, layouts, allItems, lists, activeList: listId });
 
   /** Adds a shelf (10 squares) or open area (6 × 4) centred where the map was tapped. */
-  function addPlaceAt(kind: 'shelf-v' | 'shelf-h' | 'area', at: Point): { placeId: string; label: string; snapshot: Snapshot } {
+  function addPlaceAt(kind: 'shelf-v' | 'shelf-h' | 'area', at: Point): { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean } {
     const snapshot = snapshotNow();
     const id = `${kind === 'area' ? 'a' : 's'}-${newId()}`;
     const place: Place = kind === 'area'
@@ -742,8 +778,22 @@ export default function App() {
           y: kind === 'shelf-h' ? at.y : at.y - 5,
           length: 10, categories: [],
         };
-    replaceLayout({ ...layout, places: [...layout.places, clampPlace(place, layout)] });
-    return { placeId: id, label: place.label, snapshot };
+    const preferAcross = place.kind === 'shelf' && place.orientation === 'vertical' ? 'x' as const
+      : place.kind === 'shelf' ? 'y' as const : undefined;
+    const cleared = clearFor(layout, [footprint(place)], { preferAcross });
+    const placed: Place = {
+      ...place,
+      x: place.x + cleared.shift.x,
+      y: place.y + cleared.shift.y,
+    };
+    replaceLayout({ ...cleared.layout, places: [...cleared.layout.places, placed] });
+    return {
+      placeId: id,
+      label: place.label,
+      snapshot,
+      moved: Object.keys(cleared.shiftById).length,
+      grown: Object.keys(cleared.grown).length > 0 || !!cleared.shift.x || !!cleared.shift.y,
+    };
   }
 
   /** Puts the entrance or checkout on a square of the map (the tapped one, or where it was dragged). */
@@ -821,6 +871,12 @@ export default function App() {
     renumber(): Snapshot {
       const snapshot = snapshotNow();
       replaceLayout(renumberAisles(layout));
+      return snapshot;
+    },
+    /** Renames a selection of aisles/shelves from `start` in geometric order. */
+    renumberFrom(ids: string[], start: string, flip = false): Snapshot {
+      const snapshot = snapshotNow();
+      replaceLayout(renumberSelection(layout, ids, start, { flip }));
       return snapshot;
     },
     /** Clears the shelves under an area (splitting them round it). */

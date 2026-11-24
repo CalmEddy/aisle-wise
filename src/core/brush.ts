@@ -1,5 +1,6 @@
 import { paintAisle } from './aisles';
-import { growStore, nextLabel, type Direction } from './build';
+import { nextLabel, type Direction } from './build';
+import { makeRoom } from './expand';
 import { contains, exactKey, footprint, parseExactKey } from './geometry';
 import type { Orientation, Point, Rect, Shelf, StoreLayout } from './types';
 
@@ -186,27 +187,6 @@ function paintSegment(l: StoreLayout, seg: SideSegment, avoid: Rect[]): { layout
     layout = { ...layout, places: [...layout.places.filter((p) => !gone.has(p.id)), merged] };
   }
   return { layout, rekeys, painted, blocked };
-}
-
-/** Grows the store so `cells` (and `also`) fit inside. Returns the shift applied to everything. */
-function makeRoom(l: StoreLayout, rects: Rect[]): { layout: StoreLayout; shift: Point } {
-  let layout = l;
-  const shift = { x: 0, y: 0 };
-  const minX = Math.min(...rects.map((r) => r.x));
-  const minY = Math.min(...rects.map((r) => r.y));
-  const maxX = Math.max(...rects.map((r) => r.x + r.w - 1));
-  const maxY = Math.max(...rects.map((r) => r.y + r.h - 1));
-  const grow = (dir: Direction, by: number) => {
-    const g = growStore(layout, dir, by);
-    layout = g.layout;
-    shift.x += g.shift.x;
-    shift.y += g.shift.y;
-  };
-  if (minX < 0) grow('left', -minX + 1);
-  if (minY < 0) grow('up', -minY + 1);
-  if (maxX + shift.x > layout.width - 1) grow('right', maxX + shift.x - (layout.width - 1) + 1);
-  if (maxY + shift.y > layout.height - 1) grow('down', maxY + shift.y - (layout.height - 1) + 1);
-  return { layout, shift };
 }
 
 export interface PaintResult {

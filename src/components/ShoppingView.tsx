@@ -45,11 +45,13 @@ import { AisleEditor } from './AisleEditor';
 import { WhereList } from './WhereList';
 import { PlacementCard } from './PlacementCard';
 import { LabelStyleSheet } from './LabelStyleSheet';
-import { parseLabel, type LabelStyle } from '../core/labels';
+import { parseLabel, sequenceLabels, type LabelStyle } from '../core/labels';
 import { blockSubject, isBlock, pendingPlacements } from '../core/placement';
 import { MapTools, type MapAction } from './MapTools';
 import { MAX_ZOOM, useMapZoom } from './useMapZoom';
 import { aisleShelves, runsUp, selectionRect } from '../core/aisles';
+import { clearFor } from '../core/expand';
+import { selectionOrder } from '../core/renumber';
 import { TripDoneCard } from './TripDoneCard';
 import { DeptWallsSheet } from './DeptWallsSheet';
 import { offerWalls } from '../core/walls';
@@ -158,8 +160,8 @@ export interface BuildApi {
   pickUpHere: (name: string, itemId?: string) => BuildOutcome;
   moveHereAndBuild: (productId: string) => BuildOutcome;
   placeChosen: (productId: string, at: Point, choice: BuildChoice, snapshot: Snapshot) => BuildOutcome;
-  /** Adds shelves (numbered in order); returns their ids and what Undo restores. */
-  addShelves: (shelves: Shelf[]) => { placeIds: string[]; snapshot: Snapshot };
+  /** Adds shelves (keeps labels if set); may move neighbours / grow the map. */
+  addShelves: (shelves: Shelf[]) => { placeIds: string[]; snapshot: Snapshot; moved: number; grown: boolean };
   /** Returns what Undo restores, or nothing if the shelf can't turn. */
   turnShelfHere: (shelfId: string, pairId?: string) => Snapshot | undefined;
   renamePlace: (placeId: string, label: string) => void;
@@ -179,7 +181,7 @@ export interface BuildApi {
   /** What Undo would put back right now. */
   snapshot: () => Snapshot;
   /** Adds a shelf or open area where the map was tapped. */
-  addPlaceAt: (kind: 'shelf-v' | 'shelf-h' | 'area', at: Point) => { placeId: string; label: string; snapshot: Snapshot };
+  addPlaceAt: (kind: 'shelf-v' | 'shelf-h' | 'area', at: Point) => { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean };
   /** Moves the entrance or checkout to a square. */
   markAt: (which: 'entrance' | 'checkout', at: Point) => void;
   /** Aisle brush: paint and step; back up one step. */
@@ -191,6 +193,7 @@ export interface BuildApi {
     rename: (id: string, label: string) => void;
     remove: (id: string) => Snapshot;
     renumber: () => Snapshot;
+    renumberFrom: (ids: string[], start: string, flip?: boolean) => Snapshot;
     move: (ids: string | string[], dx: number, dy: number) => boolean;
     turn: (ids: string | string[]) => Snapshot | undefined;
     deleteMany: (ids: string[]) => Snapshot;
@@ -261,6 +264,8 @@ export function ShoppingView(props: Props) {
   // Select tool: a group of aisles to turn, move or delete together.
   const selectDrag = useBlockDrag(layout);
   const [selectedAisles, setSelectedAisles] = useState<string[]>([]);
+  /** Selection renumber: on-map preview of new labels before confirming. */
+  const [renumberMode, setRenumberMode] = useState<{ ids: string[]; start: string; flip: boolean }>();
   const selecting = building && tool === 'select';
   const chosenAisles = selecting ? selectedAisles.filter((id) => layout.aisles?.some((a) => a.id === id) || layout.places.some((p) => p.id === id)) : [];
   function finishSelect() {
@@ -343,6 +348,7 @@ export function ShoppingView(props: Props) {
     cutDrag.clear();
     setCutWidth(undefined);
     setBrushSteps([]);
+    if (t !== 'select') setRenumberMode(undefined);
     if (t === 'brush' || t === 'block' || t === 'cut') { setSheetTab('tool'); setSheetOpen(true); }
     if (t === 'block' || t === 'cut' || t === 'select') {
       setEditingId(undefined);
@@ -363,6 +369,33 @@ export function ShoppingView(props: Props) {
     const aisleIds = ids.filter((id) => layout.aisles?.some((a) => a.id === id));
     const onlyAisles = aisleIds.length === ids.length;
     const what = !onlyAisles ? 'them' : ids.length === 1 ? 'aisle' : 'aisles';
+    const defaultStart = (() => {
+      const order = selectionOrder(layout, ids);
+      const first = order[0];
+      if (!first) return 'B1';
+      if (first.kind === 'aisle') {
+        const a = layout.aisles?.find((x) => x.id === first.id);
+        return a?.label?.trim() || 'Aisle 1';
+      }
+      const p = layout.places.find((x) => x.id === first.id);
+      return p?.label?.trim() || (layout.labels ? 'B1' : 'Shelf 1');
+    })();
+    if (renumberMode && renumberMode.ids.length === ids.length && renumberMode.ids.every((id) => ids.includes(id))) {
+      return {
+        anchor, title: `Number ${title}`,
+        rows: [
+          [
+            { key: 'flip', icon: vertical ? '⇄' : '⇅', label: 'Reverse numbering order', onClick: () => setRenumberMode({ ...renumberMode, flip: !renumberMode.flip }) },
+            { key: 'ok', icon: '✓', label: 'Apply numbers', onClick: () => {
+              const snapshot = props.build.aisles.renumberFrom(renumberMode.ids, renumberMode.start || defaultStart, renumberMode.flip);
+              setRenumberMode(undefined);
+              say(`Renumbered ${title}.`, snapshot);
+            } },
+            { key: 'cancel', icon: '✕', label: 'Cancel renumber', onClick: () => setRenumberMode(undefined) },
+          ],
+        ] as MapAction[][],
+      };
+    }
     return {
       anchor, title,
       rows: [
@@ -373,6 +406,11 @@ export function ShoppingView(props: Props) {
             else say('No room to turn here: something’s in the way, or it would go past the walls.');
           } },
           ...arrows((dx, dy) => props.build.aisles.move(ids, dx, dy), what),
+          { key: '123', icon: '123', label: 'Renumber selection', onClick: () => {
+            setRenumberMode({ ids, start: defaultStart, flip: false });
+            setSheetOpen(true);
+            setSheetTab('tool');
+          } },
           ...(layout.gen?.enabled && aisleIds.length > 0 && aisleIds.every((id) => id.startsWith('g-aisle-')) ? [{
             key: 'block', icon: '⧉', label: 'Make these aisles a block', onClick: () => {
               const snapshot = props.build.aisles.makeBlock(aisleIds);
@@ -386,7 +424,7 @@ export function ShoppingView(props: Props) {
             onGone();
             say(`Deleted ${title}.`, snapshot);
           } },
-          { key: 'clear', icon: '✕', label: 'Clear the selection', onClick: onGone },
+          { key: 'clear', icon: '✕', label: 'Clear the selection', onClick: () => { setRenumberMode(undefined); onGone(); } },
         ],
       ] as MapAction[][],
     };
@@ -441,8 +479,22 @@ export function ShoppingView(props: Props) {
       }, p.kind)],
     };
   }
+  const blockTools = blocking && block.shelves.length ? {
+    anchor: block.drag.rect ?? footprint(block.shelves[0]),
+    title: block.shelves.map((s) => s.label).filter(Boolean).slice(0, 3).join('·') || 'Block',
+    rows: [[
+      {
+        key: 'flip',
+        icon: block.orientation === 'vertical' ? '⇄' : '⇅',
+        label: 'Reverse numbering order',
+        onClick: () => block.setFlip(!block.flip),
+      },
+    ]] as MapAction[][],
+  } : undefined;
+
   const mapTools = !building ? undefined
-    : selecting && chosenAisles.length ? aisleTools(chosenAisles, selectionTitle(chosenAisles), () => setSelectedAisles([]))
+    : blockTools ? blockTools
+    : selecting && chosenAisles.length ? aisleTools(chosenAisles, selectionTitle(chosenAisles), () => { setSelectedAisles([]); setRenumberMode(undefined); })
       : tool === 'walk' && editingAisle ? aisleTools([editingAisle.id], editingAisle.label || 'aisle', () => setEditingAisleId(undefined))
         : tool === 'walk' && editing ? placeTools(editing)
           : undefined;
@@ -560,7 +612,17 @@ export function ShoppingView(props: Props) {
       const r = props.build.addPlaceAt(tool, cell);
       setEditingId(r.placeId);
       setToolState('walk');
-      setNote({ kind: 'message', text: `Added “${r.label}”. Drag it to move it, or change it below.`, snapshot: r.snapshot });
+      const extras = [
+        r.moved ? `Moved ${r.moved} to make room` : '',
+        r.grown ? 'Map grew' : '',
+      ].filter(Boolean).join(' · ');
+      setNote({
+        kind: 'message',
+        text: extras
+          ? `Added “${r.label}”. ${extras}.`
+          : `Added “${r.label}”. Drag it to move it, or change it below.`,
+        snapshot: r.snapshot,
+      });
       return;
     }
     if (tool === 'entrance' || tool === 'checkout') {
@@ -614,7 +676,13 @@ export function ShoppingView(props: Props) {
   function stampShelves(shelves: Shelf[], filled: boolean) {
     const r = props.build.addShelves(shelves);
     const last = r.placeIds[r.placeIds.length - 1];
-    if (last) setNote({ kind: 'shelves', placeId: last, count: r.placeIds.length, filled, snapshot: r.snapshot });
+    if (!last) return;
+    const extras = [
+      r.moved ? `Moved ${r.moved} to make room` : '',
+      r.grown ? 'Map grew' : '',
+    ].filter(Boolean).join(' · ');
+    if (extras) say(`${r.placeIds.length} shel${r.placeIds.length === 1 ? 'f' : 'ves'} added. ${extras}.`, r.snapshot);
+    else setNote({ kind: 'shelves', placeId: last, count: r.placeIds.length, filled, snapshot: r.snapshot });
   }
 
   const ghosts: MapGhost[] = [];
@@ -673,7 +741,57 @@ export function ShoppingView(props: Props) {
       : { x: a.start, y: a.lo, w: a.end - a.start + 1, h: a.hi - a.lo + 1 }, kind: 'lane' });
     for (const seg of brushSegments(position, brushDir, brush)) ghosts.push({ rect: segmentRect(seg), kind: seg.kind === 'wall' ? 'wall' : 'preview' });
   } else if (blocking) {
-    for (const sh of block.shelves) ghosts.push({ rect: footprint(sh), kind: 'block' });
+    for (const sh of block.shelves) {
+      ghosts.push({
+        rect: footprint(sh),
+        kind: 'block',
+        label: sh.label,
+        onTap: () => block.setFirstShelf(sh),
+      });
+    }
+    // Preview where overlapping neighbours would slide.
+    if (block.shelves.length) {
+      const preview = clearFor(layout, block.shelves.map((s) => footprint(s)), {
+        preferAcross: block.orientation === 'vertical' ? 'x' : 'y',
+      });
+      for (const [id, d] of Object.entries(preview.shiftById)) {
+        if (!d.x && !d.y) continue;
+        const p = layout.places.find((x) => x.id === id);
+        if (!p) continue;
+        ghosts.push({
+          rect: { ...footprint(p), x: p.x + d.x, y: p.y + d.y },
+          kind: 'next',
+          label: '→',
+        });
+      }
+    }
+  } else if (renumberMode) {
+    const order = selectionOrder(layout, renumberMode.ids);
+    const seq = sequenceLabels(renumberMode.start || '1', order.length, layout.labels);
+    const ordered = renumberMode.flip ? [...order].reverse() : order;
+    ordered.forEach((o, i) => {
+      if (o.kind === 'aisle') {
+        const a = layout.aisles?.find((x) => x.id === o.id);
+        if (a) ghosts.push({ rect: a, kind: 'fill', label: seq[i], onTap: () => setRenumberMode({ ...renumberMode, start: seq[0] === seq[i] ? renumberMode.start : seq[i] }) });
+      } else {
+        const p = layout.places.find((x) => x.id === o.id);
+        if (p) ghosts.push({
+          rect: footprint(p),
+          kind: 'fill',
+          label: seq[i],
+          onTap: () => {
+            const geo = selectionOrder(layout, renumberMode.ids);
+            const at = geo.findIndex((x) => x.id === o.id);
+            setRenumberMode({
+              ...renumberMode,
+              flip: false,
+              start: renumberMode.start,
+              ids: at >= 0 ? [...geo.slice(at), ...geo.slice(0, at)].map((x) => x.id) : renumberMode.ids,
+            });
+          },
+        });
+      }
+    });
   } else if (cut) {
     for (const r of cut.removed) ghosts.push({ rect: r, kind: 'cut' });
   } else if (building) {
@@ -1933,9 +2051,43 @@ export function ShoppingView(props: Props) {
               setDouble={setDouble}
               lane={lane}
               setLane={(n) => props.setDisplay((x) => ({ ...x, blockLane: n }))}
+              startLabel={block.startLabel}
+              setStartLabel={block.setStartLabel}
               onAdd={() => { stampShelves(block.shelves, false); setTool('walk'); }}
               onCancel={() => setTool('walk')}
             />
+          )}
+          {renumberMode && selecting && (
+            <section className="card block-panel renumber-panel" aria-label="Renumber selection">
+              <div className="block-head">
+                <b>123 Renumber</b>
+                <span className="muted small">Tap a shelf or aisle on the map to make it first. Labels update live.</span>
+              </div>
+              <label className="lane-field first-label-field">
+                <span>First</span>
+                <input
+                  value={renumberMode.start}
+                  onChange={(e) => setRenumberMode({ ...renumberMode, start: e.target.value })}
+                  placeholder="B1"
+                  aria-label="First label"
+                  inputMode="text"
+                  autoCapitalize="characters"
+                  style={{ fontSize: 16 }}
+                />
+              </label>
+              <div className="sheet-actions">
+                <button className="btn" onClick={() => setRenumberMode(undefined)}>Cancel</button>
+                <span style={{ flex: 1 }} />
+                <button className="btn" onClick={() => setRenumberMode({ ...renumberMode, flip: !renumberMode.flip })}>
+                  {runsUp(layout, renumberMode.ids) ? '⇄' : '⇅'} Flip
+                </button>
+                <button className="btn primary" onClick={() => {
+                  const snapshot = props.build.aisles.renumberFrom(renumberMode.ids, renumberMode.start || '1', renumberMode.flip);
+                  setRenumberMode(undefined);
+                  say(`Renumbered ${selectionTitle(renumberMode.ids)}.`, snapshot);
+                }}>Apply</button>
+              </div>
+            </section>
           )}
           {cutting && (
             <CutPanel

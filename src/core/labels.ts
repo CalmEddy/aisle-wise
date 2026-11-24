@@ -64,6 +64,73 @@ export function parseLabel(style: LabelStyle, label: string): { section: string;
   return { section, ...(shelfTok && /^\d+$/.test(shelfTok.text) && { shelf: Number(shelfTok.text) }) };
 }
 
+/**
+ * A sensible next start label for a new shelf block from existing place
+ * labels: continue the highest shelf number (B4 after B1–B3), else "B1".
+ */
+export function nextBlockStart(existingLabels: string[], style?: LabelStyle): string {
+  let best: { section: string; shelf: number } | undefined;
+  for (const label of existingLabels) {
+    const plain = /^Shelf (\d+)$/i.exec(label.trim());
+    if (plain) {
+      const n = Number(plain[1]);
+      if (!best || n > best.shelf) best = { section: 'Shelf', shelf: n };
+      continue;
+    }
+    const read = style
+      ? parseLabel(style, label)
+      : parseLabel({ example: 'B12', roles: ['section', 'shelf'], pairing: 'single' }, label);
+    if (read?.shelf !== undefined && (!best || read.shelf > best.shelf)) {
+      best = { section: read.section, shelf: read.shelf };
+    }
+  }
+  if (!best) return style ? formatLabel(style, 'B', 1) : 'B1';
+  if (best.section === 'Shelf') return `Shelf ${best.shelf + 1}`;
+  return formatLabel(style ?? { example: 'B12', roles: ['section', 'shelf'], pairing: 'single' }, best.section, best.shelf + 1);
+}
+
+/**
+ * Sequential labels from a start code: "B1" → ["B1","B2","B3"], or "Shelf 3" →
+ * ["Shelf 3","Shelf 4",…]. Uses the store's label style when given.
+ */
+export function sequenceLabels(start: string, count: number, style?: LabelStyle): string[] {
+  if (count <= 0) return [];
+  const trimmed = start.trim();
+  if (!trimmed) return Array.from({ length: count }, (_, i) => `Shelf ${i + 1}`);
+
+  // "Shelf 3" / "Area 2" / "Aisle 5"
+  const plain = /^(Shelf|Area|Aisle)\s+(\d+)$/i.exec(trimmed);
+  if (plain) {
+    const word = plain[1][0].toUpperCase() + plain[1].slice(1).toLowerCase();
+    const n0 = Number(plain[2]);
+    return Array.from({ length: count }, (_, i) => `${word} ${n0 + i}`);
+  }
+
+  const effective = style ?? (looksLikeShelfCode(trimmed)
+    ? { example: trimmed.toUpperCase(), roles: guessRoles(trimmed), pairing: 'single' as Pairing }
+    : undefined);
+
+  if (effective) {
+    const read = parseLabel(effective, trimmed);
+    if (read?.shelf !== undefined) {
+      return Array.from({ length: count }, (_, i) => formatLabel(effective, read.section, read.shelf! + i));
+    }
+    if (read) {
+      // Section only: append 1, 2, 3…
+      return Array.from({ length: count }, (_, i) => formatLabel(effective, read.section, i + 1));
+    }
+  }
+
+  // Fallback: trailing digits on the string.
+  const m = /^(.*?)(\d+)(\D*)$/.exec(trimmed);
+  if (m) {
+    const n0 = Number(m[2]);
+    const width = m[2].length;
+    return Array.from({ length: count }, (_, i) => `${m[1]}${String(n0 + i).padStart(width, '0')}${m[3]}`);
+  }
+  return Array.from({ length: count }, (_, i) => (i === 0 ? trimmed : `${trimmed}${i + 1}`));
+}
+
 /** A label in the store's style for a section and shelf ("B12", "12-3"), keeping the example's separators. */
 export function formatLabel(style: LabelStyle | undefined, section: string, shelf?: number): string {
   if (!style) return `${section}${shelf ?? ''}`;
