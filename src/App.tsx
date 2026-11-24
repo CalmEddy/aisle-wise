@@ -37,13 +37,13 @@ import {
   applyBothShare, applyListShare, applyStoreShare, decodeShare, shareFromHash, type Share,
 } from './core/share';
 import type { Clue, GeoPoint, ItemUnit, Rect, SectionShape, ShelfReach } from './core/types';
-import { MAIN_LIST, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
+import { MAIN_LIST, type Area, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import {
   clearList, clearTripCart, cleanShopWith, combineLists, copyItem, copyListName, defaultLists, duplicateList,
   itemsOn, listOf, moveItem, moveListOrder, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
   updateList, type ClearMode,
 } from './core/lists';
-import { clearFor } from './core/expand';
+import { clearFor, expandKeepingWalls } from './core/expand';
 import { clampPlace, footprint } from './core/geometry';
 import { renumberSelection } from './core/renumber';
 import { useHousehold } from './sync/useHousehold';
@@ -677,7 +677,6 @@ export default function App() {
       replaceLayout({ ...layout, places: layout.places.map((p) => (p.id === placeId ? { ...p, ...patch } as Place : p)) });
       return true;
     }
-    // Apply the patch, then push neighbours / expand so it fits (no silent stacking).
     const next = { ...place, ...patch } as Place;
     if (place.kind === 'shelf') {
       const r = moveShelf(layout, placeId, next as Partial<Shelf>);
@@ -685,15 +684,37 @@ export default function App() {
         replaceLayout(r.layout);
         return true;
       }
+      // Lengthening into neighbours: clear space. Moves/turns still refuse so
+      // aisle bumping, swaps and drag-onto keep working.
+      const onlyLonger = 'length' in patch
+        && !(['x', 'y', 'orientation'] as const).some((k) => k in patch)
+        && next.kind === 'shelf' && next.length > place.length;
+      if (!onlyLonger) return false;
+      const draft: StoreLayout = {
+        ...layout,
+        places: layout.places.map((p) => (p.id === placeId ? next : p)),
+      };
+      const preferAcross = next.orientation === 'vertical' ? 'x' as const : 'y' as const;
+      replaceLayout(clearFor(draft, [footprint(next)], { exceptIds: [placeId], preferAcross }).layout);
+      return true;
     }
+    // Areas may sit over shelves (promo / cut-under). Expand if past the rim;
+    // otherwise keep the old clamp-in-bounds behaviour.
+    const area = next as Area;
     const draft: StoreLayout = {
       ...layout,
-      places: layout.places.map((p) => (p.id === placeId ? next : p)),
+      places: layout.places.map((p) => (p.id === placeId ? area : p)),
     };
-    const preferAcross = next.kind === 'shelf' && next.orientation === 'vertical' ? 'x' as const
-      : next.kind === 'shelf' ? 'y' as const : undefined;
-    const cleared = clearFor(draft, [footprint(next)], { exceptIds: [placeId], preferAcross });
-    replaceLayout(cleared.layout);
+    const expanded = expandKeepingWalls(draft, [footprint(area)], 1);
+    const placed = expanded.layout.places.find((p) => p.id === placeId) ?? {
+      ...area,
+      x: area.x + expanded.shift.x,
+      y: area.y + expanded.shift.y,
+    };
+    replaceLayout({
+      ...expanded.layout,
+      places: expanded.layout.places.map((p) => (p.id === placeId ? clampPlace(placed as Place, expanded.layout) : p)),
+    });
     return true;
   }
 
@@ -778,8 +799,24 @@ export default function App() {
           y: kind === 'shelf-h' ? at.y : at.y - 5,
           length: 10, categories: [],
         };
-    const preferAcross = place.kind === 'shelf' && place.orientation === 'vertical' ? 'x' as const
-      : place.kind === 'shelf' ? 'y' as const : undefined;
+    // Areas may cover shelves (promo / cut-under): expand to fit, don't shove shelves.
+    if (place.kind === 'area') {
+      const expanded = expandKeepingWalls(layout, [footprint(place)], 1);
+      const placed: Place = {
+        ...place,
+        x: place.x + expanded.shift.x,
+        y: place.y + expanded.shift.y,
+      };
+      replaceLayout({ ...expanded.layout, places: [...expanded.layout.places, placed] });
+      return {
+        placeId: id,
+        label: place.label,
+        snapshot,
+        moved: 0,
+        grown: Object.keys(expanded.grown).length > 0 || !!expanded.shift.x || !!expanded.shift.y,
+      };
+    }
+    const preferAcross = place.orientation === 'vertical' ? 'x' as const : 'y' as const;
     const cleared = clearFor(layout, [footprint(place)], { preferAcross });
     const placed: Place = {
       ...place,
