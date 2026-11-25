@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { cutPreview, cutsVertical, shelvesUnder, type CutNumbers } from '../core/cut';
+import { cutPreview, cutsVertical, type CutNumbers } from '../core/cut';
 import { CutPanel } from './CutPanel';
-import { ShelfBlockPanel, useBlockDrag, useShelfBlock } from './ShelfBlock';
-import { expandSelection, isExactGroup } from '../core/groups';
+import { AreaPanel, rectBetween, ShelfBlockPanel, useAreaDraft, useBlockDrag, useShelfBlock, type BlockCorner } from './ShelfBlock';
+import { expandSelection } from '../core/groups';
 import type { Usual } from '../core/trips';
 import type { LayoutQuestion } from '../core/learn';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
@@ -11,7 +11,6 @@ import { addedRect, nextShelves, skippedShelves } from '../core/rows';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
 import { contains, exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
-import { touchingInLine } from '../core/swap';
 import { endKey, pastEnd, type Extension } from '../core/extend';
 import { hereOptions, type HereOption } from '../core/here';
 import { TemplatePicker } from './TemplatePicker';
@@ -181,6 +180,7 @@ export interface BuildApi {
   snapshot: () => Snapshot;
   /** Adds a shelf or open area where the map was tapped. */
   addPlaceAt: (kind: 'shelf-v' | 'shelf-h' | 'area', at: Point) => { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean };
+  addArea: (rect: Rect, label?: string) => { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean };
   /** Moves the entrance or checkout to a square. */
   markAt: (which: 'entrance' | 'checkout', at: Point) => void;
   /** Aisle brush: paint and step; back up one step. */
@@ -209,7 +209,15 @@ export interface BuildApi {
 /** Dragging something on the map in build mode's Walk tool. */
 type MapDrag =
   | { mode: 'move' | 'resize'; id: string; start: Point; orig: Place; snapshot: Snapshot; moved: boolean; last?: Point }
+  | { mode: 'area-corner'; id: string; corner: BlockCorner; fixed: Point; orig: Place; snapshot: Snapshot; moved: boolean }
   | { mode: 'entrance' | 'checkout'; start: Point; snapshot: Snapshot; moved: boolean };
+
+const areaCornerCell = (r: Rect, c: BlockCorner): Point => ({
+  x: c === 'nw' || c === 'sw' ? r.x : r.x + r.w - 1,
+  y: c === 'nw' || c === 'ne' ? r.y : r.y + r.h - 1,
+});
+const areaOpposite = (c: BlockCorner): BlockCorner =>
+  ({ nw: 'se', ne: 'sw', sw: 'ne', se: 'nw' }[c] as BlockCorner);
 
 const overlapsRect = (a: Rect, b: Rect) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
@@ -257,6 +265,9 @@ export function ShoppingView(props: Props) {
   const [tool, setToolState] = useState<BuildTool>('walk');
   const block = useShelfBlock(layout, double, lane);
   const blocking = building && tool === 'block';
+  // Area tool: same draft gestures as a shelf block.
+  const areaDraft = useAreaDraft();
+  const draftingArea = building && tool === 'area';
   // Cut tool: drag a box across a block of aisles to make a cross aisle.
   const cutDrag = useBlockDrag(layout);
   const [cutWidth, setCutWidth] = useState<number>();
@@ -280,7 +291,12 @@ export function ShoppingView(props: Props) {
     const r = { x: cell.x, y: cell.y, w: 1, h: 1 };
     const here = props.build.aisles.within(r);
     const id = here.find((x) => !isAisleId(x)) ?? here.find(isAisleId) ?? placeUnder(layout, r.x + 0.5, r.y + 0.5)?.id;
-    if (!id) return;
+    if (!id) {
+      // Empty floor: clear the selection (no Clear button on the palette).
+      setSelectedAisles([]);
+      setRenumberMode(undefined);
+      return;
+    }
     setSelectedAisles((prev) => {
       const bunch = expandSelection(layout, [id]);
       if (prev.some((x) => bunch.includes(x))) return prev.filter((x) => !bunch.includes(x));
@@ -390,6 +406,7 @@ export function ShoppingView(props: Props) {
   function setTool(t: BuildTool) {
     setToolState(t);
     block.reset();
+    areaDraft.reset();
     selectDrag.clear();
     selectMove.current = null;
     if (t !== 'select') setSelectedAisles([]);
@@ -397,166 +414,44 @@ export function ShoppingView(props: Props) {
     setCutWidth(undefined);
     setBrushSteps([]);
     if (t !== 'select') setRenumberMode(undefined);
-    if (t === 'brush' || t === 'block' || t === 'cut') { setSheetTab('tool'); setSheetOpen(true); }
-    if (t === 'block' || t === 'cut' || t === 'select') {
+    if (t === 'brush' || t === 'block' || t === 'area' || t === 'cut') { setSheetTab('tool'); setSheetOpen(true); }
+    if (t === 'block' || t === 'area' || t === 'cut' || t === 'select') {
       setEditingId(undefined);
       setNote(null);
     }
   }
   // ---- Controls on the map, next to what's selected ----
   const say = (text: string, snapshot?: Snapshot) => setNote({ kind: 'message', text, ...(snapshot && { snapshot }) });
-  const arrows = (move: (dx: number, dy: number) => boolean, what: string): MapAction[] =>
-    ([['←', -1, 0, 'left'], ['↑', 0, -1, 'up'], ['↓', 0, 1, 'down'], ['→', 1, 0, 'right']] as const).map(([icon, dx, dy, word]) => ({
-      key: word, icon, label: `Move ${what} ${word}`,
-      onClick: () => { if (!move(dx, dy)) say('Can’t move it that way: something’s in the way, or it’s at the wall.'); },
-    }));
-  function aisleTools(ids: string[], title: string, onGone: () => void) {
+  /** Floating map palette: delete only (move/resize are on-map gestures). */
+  function deleteTools(ids: string[], title: string, onGone: () => void) {
     const anchor = selectionRect(layout, ids);
     if (!anchor) return undefined;
-    const vertical = runsUp(layout, ids);
     const aisleIds = ids.filter((id) => layout.aisles?.some((a) => a.id === id));
-    const onlyAisles = aisleIds.length === ids.length;
-    const what = !onlyAisles ? 'them' : ids.length === 1 ? 'aisle' : 'aisles';
-    const defaultStart = (() => {
-      const order = selectionOrder(layout, ids);
-      const first = order[0];
-      if (!first) return 'B1';
-      if (first.kind === 'aisle') {
-        const a = layout.aisles?.find((x) => x.id === first.id);
-        return a?.label?.trim() || 'Aisle 1';
-      }
-      const p = layout.places.find((x) => x.id === first.id);
-      return p?.label?.trim() || (layout.labels ? 'B1' : 'Shelf 1');
-    })();
-    if (renumberMode && renumberMode.ids.length === ids.length && renumberMode.ids.every((id) => ids.includes(id))) {
-      return {
-        anchor, title: `Number ${title}`,
-        rows: [
-          [
-            { key: 'flip', icon: vertical ? '⇄' : '⇅', label: 'Reverse numbering order', onClick: () => setRenumberMode({ ...renumberMode, flip: !renumberMode.flip }) },
-            { key: 'ok', icon: '✓', label: 'Apply numbers', onClick: () => {
-              const snapshot = props.build.aisles.renumberFrom(renumberMode.ids, renumberMode.start || defaultStart, renumberMode.flip);
-              setRenumberMode(undefined);
-              say(`Renumbered ${title}.`, snapshot);
-            } },
-            { key: 'cancel', icon: '✕', label: 'Cancel renumber', onClick: () => setRenumberMode(undefined) },
-          ],
-        ] as MapAction[][],
-      };
-    }
+    const onlyAisles = aisleIds.length === ids.length && aisleIds.length > 0;
+    const what = !onlyAisles ? title : ids.length === 1 ? 'aisle' : 'aisles';
     return {
       anchor, title,
-      rows: [
-        [
-          { key: 'turn', icon: vertical ? '↔' : '↕', label: vertical ? 'Turn side to side' : 'Turn up and down', onClick: () => {
-            const snapshot = props.build.aisles.turn(ids);
-            if (snapshot) say(`Turned ${title}.`, snapshot);
-            else say('No room to turn here: something’s in the way, or it would go past the walls.');
-          } },
-          ...arrows((dx, dy) => props.build.aisles.move(ids, dx, dy), what),
-          { key: '123', icon: '123', label: 'Renumber selection', onClick: () => {
-            setRenumberMode({ ids, start: defaultStart, flip: false });
-            setSheetOpen(true);
-            setSheetTab('tool');
-          } },
-          ...(layout.gen?.enabled && aisleIds.length > 0 && aisleIds.every((id) => id.startsWith('g-aisle-')) ? [{
-            key: 'block', icon: '⧉', label: 'Make these aisles a block', onClick: () => {
-              const snapshot = props.build.aisles.makeBlock(aisleIds);
-              if (!snapshot) { say('Only numbered aisles from answers can be made into a block.'); return; }
-              onGone();
-              say(`${title} are their own block now: say where on the map.`, snapshot);
-            },
-          }] : []),
-          ...(ids.length >= 2 && !isExactGroup(layout, ids) ? [{
-            key: 'group', icon: '☍', label: 'Group so they move together', onClick: () => {
-              const snapshot = props.build.aisles.group(ids);
-              say(`Grouped ${title}.`, snapshot);
-            },
-          }] : []),
-          ...(isExactGroup(layout, ids) ? [{
-            key: 'ungroup', icon: '🔓', label: 'Ungroup', onClick: () => {
-              const snapshot = props.build.aisles.ungroup(ids);
-              say(`Ungrouped ${title}.`, snapshot);
-            },
-          }] : []),
-          { key: 'delete', icon: '🗑', label: onlyAisles ? `Delete ${what} and shelves` : `Delete ${title}`, danger: true, onClick: () => {
-            const snapshot = props.build.aisles.deleteMany(ids);
+      rows: [[
+        { key: 'delete', icon: '🗑', label: onlyAisles ? `Delete ${what} and shelves` : `Delete ${title}`, danger: true, onClick: () => {
+          if (ids.length === 1 && layout.places.some((p) => p.id === ids[0]) && !layout.aisles?.some((a) => a.id === ids[0])) {
+            const snapshot = props.build.snapshot();
+            props.build.deletePlace(ids[0]);
             onGone();
-            say(`Deleted ${title}.`, snapshot);
-          } },
-          { key: 'clear', icon: '✕', label: 'Clear the selection', onClick: () => { setRenumberMode(undefined); onGone(); } },
-        ],
-      ] as MapAction[][],
+            say(`Deleted “${title}”.`, snapshot);
+            return;
+          }
+          const snapshot = props.build.aisles.deleteMany(ids);
+          onGone();
+          say(`Deleted ${title}.`, snapshot);
+        } },
+      ]] as MapAction[][],
     };
   }
-  function placeTools(p: Place) {
-    const anchor = footprint(p);
-    const update = (patch: Partial<Place>) => props.build.updatePlace(p.id, patch);
-    const turn: MapAction = p.kind === 'shelf'
-      ? { key: 'turn', icon: p.orientation === 'vertical' ? '↔' : '↕', label: 'Turn the shelf', onClick: () => {
-          // About its middle.
-          const v = p.orientation === 'vertical';
-          const half = Math.floor(p.length / 2);
-          const patch = v ? { orientation: 'horizontal' as const, x: p.x - half, y: p.y + half } : { orientation: 'vertical' as const, x: p.x + half, y: p.y - half };
-          if (!update(patch)) say('No room to turn it here.');
-        } }
-      : { key: 'turn', icon: '⟳', label: 'Turn the area', onClick: () => { update({ w: p.h, h: p.w } as Partial<Place>); } };
-    const size: MapAction[] = p.kind === 'shelf'
-      ? [
-          { key: 'shorter', icon: '−', label: 'Shorter', disabled: p.length <= 2, onClick: () => { update({ length: p.length - 1 } as Partial<Place>); } },
-          { key: 'longer', icon: '+', label: 'Longer', onClick: () => { if (!update({ length: p.length + 1 } as Partial<Place>)) say('Can’t make it longer: something’s in the way.'); } },
-        ]
-      : [
-          { key: 'narrower', icon: '⇤', label: 'Narrower', disabled: p.w <= 1, onClick: () => { update({ w: p.w - 1 } as Partial<Place>); } },
-          { key: 'wider', icon: '⇥', label: 'Wider', onClick: () => { update({ w: p.w + 1 } as Partial<Place>); } },
-          { key: 'shallower', icon: '⤒', label: 'Less deep', disabled: p.h <= 1, onClick: () => { update({ h: p.h - 1 } as Partial<Place>); } },
-          { key: 'deeper', icon: '⤓', label: 'Deeper', onClick: () => { update({ h: p.h + 1 } as Partial<Place>); } },
-        ];
-    // An area over shelves (a display or promo space): offer clearing the shelves under it.
-    const under = p.kind === 'area' ? shelvesUnder(layout, footprint(p)) : 0;
-    const cutBtn: MapAction[] = under ? [{ key: 'cut-under', icon: '✂', label: 'Cut the shelves under it', onClick: () => {
-      const r = props.build.aisles.cutUnder(p.id);
-      say(`Cut ${r.cut} shel${r.cut === 1 ? 'f' : 'ves'} under “${p.label || 'the area'}”.`, r.snapshot);
-    } }] : [];
-    const del: MapAction = { key: 'delete', icon: '🗑', label: `Delete ${p.kind}`, danger: true, onClick: () => {
-      const snapshot = props.build.snapshot();
-      props.build.deletePlace(p.id);
-      setEditingId(undefined);
-      say(`Deleted “${p.label || p.kind}”.`, snapshot);
-    } };
-    return {
-      anchor, title: p.label || (p.kind === 'shelf' ? 'Shelf' : 'Area'),
-      rows: [[turn, ...size, ...cutBtn, del], arrows((dx, dy) => {
-        // Right up against the next piece in its line (Meat beside Cheese): the two swap.
-        const next = touchingInLine(layout, p.id, dx, dy);
-        if (next) {
-          const snapshot = props.build.snapshot();
-          if (!props.build.swapPlace(p.id, dx, dy)) return false;
-          say(`Swapped with “${next.label || next.kind}”.`, snapshot);
-          return true;
-        }
-        return update({ x: p.x + dx, y: p.y + dy });
-      }, p.kind)],
-    };
-  }
-  const blockTools = blocking && block.shelves.length ? {
-    anchor: block.rect ?? footprint(block.shelves[0]),
-    title: block.shelves.map((s) => s.label).filter(Boolean).slice(0, 3).join('·') || 'Block',
-    rows: [[
-      {
-        key: 'flip',
-        icon: block.orientation === 'vertical' ? '⇄' : '⇅',
-        label: 'Reverse numbering order',
-        onClick: () => block.setFlip(!block.flip),
-      },
-    ]] as MapAction[][],
-  } : undefined;
 
   const mapTools = !building ? undefined
-    : blockTools ? blockTools
-    : selecting && chosenAisles.length ? aisleTools(chosenAisles, selectionTitle(chosenAisles), () => { setSelectedAisles([]); setRenumberMode(undefined); })
-      : tool === 'walk' && editingAisle ? aisleTools([editingAisle.id], editingAisle.label || 'aisle', () => setEditingAisleId(undefined))
-        : tool === 'walk' && editing ? placeTools(editing)
+    : selecting && chosenAisles.length ? deleteTools(chosenAisles, selectionTitle(chosenAisles), () => { setSelectedAisles([]); setRenumberMode(undefined); })
+      : tool === 'walk' && editingAisle ? deleteTools([editingAisle.id], editingAisle.label || 'aisle', () => setEditingAisleId(undefined))
+        : tool === 'walk' && editing ? deleteTools([editing.id], editing.label || (editing.kind === 'shelf' ? 'Shelf' : 'Area'), () => setEditingId(undefined))
           : undefined;
 
   // When the map changes, the strip shows the changed part for a few seconds, then goes back to following you.
@@ -586,7 +481,7 @@ export function ShoppingView(props: Props) {
   // ---- The editor screen: zoom, the bottom sheet, Undo ----
   const zoom = useMapZoom(svgRef, layout.width, layout.height, {
     canPan: () => tool === 'walk' && !mapDrag.current,
-    onGesture: () => { mapDrag.current = null; block.reset(); selectDrag.clear(); cutDrag.clear(); },
+    onGesture: () => { mapDrag.current = null; block.reset(); areaDraft.reset(); selectDrag.clear(); cutDrag.clear(); },
     onPanned: () => { ignoreTap.current = true; setTimeout(() => { ignoreTap.current = false; }, 0); },
   });
   const [sheetTab, setSheetTab] = useState<'tool' | 'list' | 'store'>('tool');
@@ -625,16 +520,30 @@ export function ShoppingView(props: Props) {
     const d = mapDrag.current;
     if (!d) return;
     const c = cellOf(e);
+    if (d.mode === 'area-corner') {
+      const next = rectBetween(d.fixed, c);
+      if (next.w === (d.orig.kind === 'area' ? d.orig.w : 0) && next.h === (d.orig.kind === 'area' ? d.orig.h : 0)
+        && next.x === d.orig.x && next.y === d.orig.y && !d.moved) return;
+      d.moved = true;
+      props.build.updatePlace(d.id, { x: next.x, y: next.y, w: next.w, h: next.h } as Partial<Place>);
+      return;
+    }
     const dx = c.x - d.start.x;
     const dy = c.y - d.start.y;
     if (!d.moved && !dx && !dy) return;
     d.moved = true;
-    if ('orig' in d) d.last = c;
     if (!('orig' in d)) {
       props.build.markAt(d.mode, c);
-    } else if (d.mode === 'move') {
+      return;
+    }
+    if (d.mode === 'move') {
+      d.last = c;
       props.build.updatePlace(d.id, { x: d.orig.x + dx, y: d.orig.y + dy });
-    } else if (d.orig.kind === 'shelf') {
+      return;
+    }
+    // resize (shelf end or area SE handle)
+    d.last = c;
+    if (d.orig.kind === 'shelf') {
       const o = d.orig;
       const max = o.orientation === 'vertical' ? layout.height - o.y : layout.width - o.x;
       props.build.updatePlace(d.id, { length: clamp(o.length + (o.orientation === 'vertical' ? dy : dx), 2, max) } as Partial<Place>);
@@ -668,7 +577,7 @@ export function ShoppingView(props: Props) {
   function buildTap(x: number, y: number, place: Place | undefined) {
     if (ignoreTap.current) return;
     const cell = { x: clamp(Math.floor(x), 0, layout.width - 1), y: clamp(Math.floor(y), 0, layout.height - 1) };
-    if (tool === 'shelf-v' || tool === 'shelf-h' || tool === 'area') {
+    if (tool === 'shelf-v' || tool === 'shelf-h') {
       const r = props.build.addPlaceAt(tool, cell);
       setEditingId(r.placeId);
       setToolState('walk');
@@ -809,10 +718,17 @@ export function ShoppingView(props: Props) {
         onTap: () => block.setFirstShelf(sh),
       });
     }
-    // Preview where overlapping neighbours would slide.
+    // Preview where neighbours would slide (1-square gap around the block).
     if (block.shelves.length) {
-      const preview = clearFor(layout, block.shelves.map((s) => footprint(s)), {
+      const box = { x: Math.min(...block.shelves.map((s) => footprint(s).x)), y: Math.min(...block.shelves.map((s) => footprint(s).y)),
+        w: 0, h: 0 };
+      const maxX = Math.max(...block.shelves.map((s) => { const f = footprint(s); return f.x + f.w; }));
+      const maxY = Math.max(...block.shelves.map((s) => { const f = footprint(s); return f.y + f.h; }));
+      box.w = maxX - box.x;
+      box.h = maxY - box.y;
+      const preview = clearFor(layout, [box], {
         preferAcross: block.orientation === 'vertical' ? 'x' : 'y',
+        gap: 1,
       });
       for (const [id, d] of Object.entries(preview.shiftById)) {
         if (!d.x && !d.y) continue;
@@ -824,6 +740,19 @@ export function ShoppingView(props: Props) {
           label: '→',
         });
       }
+    }
+  } else if (draftingArea && areaDraft.rect) {
+    ghosts.push({ rect: areaDraft.rect, kind: 'block', label: areaDraft.label || 'Area' });
+    const preview = clearFor(layout, [areaDraft.rect], { gap: 1 });
+    for (const [id, d] of Object.entries(preview.shiftById)) {
+      if (!d.x && !d.y) continue;
+      const p = layout.places.find((x) => x.id === id);
+      if (!p) continue;
+      ghosts.push({
+        rect: { ...footprint(p), x: p.x + d.x, y: p.y + d.y },
+        kind: 'next',
+        label: '→',
+      });
     }
   } else if (renumberMode) {
     const order = selectionOrder(layout, renumberMode.ids);
@@ -1574,7 +1503,7 @@ export function ShoppingView(props: Props) {
             selectedAisleIds={chosenAisles}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
-            onMapTap={blocking || cutting || selecting ? undefined
+            onMapTap={blocking || draftingArea || cutting || selecting ? undefined
               : whereBarFor && placeMap ? (x, y, place) => {
                   const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
                   setPosition(cell);
@@ -1588,7 +1517,10 @@ export function ShoppingView(props: Props) {
             onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
               if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
             } : undefined}
-            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : selecting ? {
+            svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : draftingArea ? {
+              className: 'map drawing',
+              ...areaDraft.svgHandlers,
+            } : selecting ? {
               className: 'map drawing',
               ...selectSvgHandlers,
             } : cutting ? {
@@ -1618,17 +1550,37 @@ export function ShoppingView(props: Props) {
                 aria-label={`Resize block ${corner}`}
                 onPointerDown={(e) => block.beginCorner(corner, e)} />
             ))}
+            {draftingArea && areaDraft.rect && (
+              <rect className="map-block-outline" x={areaDraft.rect.x} y={areaDraft.rect.y} width={areaDraft.rect.w} height={areaDraft.rect.h} />
+            )}
+            {draftingArea && areaDraft.corners.map(({ corner, x, y }) => (
+              <circle key={corner} className="block-corner-handle" cx={x + 0.5} cy={y + 0.5} r={0.7}
+                aria-label={`Resize area ${corner}`}
+                onPointerDown={(e) => areaDraft.beginCorner(corner, e)} />
+            ))}
             {building && tool === 'walk' && (['entrance', 'checkout'] as const).map((which) => (
               <rect key={which} className="marker-hit" x={layout[which].x - 0.5} y={layout[which].y - 0.5} width={2} height={2}
                 onPointerDown={(e) => beginMapDrag({ mode: which, start: cellOf(e), snapshot: props.build.snapshot(), moved: false }, e)} />
             ))}
-            {building && tool === 'walk' && editing && (() => {
+            {building && tool === 'walk' && editing?.kind === 'shelf' && (() => {
               const h = handlePoint(editing);
               return (
                 <circle className="resize-handle" cx={h.x} cy={h.y} r={1.2} aria-label="Resize"
                   onPointerDown={(e) => beginMapDrag({ mode: 'resize', id: editing.id, start: cellOf(e), orig: editing, snapshot: props.build.snapshot(), moved: false }, e)} />
               );
             })()}
+            {building && tool === 'walk' && editing?.kind === 'area' && (['nw', 'ne', 'sw', 'se'] as BlockCorner[]).map((corner) => {
+              const f = footprint(editing);
+              const pt = areaCornerCell(f, corner);
+              return (
+                <circle key={corner} className="block-corner-handle" cx={pt.x + 0.5} cy={pt.y + 0.5} r={0.7}
+                  aria-label={`Resize area ${corner}`}
+                  onPointerDown={(e) => beginMapDrag({
+                    mode: 'area-corner', id: editing.id, corner, fixed: areaCornerCell(f, areaOpposite(corner)),
+                    orig: editing, snapshot: props.build.snapshot(), moved: false,
+                  }, e)} />
+              );
+            })}
           </StoreMap>
   );
   const listMain = (
@@ -2021,11 +1973,14 @@ export function ShoppingView(props: Props) {
               selectedAisleIds={chosenAisles}
               onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
               ref={svgRef}
-              onMapTap={blocking || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
+              onMapTap={blocking || draftingArea || cutting || selecting ? undefined : building ? buildTap : (x, y) => setPosition(floor.snap({ x: Math.floor(x), y: Math.floor(y) }))}
               onPlacePointerDown={building && tool === 'walk' ? (place, e) => {
                 if (place.id === editing?.id) beginMapDrag({ mode: 'move', id: place.id, start: cellOf(e), orig: place, snapshot: props.build.snapshot(), moved: false }, e);
               } : undefined}
-              svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : selecting ? {
+              svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : draftingArea ? {
+                className: 'map drawing',
+                ...areaDraft.svgHandlers,
+              } : selecting ? {
                 className: 'map drawing',
                 ...selectSvgHandlers,
               } : cutting ? {
@@ -2053,17 +2008,37 @@ export function ShoppingView(props: Props) {
                   aria-label={`Resize block ${corner}`}
                   onPointerDown={(e) => block.beginCorner(corner, e)} />
               ))}
+              {draftingArea && areaDraft.rect && (
+                <rect className="map-block-outline" x={areaDraft.rect.x} y={areaDraft.rect.y} width={areaDraft.rect.w} height={areaDraft.rect.h} />
+              )}
+              {draftingArea && areaDraft.corners.map(({ corner, x, y }) => (
+                <circle key={corner} className="block-corner-handle" cx={x + 0.5} cy={y + 0.5} r={0.7}
+                  aria-label={`Resize area ${corner}`}
+                  onPointerDown={(e) => areaDraft.beginCorner(corner, e)} />
+              ))}
               {building && tool === 'walk' && (['entrance', 'checkout'] as const).map((which) => (
                 <rect key={which} className="marker-hit" x={layout[which].x - 0.5} y={layout[which].y - 0.5} width={2} height={2}
                   onPointerDown={(e) => beginMapDrag({ mode: which, start: cellOf(e), snapshot: props.build.snapshot(), moved: false }, e)} />
               ))}
-              {building && tool === 'walk' && editing && (() => {
+              {building && tool === 'walk' && editing?.kind === 'shelf' && (() => {
                 const h = handlePoint(editing);
                 return (
                   <circle className="resize-handle" cx={h.x} cy={h.y} r={1.2} aria-label="Resize"
                     onPointerDown={(e) => beginMapDrag({ mode: 'resize', id: editing.id, start: cellOf(e), orig: editing, snapshot: props.build.snapshot(), moved: false }, e)} />
                 );
               })()}
+              {building && tool === 'walk' && editing?.kind === 'area' && (['nw', 'ne', 'sw', 'se'] as BlockCorner[]).map((corner) => {
+                const f = footprint(editing);
+                const pt = areaCornerCell(f, corner);
+                return (
+                  <circle key={corner} className="block-corner-handle" cx={pt.x + 0.5} cy={pt.y + 0.5} r={0.7}
+                    aria-label={`Resize area ${corner}`}
+                    onPointerDown={(e) => beginMapDrag({
+                      mode: 'area-corner', id: editing.id, corner, fixed: areaCornerCell(f, areaOpposite(corner)),
+                      orig: editing, snapshot: props.build.snapshot(), moved: false,
+                    }, e)} />
+                );
+              })}
             </StoreMap>
               {mapTools && <MapTools svgRef={svgRef} viewKey={zoom.rect ? `${zoom.rect.x},${zoom.rect.y},${zoom.rect.w}` : 'all'} {...mapTools} />}
             </div>
@@ -2124,6 +2099,29 @@ export function ShoppingView(props: Props) {
               startLabel={block.startLabel}
               setStartLabel={block.setStartLabel}
               onAdd={() => { stampShelves(block.shelves, false); setTool('walk'); }}
+              onCancel={() => setTool('walk')}
+            />
+          )}
+          {draftingArea && (
+            <AreaPanel
+              rect={areaDraft.rect}
+              label={areaDraft.label}
+              setLabel={areaDraft.setLabel}
+              onAdd={() => {
+                if (!areaDraft.rect) return;
+                const r = props.build.addArea(areaDraft.rect, areaDraft.label);
+                setEditingId(r.placeId);
+                const extras = [
+                  r.moved ? `Moved ${r.moved} to make room` : '',
+                  r.grown ? 'Map grew' : '',
+                ].filter(Boolean).join(' · ');
+                setNote({
+                  kind: 'message',
+                  text: extras ? `Added “${r.label}”. ${extras}.` : `Added “${r.label}”.`,
+                  snapshot: r.snapshot,
+                });
+                setTool('walk');
+              }}
               onCancel={() => setTool('walk')}
             />
           )}
@@ -2194,7 +2192,7 @@ export function ShoppingView(props: Props) {
               lastResult={brushResult}
             />
           )}
-          {building && !blocking && !cutting && tool !== 'brush' && (
+          {building && !blocking && !draftingArea && !cutting && tool !== 'brush' && (
             <BuildPanel
               layout={layout}
               position={position}

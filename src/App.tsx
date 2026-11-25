@@ -43,7 +43,7 @@ import {
   itemsOn, listOf, moveItem, moveListOrder, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
   updateList, type ClearMode,
 } from './core/lists';
-import { clearFor, expandKeepingWalls } from './core/expand';
+import { boundsOf, clearFor } from './core/expand';
 import { clampPlace, footprint } from './core/geometry';
 import { groupPlaces, pruneGroups, ungroupPlaces } from './core/groups';
 import { renumberSelection } from './core/renumber';
@@ -420,9 +420,11 @@ export default function App() {
   function addShelves(shelves: Shelf[]): { placeIds: string[]; snapshot: Snapshot; moved: number; grown: boolean } {
     const snapshot: Snapshot = { items, products, layouts };
     if (!shelves.length) return { placeIds: [], snapshot, moved: 0, grown: false };
-    const reserved = shelves.map((s) => footprint(s));
+    // One box for the whole block so walkways inside stay; gap keeps neighbours off.
+    const box = boundsOf(shelves.map((s) => footprint(s)));
+    const reserved = box ? [box] : shelves.map((s) => footprint(s));
     const preferAcross = shelves[0].orientation === 'vertical' ? 'x' as const : 'y' as const;
-    const cleared = clearFor(layout, reserved, { preferAcross });
+    const cleared = clearFor(layout, reserved, { preferAcross, gap: 1 });
     let next = cleared.layout;
     const sx = cleared.shift.x;
     const sy = cleared.shift.y;
@@ -701,23 +703,13 @@ export default function App() {
       replaceLayout(clearFor(draft, [footprint(next)], { exceptIds: [placeId], preferAcross }).layout);
       return true;
     }
-    // Areas may sit over shelves (promo / cut-under). Expand if past the rim;
-    // otherwise keep the old clamp-in-bounds behaviour.
+    // Areas clear neighbours with the same 1-square gap as shelf blocks.
     const area = next as Area;
     const draft: StoreLayout = {
       ...layout,
       places: layout.places.map((p) => (p.id === placeId ? area : p)),
     };
-    const expanded = expandKeepingWalls(draft, [footprint(area)], 1);
-    const placed = expanded.layout.places.find((p) => p.id === placeId) ?? {
-      ...area,
-      x: area.x + expanded.shift.x,
-      y: area.y + expanded.shift.y,
-    };
-    replaceLayout({
-      ...expanded.layout,
-      places: expanded.layout.places.map((p) => (p.id === placeId ? clampPlace(placed as Place, expanded.layout) : p)),
-    });
+    replaceLayout(clearFor(draft, [footprint(area)], { exceptIds: [placeId], gap: 1 }).layout);
     return true;
   }
 
@@ -789,38 +781,42 @@ export default function App() {
   /** What Undo puts back for a change to the current store. */
   const snapshotNow = (): Snapshot => ({ items, products, layouts, allItems, lists, activeList: listId });
 
-  /** Adds a shelf (10 squares) or open area (6 × 4) centred where the map was tapped. */
-  function addPlaceAt(kind: 'shelf-v' | 'shelf-h' | 'area', at: Point): { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean } {
+  /** Adds an area covering `rect` (or a 6×4 centred on a tap). Clears neighbours with a 1-square gap. */
+  function addArea(rect: Rect, label?: string): { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean } {
     const snapshot = snapshotNow();
-    const id = `${kind === 'area' ? 'a' : 's'}-${newId()}`;
-    const place: Place = kind === 'area'
-      ? { kind: 'area', id, label: nextLabel(layout, 'area'), x: at.x - 3, y: at.y - 2, w: 6, h: 4, categories: [] }
-      : {
-          kind: 'shelf', id, label: nextLabel(layout, 'shelf'),
-          orientation: kind === 'shelf-h' ? 'horizontal' : 'vertical',
-          x: kind === 'shelf-h' ? at.x - 5 : at.x,
-          y: kind === 'shelf-h' ? at.y : at.y - 5,
-          length: 10, categories: [],
-        };
-    // Areas may cover shelves (promo / cut-under): expand to fit, don't shove shelves.
-    if (place.kind === 'area') {
-      const expanded = expandKeepingWalls(layout, [footprint(place)], 1);
-      const placed: Place = {
-        ...place,
-        x: place.x + expanded.shift.x,
-        y: place.y + expanded.shift.y,
-      };
-      replaceLayout({ ...expanded.layout, places: [...expanded.layout.places, placed] });
-      return {
-        placeId: id,
-        label: place.label,
-        snapshot,
-        moved: 0,
-        grown: Object.keys(expanded.grown).length > 0 || !!expanded.shift.x || !!expanded.shift.y,
-      };
-    }
+    const id = `a-${newId()}`;
+    const name = label?.trim() || nextLabel(layout, 'area');
+    const place: Area = { kind: 'area', id, label: name, x: rect.x, y: rect.y, w: Math.max(1, rect.w), h: Math.max(1, rect.h), categories: [] };
+    const cleared = clearFor(layout, [footprint(place)], { gap: 1 });
+    const placed: Place = {
+      ...place,
+      x: place.x + cleared.shift.x,
+      y: place.y + cleared.shift.y,
+    };
+    replaceLayout({ ...cleared.layout, places: [...cleared.layout.places, placed] });
+    return {
+      placeId: id,
+      label: name,
+      snapshot,
+      moved: Object.keys(cleared.shiftById).length,
+      grown: Object.keys(cleared.grown).length > 0 || !!cleared.shift.x || !!cleared.shift.y,
+    };
+  }
+
+  /** Adds a shelf (10 squares) or area (6 × 4) centred where the map was tapped. */
+  function addPlaceAt(kind: 'shelf-v' | 'shelf-h' | 'area', at: Point): { placeId: string; label: string; snapshot: Snapshot; moved: number; grown: boolean } {
+    if (kind === 'area') return addArea({ x: at.x - 3, y: at.y - 2, w: 6, h: 4 });
+    const snapshot = snapshotNow();
+    const id = `s-${newId()}`;
+    const place: Place = {
+      kind: 'shelf', id, label: nextLabel(layout, 'shelf'),
+      orientation: kind === 'shelf-h' ? 'horizontal' : 'vertical',
+      x: kind === 'shelf-h' ? at.x - 5 : at.x,
+      y: kind === 'shelf-h' ? at.y : at.y - 5,
+      length: 10, categories: [],
+    };
     const preferAcross = place.orientation === 'vertical' ? 'x' as const : 'y' as const;
-    const cleared = clearFor(layout, [footprint(place)], { preferAcross });
+    const cleared = clearFor(layout, [footprint(place)], { preferAcross, gap: 1 });
     const placed: Place = {
       ...place,
       x: place.x + cleared.shift.x,
@@ -1529,7 +1525,7 @@ export default function App() {
           quickAdd={quickAdd}
           build={{
             pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
-            startBlankStore, clearSetup, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, markAt, brushStep, brushBack, aisles: aisleApi,
+            startBlankStore, clearSetup, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, addArea, markAt, brushStep, brushBack, aisles: aisleApi,
             store: {
               layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => openShare({ list: false, map: true }), resetDemo, isDemo: layout.id === demoLayout.id,
               gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,

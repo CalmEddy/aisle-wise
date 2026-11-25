@@ -20,7 +20,7 @@ export const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }
   { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
   { id: 'block', icon: '▤', label: 'Shelf block', hint: 'Drag a rectangle once. Tap inside to move; drag corners to resize (along = length, across = how many shelves).' },
   { id: 'cut', icon: '✂', label: 'Cut aisles', hint: 'Drag a box across a block of aisles to make a cross aisle through them.' },
-  { id: 'area', icon: '▦', label: 'Open area', hint: 'Tap the map to add an open area, like Produce.' },
+  { id: 'area', icon: '▦', label: 'Area', hint: 'Drag a rectangle for a region without shelves (Produce, Bakery…). Move and resize like a shelf block.' },
   { id: 'entrance', icon: 'IN', label: 'Entrance', hint: 'Tap where shoppers come in (or drag IN in Walk).' },
   { id: 'checkout', icon: '$', label: 'Checkout', hint: 'Tap where shoppers pay (or drag $ in Walk).' },
 ];
