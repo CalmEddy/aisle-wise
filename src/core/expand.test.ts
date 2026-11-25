@@ -101,6 +101,16 @@ describe('clearFor', () => {
     expect(rectOverlap(footprint(b), reserved[0])).toBe(false);
   });
 
+  it('with gap keeps a corridor between reserved and neighbours', () => {
+    const next = shelf({ id: 'n', x: 5, y: 6, length: 6, orientation: 'horizontal' });
+    const l = base([next], 20, 20);
+    // New shelf one row above, touching — gap:1 must push the neighbour.
+    const reserved = [{ x: 5, y: 5, w: 6, h: 1 }];
+    const r = clearFor(l, reserved, { preferAcross: 'y', gap: 1 });
+    const moved = r.layout.places.find((p) => p.id === 'n')!;
+    expect(moved.y).toBeGreaterThanOrEqual(7);
+  });
+
   it('pushes a row of aisles clear of an earlier horizontal block', () => {
     const aisles = [8, 11, 14, 17, 20, 23, 26].map((x, i) =>
       shelf({ id: `a${i}`, x, y: 5, length: 20, orientation: 'vertical' }));

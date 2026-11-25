@@ -133,39 +133,18 @@ type Gesture =
   | { kind: 'resize'; corner: BlockCorner; fixed: Point };
 
 /**
- * Shelf-block tool: draw a rect once, then treat it as one object — drag to
- * move, corner handles to resize (along = shelf length, across = how many).
+ * Shared draft rectangle: draw once, then drag inside to move and corners to
+ * resize (opposite corner stays fixed). Used by shelf blocks and areas.
  */
-export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number) {
+export function useRectDraft(onNewDraw?: () => void) {
   const [rect, setRect] = useState<Rect>();
-  const [chosen, setChosen] = useState<Orientation>();
-  const defaultStart = nextBlockStart(layout.places.map((p) => p.label), layout.labels);
-  const [startLabel, setStartLabel] = useState(defaultStart);
-  const [startTouched, setStartTouched] = useState(false);
-  const [flip, setFlip] = useState(false);
-  const [startIndex, setStartIndex] = useState(0);
   const gesture = useRef<Gesture>();
-  const effectiveStart = startTouched ? startLabel : defaultStart;
-  const orientation = chosen ?? (rect ? blockOrientation(rect) : 'vertical');
-  const raw = rect
-    ? fillBlock(layout, rect, { orientation, double, lane, open: true, overlap: true })
-    : [];
-  const ordered = (() => {
-    if (!raw.length) return [] as Shelf[];
-    const n = raw.length;
-    const idx = ((startIndex % n) + n) % n;
-    const rotated = [...raw.slice(idx), ...raw.slice(0, idx)];
-    return flip ? [...rotated].reverse() : rotated;
-  })();
-  const labels = sequenceLabels(effectiveStart || 'B1', ordered.length, layout.labels);
-  const shelves = ordered.map((s, i) => ({ ...s, label: labels[i] ?? s.label }));
 
   const cell = (e: React.PointerEvent<SVGSVGElement>): Point => {
     const p = toGrid(e.currentTarget, e.clientX, e.clientY);
     return { x: Math.floor(p.x), y: Math.floor(p.y) };
   };
 
-  /** Hit-test a corner within ~1.5 squares of the pointer. */
   const hitCorner = (r: Rect, p: Point): BlockCorner | undefined => {
     const corners: BlockCorner[] = ['nw', 'ne', 'sw', 'se'];
     let best: BlockCorner | undefined;
@@ -183,33 +162,12 @@ export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number
 
   return {
     rect,
-    orientation,
-    setOrientation: (o: Orientation) => setChosen(o),
-    shelves,
-    startLabel: effectiveStart,
-    setStartLabel: (s: string) => { setStartTouched(true); setStartLabel(s); setStartIndex(0); },
-    flip,
-    setFlip,
-    setFirstShelf(shelf: Shelf) {
-      const i = raw.findIndex((s) => s.x === shelf.x && s.y === shelf.y && s.orientation === shelf.orientation);
-      if (i >= 0) {
-        setStartIndex(i);
-        setFlip(false);
-      }
-    },
-    reset: () => {
-      gesture.current = undefined;
-      setRect(undefined);
-      setChosen(undefined);
-      setFlip(false);
-      setStartIndex(0);
-    },
-    /** Corner handle positions for the map (when a rect exists). */
+    setRect,
+    reset: () => { gesture.current = undefined; setRect(undefined); },
     corners: (rect ? (['nw', 'ne', 'sw', 'se'] as BlockCorner[]).map((c) => ({ corner: c, ...cornerPoint(rect, c) })) : []),
     beginCorner(corner: BlockCorner, e: React.PointerEvent) {
       if (!rect) return;
       e.stopPropagation();
-      // Capture on the map <svg> so move/up still run through svgHandlers.
       const el = e.currentTarget as SVGElement;
       const svg = el.ownerSVGElement ?? el;
       svg.setPointerCapture?.(e.pointerId);
@@ -230,10 +188,7 @@ export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number
             return;
           }
         }
-        // Empty floor: start a new block (replaces the draft).
-        setChosen(undefined);
-        setStartIndex(0);
-        setFlip(false);
+        onNewDraw?.();
         gesture.current = { kind: 'draw', anchor: c };
         setRect(rectBetween(c, c));
       },
@@ -251,11 +206,118 @@ export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number
           setRect({ ...g.startRect, x: g.startRect.x + dx, y: g.startRect.y + dy });
           return;
         }
-        // Resize: opposite corner fixed; pointer sets the free corner.
         setRect(rectBetween(g.fixed, c));
       },
       onPointerUp: () => { gesture.current = undefined; },
       onPointerCancel: () => { gesture.current = undefined; },
     },
   };
+}
+
+/**
+ * Shelf-block tool: draw a rect once, then treat it as one object — drag to
+ * move, corner handles to resize (along = shelf length, across = how many).
+ */
+export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number) {
+  const [chosen, setChosen] = useState<Orientation>();
+  const defaultStart = nextBlockStart(layout.places.map((p) => p.label), layout.labels);
+  const [startLabel, setStartLabel] = useState(defaultStart);
+  const [startTouched, setStartTouched] = useState(false);
+  const [flip, setFlip] = useState(false);
+  const [startIndex, setStartIndex] = useState(0);
+  const draft = useRectDraft(() => {
+    setChosen(undefined);
+    setStartIndex(0);
+    setFlip(false);
+  });
+  const rect = draft.rect;
+  const effectiveStart = startTouched ? startLabel : defaultStart;
+  const orientation = chosen ?? (rect ? blockOrientation(rect) : 'vertical');
+  const raw = rect
+    ? fillBlock(layout, rect, { orientation, double, lane, open: true, overlap: true })
+    : [];
+  const ordered = (() => {
+    if (!raw.length) return [] as Shelf[];
+    const n = raw.length;
+    const idx = ((startIndex % n) + n) % n;
+    const rotated = [...raw.slice(idx), ...raw.slice(0, idx)];
+    return flip ? [...rotated].reverse() : rotated;
+  })();
+  const labels = sequenceLabels(effectiveStart || 'B1', ordered.length, layout.labels);
+  const shelves = ordered.map((s, i) => ({ ...s, label: labels[i] ?? s.label }));
+
+  return {
+    rect,
+    orientation,
+    setOrientation: (o: Orientation) => setChosen(o),
+    shelves,
+    startLabel: effectiveStart,
+    setStartLabel: (s: string) => { setStartTouched(true); setStartLabel(s); setStartIndex(0); },
+    flip,
+    setFlip,
+    setFirstShelf(shelf: Shelf) {
+      const i = raw.findIndex((s) => s.x === shelf.x && s.y === shelf.y && s.orientation === shelf.orientation);
+      if (i >= 0) {
+        setStartIndex(i);
+        setFlip(false);
+      }
+    },
+    reset: () => {
+      draft.reset();
+      setChosen(undefined);
+      setFlip(false);
+      setStartIndex(0);
+    },
+    corners: draft.corners,
+    beginCorner: draft.beginCorner,
+    svgHandlers: draft.svgHandlers,
+  };
+}
+
+/** Area tool: same draft gestures as a shelf block; the rect is the area. */
+export function useAreaDraft() {
+  const draft = useRectDraft();
+  const [label, setLabel] = useState('');
+  return {
+    ...draft,
+    label,
+    setLabel,
+    reset: () => { draft.reset(); setLabel(''); },
+  };
+}
+
+/** Options while dragging out an area on the map. */
+export function AreaPanel({ rect, label, setLabel, onAdd, onCancel }: {
+  rect?: Rect;
+  label: string;
+  setLabel: (s: string) => void;
+  onAdd: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <section className="card block-panel" aria-label="Area">
+      <div className="block-head">
+        <b>▦ Area</b>
+        <span className="muted small">
+          {rect
+            ? `${rect.w} × ${rect.h} squares · drag to move · corners to resize`
+            : 'Drag across the map to mark a region without shelves (Produce, Bakery…).'}
+        </span>
+      </div>
+      <div className="block-options">
+        <label className="lane-field first-label-field">
+          <span>Label</span>
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Produce"
+            aria-label="Area label" inputMode="text" />
+        </label>
+      </div>
+      <div className="sheet-actions">
+        <button className="btn" onClick={onCancel}>Cancel</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn primary" disabled={!rect || rect.w < 1 || rect.h < 1} onClick={onAdd}>
+          Add area
+        </button>
+      </div>
+    </section>
+  );
 }

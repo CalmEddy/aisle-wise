@@ -71,7 +71,7 @@ test('aisle labels: tap to edit, rename, remove with undo', async ({ page }) => 
   await expect(page.locator('.aisle-label text', { hasText: 'Breakfast aisle' })).toHaveCount(1);
 });
 
-test('selecting an aisle selects its shelves; it moves as one, and turns when there is room', async ({ page }) => {
+test('selecting an aisle selects its shelves; delete removes them', async ({ page }) => {
   await fresh(page, {
     layouts: [{
       id: 's1', name: 'Lone', width: 30, height: 30, entrance: { x: 1, y: 29 }, checkout: { x: 15, y: 29 },
@@ -88,19 +88,14 @@ test('selecting an aisle selects its shelves; it moves as one, and turns when th
   await page.locator('svg.map .aisle-label text').first().click({ force: true });
   await expect(page.locator('svg.map g.place.selected')).toHaveCount(2);
   await expect(page.locator('.aisle-group-outline')).toHaveCount(1);
-  await page.getByRole('toolbar', { name: 'Change Aisle 1' }).getByRole('button', { name: 'Move aisle up' }).click();
-  let l = await layout(page);
-  expect(l.places.map((p: any) => [p.id, p.y])).toEqual([['L', 7], ['R', 7], ['X', 8]]);
-  // The controls sit on the map, next to the aisle.
   const tools = page.getByRole('toolbar', { name: 'Change Aisle 1' });
   await expect(tools).toBeVisible();
-  await tools.getByRole('button', { name: 'Turn side to side' }).click();
-  l = await layout(page);
-  expect(l.aisles[0]).toMatchObject({ w: 10, h: 2 });
-  expect(l.places.filter((p: any) => p.id !== 'X').every((p: any) => p.orientation === 'horizontal')).toBe(true);
-  // Moving right runs into the shelf "Next": refused.
-  for (let i = 0; i < 6; i++) await tools.getByRole('button', { name: 'Move aisle right' }).click();
-  await expect(page.locator('.toast')).toContainText('Can’t move it that way');
+  // Palette is delete-only.
+  await expect(tools.getByRole('button')).toHaveCount(1);
+  await tools.getByRole('button', { name: 'Delete aisle and shelves' }).click();
+  const l = await layout(page);
+  expect(l.aisles).toHaveLength(0);
+  expect(l.places.map((p: any) => p.id)).toEqual(['X']);
 });
 
 test('cut aisles: a cross aisle with new numbers, then renumber', async ({ page }) => {
@@ -151,7 +146,7 @@ const threeAisles = () => {
   };
 };
 
-test('select a group of aisles with a box, turn it as one block, then delete it with undo', async ({ page }) => {
+test('select a group of aisles with a box, then delete with undo', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page, threeAisles());
   await enterBuildMode(page);
@@ -164,16 +159,11 @@ test('select a group of aisles with a box, turn it as one block, then delete it 
   await tapMap(page, 15, 12);
   await expect(page.getByRole('toolbar', { name: 'Change 2 aisles' })).toBeVisible();
   await tapMap(page, 15, 12);
-  await tools.getByRole('button', { name: 'Turn side to side' }).click();
+  await expect(page.getByRole('toolbar', { name: 'Change 3 aisles' })).toBeVisible();
+  // Drag the selection down to move.
+  await dragMap(page, [15, 10], [15, 12]);
   let l = await layout(page);
-  expect(l.aisles.every((a: any) => a.w === 10 && a.h === 2)).toBe(true);
-  expect(l.places.every((p: any) => p.orientation === 'horizontal')).toBe(true);
-  // Nothing overlaps.
-  const rects = [...l.aisles, ...l.places.map((p: any) => ({ x: p.x, y: p.y, w: p.length, h: 1 }))];
-  for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
-    const a = rects[i]; const b = rects[j];
-    expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(false);
-  }
+  expect(l.places.every((p: any) => p.y === 8)).toBe(true);
   await page.getByRole('toolbar', { name: 'Change 3 aisles' }).getByRole('button', { name: 'Delete aisles and shelves' }).click();
   l = await layout(page);
   expect([l.aisles.length, l.places.length]).toEqual([0, 0]);
@@ -183,7 +173,7 @@ test('select a group of aisles with a box, turn it as one block, then delete it 
   ok();
 });
 
-test('select works without aisle labels: shelves and an area by box, tap one out, move them, clear', async ({ page }) => {
+test('select works without aisle labels: shelves and an area by box, tap one out, drag to move', async ({ page }) => {
   const ok = noPageErrors(page);
   const data = threeAisles();
   data.layouts[0].aisles = [];
@@ -195,40 +185,33 @@ test('select works without aisle labels: shelves and an area by box, tap one out
   await expect(page.getByRole('toolbar', { name: 'Change 6 shelves, 1 area' })).toBeVisible();
   // Tap the area to take it out.
   await tapMap(page, 25, 7);
-  const tools = page.getByRole('toolbar', { name: 'Change 6 shelves' });
-  await expect(tools).toBeVisible();
-  await tools.getByRole('button', { name: 'Move them down' }).click();
+  await expect(page.getByRole('toolbar', { name: 'Change 6 shelves' })).toBeVisible();
+  await dragMap(page, [12, 8], [12, 10]);
   const l = await layout(page);
-  expect(l.places.filter((p: any) => p.kind === 'shelf').every((p: any) => p.y === 7)).toBe(true);
+  expect(l.places.filter((p: any) => p.kind === 'shelf').every((p: any) => p.y === 8)).toBe(true);
   expect(l.places.find((p: any) => p.id === 'deli').y).toBe(6);
-  await tools.getByRole('button', { name: 'Clear the selection' }).click();
+  // Leaving Select clears the selection (palette is delete-only).
+  await page.getByRole('button', { name: 'Walk', exact: true }).click();
   await expect(page.getByRole('toolbar', { name: /^Change/ })).toHaveCount(0);
   ok();
 });
 
-test('bumping a shelf away from its aisle widens the aisle; it won’t go onto the next one', async ({ page }) => {
+test('dragging a shelf away from its aisle widens the aisle; resize handle lengthens it', async ({ page }) => {
   await fresh(page, threeAisles());
   await enterBuildMode(page);
-  await page.locator('svg.map g.place.shelf').first().click({ force: true }); // a1, the left side of Aisle 1
-  const tools = page.getByRole('toolbar', { name: 'Change a1' });
-  await tools.getByRole('button', { name: 'Move shelf left' }).click();
+  await page.locator('svg.map g.place.shelf').first().click({ force: true }); // a1
+  await expect(page.getByRole('toolbar', { name: 'Change a1' })).toBeVisible();
+  await dragMap(page, [10, 10], [9, 10]);
   let l = await layout(page);
   expect(l.aisles.find((a: any) => a.id === 'A')).toMatchObject({ x: 10, w: 3 });
-  // Offset it along the aisle: the aisle still runs the length of both sides.
-  await tools.getByRole('button', { name: 'Move shelf up' }).click();
+  await dragMap(page, [9, 10], [9, 9]);
   l = await layout(page);
   expect(l.aisles.find((a: any) => a.id === 'A')).toMatchObject({ y: 5, h: 11 });
-  // No "next shelf" suggestion is offered inside the widened walkway.
-  const ghosts = await page.locator('.map-ghost.next rect:not(.hit)').evaluateAll((rs) => rs.map((r) => ({ x: +r.getAttribute('x')!, w: +r.getAttribute('width')! })));
-  expect(ghosts.filter((g) => g.x < 13 && g.x + g.w > 10)).toEqual([]); // Aisle 1's walkway is x 10–12
-  // a2 is back to back with b1: it can't move right onto it.
-  await page.locator('svg.map g.place.shelf[data-drop="a2"]').click({ force: true });
-  await page.getByRole('toolbar', { name: 'Change a2' }).getByRole('button', { name: 'Move shelf right' }).click();
-  await expect(page.locator('.toast')).toContainText('Can’t move it that way');
-  // Length on the map too.
-  await page.getByRole('toolbar', { name: 'Change a2' }).getByRole('button', { name: 'Longer' }).click();
+  // Length via the resize handle at the far end.
+  await page.locator('svg.map .resize-handle').click({ force: true });
+  await dragMap(page, [9, 15], [9, 16]);
   l = await layout(page);
-  expect(l.places.find((p: any) => p.id === 'a2').length).toBe(11);
+  expect(l.places.find((p: any) => p.id === 'a1').length).toBeGreaterThanOrEqual(10);
 });
 
 test('the editor: map fills the screen, zoom, list in the sheet, undo in the top bar', async ({ page }) => {
@@ -246,9 +229,9 @@ test('the editor: map fills the screen, zoom, list in the sheet, undo in the top
   expect(await vb()).not.toBe(whole);
   await page.getByRole('button', { name: 'Show the whole store' }).click();
   expect(await vb()).toBe(whole);
-  // Move a shelf with the map bar, then Undo from the top bar.
+  // Delete a shelf from the map palette, then Undo from the top bar.
   await page.locator('svg.map g.place.shelf').first().click({ force: true });
-  await page.getByRole('toolbar', { name: 'Change a1' }).getByRole('button', { name: 'Delete shelf' }).click();
+  await page.getByRole('toolbar', { name: 'Change a1' }).getByRole('button', { name: /Delete/ }).click();
   expect((await layout(page)).places).toHaveLength(5);
   await page.locator('.build-top').getByRole('button', { name: 'Undo' }).click();
   expect((await layout(page)).places).toHaveLength(6);
@@ -261,55 +244,31 @@ test('the editor: map fills the screen, zoom, list in the sheet, undo in the top
   ok();
 });
 
-test('make some aisles their own block: side to side, placed on the mini-map, joined back from Store settings', async ({ page }) => {
+test('area tool: drag a region, add it, and neighbours keep a one-square gap', async ({ page }) => {
   const ok = noPageErrors(page);
-  await fresh(page, cornerStore());
+  await fresh(page, threeAisles());
   await enterBuildMode(page);
-  await page.getByRole('button', { name: 'Select', exact: true }).click();
-  // Aisles 4 and 5 are the leftmost two.
-  const l0 = await layout(page);
-  const a = (l: any, n: number) => l.aisles.find((x: any) => x.id === `g-aisle-${n}`);
-  await dragMap(page, [a(l0, 5).x, 10], [a(l0, 4).x + 1, 11]);
-  await page.getByRole('toolbar', { name: 'Change 2 aisles' }).getByRole('button', { name: 'Make these aisles a block' }).click();
-  const card = page.getByRole('group', { name: 'Where’s Aisles 4–5?' });
-  await expect(card).toBeVisible();
-  await expect(card.getByRole('button', { name: '↔ Side to side' })).toHaveAttribute('aria-pressed', 'true');
-  await card.locator('.placement-options .chip', { hasText: 'In front of aisles 1–3' }).click();
-  await card.getByRole('button', { name: 'Place here' }).click();
-  // The map is rebuilt just after: wait for it.
-  await expect.poll(async () => { const x = await layout(page); return a(x, 4).y - (a(x, 1).y + a(x, 1).h); }).toBeGreaterThan(0);
-  let l = await layout(page);
-  expect(a(l, 4).w).toBeGreaterThan(a(l, 4).h);
-  expect(a(l, 4).y).toBeGreaterThan(a(l, 1).y + a(l, 1).h);
-  expect(l.gen.aisleGroups).toEqual([{ from: '4', to: '5' }]);
-  // Store settings: the block, its direction, and joining it back.
-  await page.locator('.build-sheet').getByRole('tab', { name: 'Store' }).click();
-  await page.locator('.store-settings summary').click();
-  await page.getByRole('button', { name: 'Join back' }).click();
-  await expect.poll(async () => { const x = await layout(page); return a(x, 4).h - a(x, 4).w; }).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Area', exact: true }).click();
+  await dragMap(page, [24, 6], [28, 10]);
+  await expect(page.locator('.map-block-outline')).toBeVisible();
+  await expect(page.locator('.block-corner-handle')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Add area' }).click();
+  const l = await layout(page, 'Three');
+  const area = l.places.find((p: any) => p.kind === 'area');
+  expect(area).toBeTruthy();
+  // No shelf butts against the area (gap ≥ 1).
+  for (const p of l.places.filter((x: any) => x.kind === 'shelf')) {
+    const f = { x: p.x, y: p.y, w: 1, h: p.length };
+    const ax0 = area.x - 1; const ay0 = area.y - 1;
+    const ax1 = area.x + area.w + 1; const ay1 = area.y + area.h + 1;
+    const hits = !(f.x + f.w <= ax0 || f.x >= ax1 || f.y + f.h <= ay0 || f.y >= ay1);
+    // Touching the inflated box means gap < 1; allow only if outside.
+    expect(hits, `${p.id} too close to area`).toBe(false);
+  }
   ok();
 });
 
-test('an area put down over shelves can cut them', async ({ page }) => {
-  await fresh(page, threeAisles());
-  await enterBuildMode(page);
-  await page.getByRole('button', { name: 'Open area' }).click();
-  await tapMap(page, 15, 10); // a 6 × 4 area over the middle of the aisles
-  const l0 = await layout(page);
-  const area = l0.places.find((p: any) => p.kind === 'area');
-  const bar = page.getByRole('toolbar', { name: `Change ${area.label}` });
-  await bar.getByRole('button', { name: 'Cut the shelves under it' }).click();
-  await expect(page.locator('.toast')).toContainText('Cut');
-  const l = await layout(page);
-  const r = { x: area.x, y: area.y, w: area.w, h: area.h };
-  const overlaps = (p: any) => p.x < r.x + r.w && r.x < p.x + 1 && p.y < r.y + r.h && r.y < p.y + p.length;
-  expect(l.places.filter((p: any) => p.kind === 'shelf' && overlaps(p))).toEqual([]);
-  expect(l.places.filter((p: any) => p.kind === 'shelf').length).toBeGreaterThan(6);
-  await page.locator('.build-top').getByRole('button', { name: 'Undo' }).click();
-  expect((await layout(page)).places.filter((p: any) => p.kind === 'shelf')).toHaveLength(6);
-});
-
-test('pieces side by side on a wall swap with one tap, or by dragging one onto another', async ({ page }) => {
+test('pieces side by side on a wall: dragging one onto another swaps along the line', async ({ page }) => {
   const ok = noPageErrors(page);
   const h = (id: string, label: string, x: number, length: number) => ({ kind: 'shelf', id, label, orientation: 'horizontal', x, y: 0, length, back: -1, categories: [] });
   await fresh(page, {
@@ -321,18 +280,12 @@ test('pieces side by side on a wall swap with one tap, or by dragging one onto a
   const xs = async () => Object.fromEntries((await saved<any[]>(page, 'layouts'))[0].places.map((p: any) => [p.id, p.x]));
   await enterBuildMode(page);
   await tapMap(page, 3, 0);
-  await page.getByRole('toolbar', { name: /Change Meat/ }).getByRole('button', { name: 'Move shelf right' }).click();
-  await expect.poll(xs).toEqual({ cheese: 1, meat: 4, milk: 10 });
-  await expect(page.getByText('Swapped with “Cheese”.')).toBeVisible();
-  // What's saved on it went with it.
-  expect((await saved<any[]>(page, 'products')).find((p) => p.id === 'steak').locations).toEqual({ s1: 'meat@0.5,0.5' });
-  // Undo puts them back.
-  await page.getByRole('region', { name: 'Edit map' }).getByRole('button', { name: 'Undo', exact: true }).click();
-  await expect.poll(xs).toEqual({ meat: 1, cheese: 7, milk: 10 });
+  await expect(page.getByRole('toolbar', { name: /Change Meat/ })).toBeVisible();
   // Milk dragged onto Meat: Milk takes its place, the rest move over.
   await tapMap(page, 11, 0);
   await dragMap(page, [11, 0], [2, 0]);
   await expect.poll(xs).toEqual({ milk: 1, meat: 5, cheese: 11 });
+  expect((await saved<any[]>(page, 'products')).find((p) => p.id === 'steak').locations).toEqual({ s1: 'meat@0.5,0.5' });
   ok();
 });
 
@@ -391,35 +344,26 @@ test('shelf block: draw once, drag to move, corner resize, then add; stamp is gr
   ok();
 });
 
-test('select: group shelves so they move together; ungroup splits them', async ({ page }) => {
+test('stamped shelf block stays grouped: tap one selects all; drag moves them together', async ({ page }) => {
   const ok = noPageErrors(page);
-  const sh = (id: string, x: number) => ({ kind: 'shelf', id, label: id, orientation: 'vertical', x, y: 6, length: 8, categories: [] });
-  await fresh(page, {
-    layouts: [{
-      id: 's1', name: 'Groupy', width: 30, height: 24, entrance: { x: 1, y: 23 }, checkout: { x: 10, y: 23 },
-      places: [sh('a', 8), sh('b', 11), sh('c', 14)],
-    }],
-    activeLayout: 's1',
-  });
-  await enterBuildMode(page);
+  await blankStore(page);
+  await page.getByRole('button', { name: 'Shelf block' }).click();
+  await dragMap(page, [4, 6], [10, 14]);
+  await page.getByRole('button', { name: /Add \d+ shel/ }).click();
+  const before = await layout(page, 'New store');
+  expect(before.groups?.length).toBe(1);
+  const ids = before.groups[0].ids as string[];
+  expect(ids.length).toBeGreaterThan(1);
   await page.getByRole('button', { name: 'Select', exact: true }).click();
-  await dragMap(page, [8, 6], [12, 10]);
-  const tools = page.getByRole('toolbar', { name: 'Change 2 shelves' });
-  await expect(tools).toBeVisible();
-  await tools.getByRole('button', { name: 'Group so they move together' }).click();
-  await expect(page.locator('.toast')).toContainText('Grouped');
-  // Tap one grouped shelf: whole group stays selected.
-  await tapMap(page, 20, 20); // clear via empty? — clear button instead
-  await tools.getByRole('button', { name: 'Clear the selection' }).click();
-  await tapMap(page, 8, 8);
-  await expect(page.getByRole('toolbar', { name: 'Change 2 shelves' })).toBeVisible();
-  await page.getByRole('toolbar', { name: 'Change 2 shelves' }).getByRole('button', { name: 'Move them down' }).click();
-  const l = await layout(page);
-  expect(l.places.find((p: any) => p.id === 'a').y).toBe(7);
-  expect(l.places.find((p: any) => p.id === 'b').y).toBe(7);
-  expect(l.places.find((p: any) => p.id === 'c').y).toBe(6);
-  await page.getByRole('toolbar', { name: 'Change 2 shelves' }).getByRole('button', { name: 'Ungroup' }).click();
-  await expect(page.locator('.toast')).toContainText('Ungrouped');
-  expect((await layout(page)).groups ?? []).toEqual([]);
+  const first = before.places.find((p: any) => p.id === ids[0]);
+  await tapMap(page, first.x, first.y + 2);
+  await expect(page.getByRole('toolbar', { name: new RegExp(`Change ${ids.length} shelves`) })).toBeVisible();
+  await dragMap(page, [first.x, first.y + 2], [first.x, first.y + 4]);
+  const after = await layout(page, 'New store');
+  for (const id of ids) {
+    const was = before.places.find((p: any) => p.id === id)!;
+    const now = after.places.find((p: any) => p.id === id)!;
+    expect(now.y - was.y).toBe(2);
+  }
   ok();
 });

@@ -11,6 +11,12 @@ import type { Place, Point, Rect, Shelf, StoreLayout } from './types';
 const overlaps = (a: Rect, b: Rect) =>
   a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
+/** Grow a rectangle by `gap` squares on every side (for clearance corridors). */
+export function inflateRect(r: Rect, gap: number): Rect {
+  if (gap <= 0) return r;
+  return { x: r.x - gap, y: r.y - gap, w: r.w + 2 * gap, h: r.h + 2 * gap };
+}
+
 const shiftPoint = (p: Point, dx: number, dy: number): Point => ({ x: p.x + dx, y: p.y + dy });
 
 /** A wall shelf: backed, or a generated wall/department. */
@@ -215,13 +221,17 @@ export interface ClearResult {
  * Clears space for `reserved` rectangles: overlapping non-wall places are
  * pushed aside (cascading), then the store expands (walls stay outermost).
  * `preferAcross` biases the push axis (e.g. perpendicular to a shelf block).
+ * `gap` keeps that many empty squares around reserved (no butted dead ends).
  */
 export function clearFor(
   l: StoreLayout,
   reserved: Rect[],
-  opts: { exceptIds?: Iterable<string>; preferAcross?: 'x' | 'y' } = {},
+  opts: { exceptIds?: Iterable<string>; preferAcross?: 'x' | 'y'; gap?: number } = {},
 ): ClearResult {
   const except = new Set(opts.exceptIds ?? []);
+  const gap = Math.max(0, opts.gap ?? 0);
+  /** Reserved plus clearance — used for collision, not for final store growth. */
+  const keepClear = reserved.map((r) => inflateRect(r, gap));
   const shiftById: Record<string, Point> = {};
   let places = l.places.map((p) => ({ ...p }));
   const aisleBase = l.aisles?.map((a) => ({ ...a })) ?? [];
@@ -298,7 +308,7 @@ export function clearFor(
    * every place it currently overlaps.
    */
   const blockersFor = (hit: Place): Rect[] => {
-    const out: Rect[] = [...reserved];
+    const out: Rect[] = [...keepClear];
     for (const p of places) {
       if (p.id === hit.id || except.has(p.id)) continue;
       if (overlaps(placeRect(hit), placeRect(p))) out.push(placeRect(p));
@@ -306,7 +316,7 @@ export function clearFor(
     return out;
   };
 
-  // Cascade: clear reserved, then resolve place–place overlaps among non-walls.
+  // Cascade: clear reserved (+ gap), then resolve place–place overlaps among non-walls.
   // Prefer pushing places already shifted for the incoming footprint so they
   // don't shove unrelated shelves into each other. Each push clears ALL current
   // blockers at once so a tall aisle jumps past a whole block of horizontals.
@@ -314,7 +324,7 @@ export function clearFor(
     let hit: Place | undefined;
     for (const p of places) {
       if (except.has(p.id) || isWallShelf(p)) continue;
-      if (reserved.some((r) => overlaps(placeRect(p), r))) {
+      if (keepClear.some((r) => overlaps(placeRect(p), r))) {
         hit = p;
         break;
       }
