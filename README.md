@@ -58,6 +58,11 @@ it (with **Undo** / **Change**); when it isn’t sure it asks “Where was it?�
 Answers redraw the map (`src/core/generate.ts`). Door and shelf-length
 guesses apply quietly at the end of a trip.
 
+A **Blank** store starts empty and builds itself from check-off order
+(`src/core/autoBuild.ts`): category areas are laid along a serpentine walk
+from the lower right toward the lower left, updating live as you tick items,
+and refining across trips. Hand-editing the map turns that off.
+
 **🛠 Edit map** (under Shop **⚙** view settings) is for drawing shelves by
 hand while you walk. Check items off or tap 🛒 Cart where you stand; the map
 grows around you (`src/core/build.ts`). Nearby shelves extend automatically;
@@ -220,6 +225,7 @@ src/core/demoLayout.ts            Example store
 src/core/geometry.ts              Shelf/area shapes and pick-up spots
 src/core/migrate.ts               Converting old aisles to shelves
 src/core/build.ts                 Build mode: growing the map from where you shop
+src/core/autoBuild.ts             Blank stores: category areas from check-off order
 src/core/floor.ts                 Walkable grid and walking distances
 src/core/locate.ts                Grocery item → spot in a store
 src/core/route.ts                 Route planning (shortest walk)

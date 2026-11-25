@@ -4,7 +4,7 @@ import { storeFromTemplate, type FromTemplateOpts } from '../core/templates';
 import { NumberField } from './PlacePanel';
 import { StoreMap } from './StoreMap';
 
-const BLANK = { id: 'blank', name: 'Blank', icon: '⬜', description: 'Just the entrance and checkout — draw the map as you shop.' };
+const BLANK = { id: 'blank', name: 'Blank', icon: '⬜', description: 'Empty map — category areas appear as you check items off, in walk order.' };
 
 const FEATURED = new Set<string>(FEATURED_TEMPLATE_IDS);
 
