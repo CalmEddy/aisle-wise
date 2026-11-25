@@ -7,12 +7,18 @@ on:
     branches-ignore: [main]
   workflow_dispatch:
 
+# Same branch from push + PR share one lane; a new push cancels the hung/older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
