@@ -60,9 +60,13 @@ import type { ItemUnit } from '../core/types';
 interface Props {
   /** The household's lists; this view shows the current one. */
   lists: ListsApi;
-  /** The lists sheet (opened from the list picker in the header). */
+  /** The lists sheet (opened from the list picker / trip title). */
   listsOpen: boolean;
   onListsClose: () => void;
+  /** Open the Shop trip list picker (select / combine). */
+  onOpenLists?: () => void;
+  /** Open the store picker sheet. */
+  onOpenStores?: () => void;
   /** Full undo snapshot (every list's items). */
   listSnapshot: () => Snapshot;
   /** Multi-list trip: source list ids for a visible row (for badges). */
@@ -147,6 +151,8 @@ interface Props {
   position: Point;
   setPosition: (p: Point) => void;
   onEditLayout: () => void;
+  /** Shop trip surface vs Setup → Stores map editor host. */
+  role?: 'shop' | 'stores';
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
   mapLook: SectionLook;
@@ -238,7 +244,9 @@ export function ShoppingView(props: Props) {
     if (setupKind) props.setDisplay((d) => (d.mapFull ? d : { ...d, mapFull: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout.id, setupKind]);
-  const building = props.display.buildMode;
+  const role = props.role ?? 'shop';
+  // Map editing lives under Setup → Stores; Shop never shows the build screen.
+  const building = role === 'stores' && props.display.buildMode;
   // Build-mode banners belong to build mode: leaving it clears them.
   useEffect(() => {
     if (!building) setNote(null);
@@ -1810,14 +1818,12 @@ export function ShoppingView(props: Props) {
 
   return (
     <>
-      {props.listsOpen && (
+      {props.listsOpen && role === 'shop' && (
         <ListsSheet
+          mode="trip"
           lists={props.lists}
           onClose={props.onListsClose}
           onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
-          onRemoved={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
-          onCleared={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
-          onDuplicated={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
           onAddItems={(id) => { props.onListsClose(); setAddingFor(id); }}
         />
       )}
@@ -1855,7 +1861,17 @@ export function ShoppingView(props: Props) {
         />
       )}
 
-      {!building && (
+      {!building && role === 'stores' && (
+        <div className="stores-setup">
+          <p className="muted small">Edit the map for <b>{layout.name}</b>. Pick which store you’re shopping from the Shop tab.</p>
+          <div className="stores-setup-actions">
+            <button type="button" className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
+              aria-label="Edit map">🛠 Edit map</button>
+            <button type="button" className="btn" onClick={() => props.onOpenStores?.()}>Change store</button>
+          </div>
+        </div>
+      )}
+      {!building && role === 'shop' && (
         <div className="shop-columns">
           <div className={`shop-map-slot${mapOpen ? ' is-open' : ''}`}>
             {(items.length > 0 || !!setupKind) && (layout.places.length > 0 || !!setupKind) && (
@@ -1882,6 +1898,53 @@ export function ShoppingView(props: Props) {
             )}
           </div>
           <div className="shop-list-col">
+            <div className="trip-head">
+              <button
+                type="button"
+                className="trip-list-title list-bar"
+                onClick={() => props.onOpenLists?.()}
+                aria-label={`List: ${props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}. Change list`}
+              >
+                <span className="trip-list-name list-bar-name">
+                  {props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
+                </span>
+                <span className="list-bar-more" aria-hidden="true">▾</span>
+              </button>
+              {props.lists.all.filter((l) => l.id !== props.lists.current).length > 0 && (
+                <details className="trip-include">
+                  <summary>
+                    More lists on this trip
+                    {props.lists.shopWith.length > 0 ? ` · ${props.lists.shopWith.length}` : ''}
+                  </summary>
+                  <p className="muted small">Show another list’s to-buy here without copying it onto “{props.lists.all.find((l) => l.id === props.lists.current)?.name}”.</p>
+                  <ul className="trip-include-list">
+                    {props.lists.all.filter((l) => l.id !== props.lists.current).map((l) => {
+                      const on = props.lists.shopWith.includes(l.id);
+                      const n = props.lists.counts.get(l.id) ?? 0;
+                      return (
+                        <li key={l.id}>
+                          <label className="also-shop">
+                            <input
+                              type="checkbox"
+                              checked={on}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...props.lists.shopWith.filter((x) => x !== l.id), l.id]
+                                  : props.lists.shopWith.filter((x) => x !== l.id);
+                                props.lists.setShopWith(next);
+                              }}
+                              aria-label={`Include ${l.name} on this trip`}
+                            />
+                            <span>{l.name}</span>
+                            <span className="muted small">{n ? `${n} to buy` : 'Empty'}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              )}
+            </div>
             {items.length === 0 && (
               <DisplayToggles
                 display={props.display}
@@ -1890,8 +1953,8 @@ export function ShoppingView(props: Props) {
                 lead={(
                   <>
                     {addButton}
-                    <button type="button" className="toggle" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
-                      aria-label="Edit map" title="Draw the store map by hand">🛠 Edit map</button>
+                    <button type="button" className="toggle" onClick={onEditLayout}
+                      aria-label="Edit map" title="Edit the store map in Setup">🛠 Edit map</button>
                   </>
                 )}
               />
@@ -1930,10 +1993,14 @@ export function ShoppingView(props: Props) {
                     <DisplayToggles
                       display={props.display}
                       setDisplay={props.setDisplay}
-                      show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons', 'buildMode']}
+                      show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
                       offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
+                      extra={(
+                        <button type="button" className="toggle" onClick={() => { setViewOpen(false); onEditLayout(); }}
+                          aria-label="Edit map" title="Edit the store map in Setup">🛠 Edit map</button>
+                      )}
                     />
-                    <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons · 🛠 Edit map</span>
+                    <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons · 🛠 Edit map (Setup → Stores)</span>
                     <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
                       Clear all locations at this store
                     </button>

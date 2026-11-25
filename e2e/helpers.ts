@@ -33,8 +33,12 @@ export async function tick(page: Page, name: string) {
   await row(page, name).getByRole('checkbox').click();
 }
 
-/** Opens Edit map (strip when the list is empty; otherwise under View settings). */
+/** Opens Edit map via Setup → Stores (map editing lives there). */
 export async function enterBuildMode(page: Page) {
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'Stores', exact: true }).click();
+  const region = page.getByRole('region', { name: 'Edit map' });
+  if (await region.count()) return;
   const direct = page.getByRole('button', { name: 'Edit map', exact: true });
   if (await direct.count()) {
     await direct.click();
