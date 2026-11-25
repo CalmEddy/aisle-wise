@@ -1850,6 +1850,7 @@ export function ShoppingView(props: Props) {
           listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? 'Shopping list'}
           catalog={catalog}
           onList={addingFor ? props.onListIds(addingFor) : onList}
+          inCart={new Set(items.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           hereLabel={addingFor === props.lists.current ? hereLabel : undefined}
           whereText={(p) => whereText(p, layout, catalog)}
           iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}

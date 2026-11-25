@@ -219,7 +219,7 @@ export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -245,6 +245,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
    * Swipe right to check off, left for Not here / Remove.
    */
   simple?: boolean;
+  /** Setup → Lists: edit without checking into the cart. */
+  noCheck?: boolean;
   onNotHere?: (i: ListItem) => void;
   /** (For testing the map) clears where this item is in this store; shown when it has a place here. */
   onClearWhere?: (i: ListItem) => void;
@@ -313,8 +315,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
         >
           {simple ? (
             <SwipeRow
-              onSwipeRight={() => onToggle(item)}
-              rightLabel={item.done ? <>↩ Back on the list</> : <>✓ Got it</>}
+              onSwipeRight={noCheck ? undefined : () => onToggle(item)}
+              rightLabel={noCheck ? undefined : (item.done ? <>↩ Back on the list</> : <>✓ Got it</>)}
               leftActions={(close) => (
                 <>
                   {onNotHere && !item.done && <button className="swipe-btn sold" onClick={() => { close(); onNotHere(item); }}>🚫 Not here</button>}
@@ -324,7 +326,9 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
             >
               <div className="row-inner">
                 <label>
-                  <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} aria-label={`${item.done ? 'Uncheck' : 'Check off'} ${item.name}`} />
+                  {!noCheck && (
+                    <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} aria-label={`${item.done ? 'Uncheck' : 'Check off'} ${item.name}`} />
+                  )}
                   {iconOf?.(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
                   <span className="name">
                     {onPatch

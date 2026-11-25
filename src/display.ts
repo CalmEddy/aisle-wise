@@ -4,6 +4,9 @@ export type ListSort = 'nearest' | 'category' | 'alpha';
 /** How the Grocery Items catalog is ordered (no nearest — items have no shopper position). */
 export type ItemsSort = 'category' | 'alpha';
 
+/** How Setup → Lists orders a list being edited (no nearest — not shopping). */
+export type ListsEditSort = 'category' | 'alpha' | 'entry';
+
 /** Per-phone display choices. */
 export interface Display {
   mapColors: boolean;
@@ -23,6 +26,8 @@ export interface Display {
   listSort?: ListSort | 'route';
   /** How to order the Grocery Items catalog (category / A–Z). Default category. */
   itemsSort?: ItemsSort;
+  /** How to order Setup → Lists while editing (category / A–Z / entry order). Default entry. */
+  listsEditSort?: ListsEditSort;
   /** Show items' categories and subcategories in the shopping list (beside where it is). */
   listCategories?: boolean;
   /** Group shopping-list rows under category headings. */
@@ -75,6 +80,12 @@ export function resolveListSort(d: Pick<Display, 'listSort' | 'groupList'>): Lis
 /** Resolve Grocery Items catalog order (default: by category). */
 export function resolveItemsSort(d: Pick<Display, 'itemsSort'>): ItemsSort {
   return d.itemsSort === 'alpha' ? 'alpha' : 'category';
+}
+
+/** Resolve Setup → Lists edit order (default: order of entry). */
+export function resolveListsEditSort(d: Pick<Display, 'listsEditSort'>): ListsEditSort {
+  if (d.listsEditSort === 'category' || d.listsEditSort === 'alpha') return d.listsEditSort;
+  return 'entry';
 }
 
 /** Whether the Items catalog shows category section headings (default on). */

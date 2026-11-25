@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { Display, ItemsSort, ListSort } from '../display';
-import { resolveItemsSort, resolveListSort } from '../display';
+import type { Display, ItemsSort, ListSort, ListsEditSort } from '../display';
+import { resolveItemsSort, resolveListSort, resolveListsEditSort } from '../display';
 
 /** Display settings that are on/off switches. */
 type Switch = { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display];
@@ -106,6 +106,34 @@ export function ItemsSortToggle({ display, setDisplay }: {
       aria-label={`${shown.label} (tap for ${next.label})`}
       title={`${shown.label} · tap to change`}
       onClick={() => setDisplay((d) => ({ ...d, itemsSort: next.id }))}
+    >
+      {shown.short}
+    </button>
+  );
+}
+
+const LISTS_EDIT_SORTS: { id: ListsEditSort; short: string; label: string }[] = [
+  { id: 'entry', short: '#', label: 'Sort by order of entry' },
+  { id: 'category', short: '🏷︎', label: 'Sort by category' },
+  { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
+];
+
+/** Cycles Setup → Lists edit order: entry → category → A–Z. */
+export function ListsEditSortToggle({ display, setDisplay }: {
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+}) {
+  const current = resolveListsEditSort(display);
+  const i = LISTS_EDIT_SORTS.findIndex((s) => s.id === current);
+  const next = LISTS_EDIT_SORTS[(i + 1) % LISTS_EDIT_SORTS.length]!;
+  const shown = LISTS_EDIT_SORTS[i >= 0 ? i : 0]!;
+  return (
+    <button
+      type="button"
+      className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
+      aria-label={`${shown.label} (tap for ${next.label})`}
+      title={`${shown.label} · tap to change`}
+      onClick={() => setDisplay((d) => ({ ...d, listsEditSort: next.id }))}
     >
       {shown.short}
     </button>
