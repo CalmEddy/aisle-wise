@@ -48,8 +48,13 @@ export async function enterBuildMode(page: Page) {
   await page.getByRole('button', { name: 'Build mode' }).click();
 }
 
-/** Starts a new, empty store right here. */
-export async function newStore(page: Page, name: string) {
+/**
+ * Starts a new blank store right here.
+ * By default turns off check-off auto-build and drops `gen`, so "Where was it?"
+ * answers can grow the map (where.e2e). Pass `{ autoBuild: true }` to keep the
+ * live category-area builder.
+ */
+export async function newStore(page: Page, name: string, opts?: { autoBuild?: boolean }) {
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill(name);
   await page.getByRole('button', { name: '＋ Here' }).click();
@@ -59,6 +64,18 @@ export async function newStore(page: Page, name: string) {
   // Skip first-time door/blank setup so later steps start on a clean map.
   const skip = page.getByRole('button', { name: 'Skip for now' });
   if (await skip.count()) await skip.click();
+  if (opts?.autoBuild) return;
+  // Blank stores enable auto-build by default; strip it (and inert gen) so aisle
+  // answers regenerate the map the way where.e2e expects.
+  await page.evaluate((storeName) => {
+    const layouts = JSON.parse(localStorage.getItem('aw.layouts') ?? '[]') as { name: string; auto?: unknown; gen?: unknown }[];
+    localStorage.setItem('aw.layouts', JSON.stringify(layouts.map((l) => {
+      if (l.name !== storeName) return l;
+      const { auto: _a, gen: _g, ...rest } = l;
+      return rest;
+    })));
+  }, name);
+  await page.reload();
 }
 
 /** The text of the toasts showing. */
