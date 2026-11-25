@@ -32,6 +32,7 @@ import { doorQuestion } from './core/door';
 import { buildModel, changedParts, modelKey, newlyEdited, regenerate } from './core/generate';
 import { aisleNumber, DEPTS } from './core/clues';
 import { describeArrangement, learnArrangement, relevant, unplacedBack, type LayoutQuestion } from './core/learn';
+import { applyAutoBuild, disableAuto, handEditedAuto } from './core/autoBuild';
 import { productFor, resolveSpot } from './core/locate';
 import {
   applyBothShare, applyListShare, applyStoreShare, decodeShare, shareFromHash, type Share,
@@ -332,16 +333,24 @@ export default function App() {
   /** A shopper's change to a store. Generated parts they change are kept as they are from then on. */
   const keepEdits = (before: StoreLayout, after: StoreLayout): StoreLayout => {
     const edited = newlyEdited(before, after);
-    if (!edited.length || !after.gen) return after;
-    // Where the map had them, so they move with it when it's rebuilt.
-    const origin = { ...after.gen.origin };
-    for (const id of edited) {
-      const was = before.places.find((p) => p.id === id) ?? before.aisles?.find((a) => a.id === id);
-      if (was && !origin[id]) origin[id] = { x: was.x, y: was.y };
+    let next = after;
+    if (edited.length && after.gen) {
+      // Where the map had them, so they move with it when it's rebuilt.
+      const origin = { ...after.gen.origin };
+      for (const id of edited) {
+        const was = before.places.find((p) => p.id === id) ?? before.aisles?.find((a) => a.id === id);
+        if (was && !origin[id]) origin[id] = { x: was.x, y: was.y };
+      }
+      next = { ...after, gen: { ...after.gen, locked: [...new Set([...after.gen.locked, ...edited])], origin } };
     }
-    return { ...after, gen: { ...after.gen, locked: [...new Set([...after.gen.locked, ...edited])], origin } };
+    // Hand geometry on a blank auto-build store stops live rebuilding from check-off order.
+    if (handEditedAuto(before, next)) next = disableAuto(next);
+    return next;
   };
-  const replaceLayout = (next: StoreLayout) => setLayouts((prev) => prev.map((l) => (l.id === next.id ? keepEdits(l, next) : l)));
+  const replaceLayout = (next: StoreLayout, opts?: { fromAuto?: boolean }) => setLayouts((prev) => prev.map((l) => {
+    if (l.id !== next.id) return l;
+    return opts?.fromAuto ? next : keepEdits(l, next);
+  }));
 
   // ---- Map generated from aisle answers ----
   /** Per store: parts of the map just added or changed (outlined until the next trip). */
@@ -556,6 +565,25 @@ export default function App() {
     setNotice(`Map updated from your trips: ${describeArrangement(learned.apply, buildModel(products, layout.id))}.`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [learnedKey, layout.id]);
+
+  // Blank-store auto-build: rebuild category areas from check-off order as the trip grows.
+  const autoKey = useMemo(() => {
+    if (!layout.auto?.enabled) return '';
+    const mine = trips.filter((t) => t.layoutId === layout.id);
+    return JSON.stringify(mine.map((t) => t.picks.map((p) => [p.productId, p.name, p.at])));
+  }, [layout.auto?.enabled, layout.id, trips]);
+  useEffect(() => {
+    if (!layout.auto?.enabled || !autoKey) return;
+    const result = applyAutoBuild(layout, products, trips, catalog);
+    if (!result || (result.changed.length === 0 && result.layout === layout && result.products === products)) return;
+    replaceLayout(result.layout, { fromAuto: true });
+    if (result.products !== products) setProducts(() => result.products);
+    if (result.changed.length) {
+      setMapChanges((m) => ({ ...m, [layout.id]: [...new Set([...(m[layout.id] ?? []), ...result.changed])] }));
+    }
+    if (result.at) setPos({ layoutId: layout.id, point: result.at });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoKey, layout.id]);
   /** How this store labels its shelves ("B12"), or back to aisle numbers. Earlier shelf answers are read again in the new style. */
   function setLabels(style: LabelStyle | undefined): Snapshot {
     const snapshot = snapshotNow();
@@ -654,7 +682,8 @@ export default function App() {
   }
 
   /** Whether to ask "Where was it?" at check-off in this store. */
-  const askWhere = !display.noAskStores?.includes(layout.id);
+  // Auto-build stores place items on category areas from check-off order — no "Where was it?".
+  const askWhere = !display.noAskStores?.includes(layout.id) && !layout.auto?.enabled;
   const setAskWhere = (on: boolean) => setDisplay((d) => ({
     ...d,
     noAskStores: on ? (d.noAskStores ?? []).filter((id) => id !== layout.id) : [...(d.noAskStores ?? []).filter((id) => id !== layout.id), layout.id],

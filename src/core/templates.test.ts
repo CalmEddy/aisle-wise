@@ -50,7 +50,8 @@ describe('the default store maps', () => {
 
   it('the shopper picks the number of aisles', () => {
     expect(storeFromTemplate('S', 'conventional', 18).aisles).toHaveLength(18);
-    expect(storeFromTemplate('S', 'blank').gen?.setup).toBe('blank');
+    expect(storeFromTemplate('S', 'blank').auto).toEqual({ enabled: true, ranks: {} });
+    expect(storeFromTemplate('S', 'blank').gen?.enabled).toBe(false);
     expect(storeFromTemplate('S', 'conventional').gen?.setup).toBe('entrance');
     expect(storeFromTemplate('S', 'conventional', 12, { mirror: true }).gen?.aisleOne).toBe('far');
   });

@@ -77,8 +77,12 @@ export function storeFromTemplate(name: string, templateId: string, aisles?: num
   const base = blankStore(name);
   const t: StoreTemplate | undefined = templateById(templateId);
   if (!t) {
-    // Blank: ask the shopper to tap the entrance on the map next.
-    return { ...base, gen: { enabled: false, entrance: 'left', locked: [], setup: 'blank' } };
+    // Blank: learn category areas from check-off order (serpentine walk).
+    return {
+      ...base,
+      auto: { enabled: true, ranks: {} },
+      gen: { enabled: false, entrance: 'left', locked: [] },
+    };
   }
   const layout: StoreLayout = {
     ...base,

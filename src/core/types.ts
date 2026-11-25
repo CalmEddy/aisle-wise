@@ -90,6 +90,19 @@ export interface StoreLayout {
   keepLength?: string[];
   /** Sets of places/aisles that move together when any member is selected. */
   groups?: { id: string; ids: string[] }[];
+  /**
+   * Map built from check-off order along a serpentine walk (blank stores):
+   * category areas from lower-right toward lower-left, refined across trips.
+   */
+  auto?: AutoBuildState;
+}
+
+/** How a blank store learns category areas from the order things are checked off. */
+export interface AutoBuildState {
+  /** Live rebuild from trips; turned off once the shopper edits the map by hand. */
+  enabled: boolean;
+  /** Category id → mean path rank (0 = first along the walk) and observation count. */
+  ranks: Record<string, { at: number; n: number }>;
 }
 
 /** Something found past a shelf's end: how far the shelf would have to run to reach it. */
