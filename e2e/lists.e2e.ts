@@ -10,6 +10,33 @@ async function goShop(page: import('@playwright/test').Page) {
   await page.getByRole('tab', { name: 'Shop', exact: true }).click();
 }
 
+/** Select a list in the Setup → Lists pulldown by display name prefix. */
+async function selectSetupList(page: import('@playwright/test').Page, name: string) {
+  const sel = page.getByLabel('Which list');
+  const value = await sel.locator('option').evaluateAll((opts, n) => {
+    const hit = opts.find((o) => (o.textContent ?? '').startsWith(n));
+    return hit ? (hit as HTMLOptionElement).value : null;
+  }, name);
+  expect(value).toBeTruthy();
+  await sel.selectOption(value!);
+}
+
+/** Create a list from the Setup → Lists pulldown (does not change the Shop trip). */
+async function createListInSetup(page: import('@playwright/test').Page, name: string) {
+  await goSetupLists(page);
+  await page.getByLabel('Which list').selectOption({ value: '__new__' });
+  await page.getByLabel('New list name').fill(name);
+  await page.getByRole('button', { name: '+ Create' }).click();
+  await expect(page.locator('.lists-select option:checked')).toContainText(name);
+}
+
+async function addInlineOnSetup(page: import('@playwright/test').Page, ...ns: string[]) {
+  for (const n of ns) {
+    await page.getByLabel('Item to add').fill(n);
+    await page.getByLabel('Item to add').press('Enter');
+  }
+}
+
 test('several lists: make, switch, combine into one (with undo), rename, delete', async ({ page }) => {
   await fresh(page, { items: [{ id: 'a', name: 'Apples', done: false }] });
   const names = async () => (await page.locator('main .name').allInnerTexts()).map((t) => t.split('\n')[0].trim()).sort();
@@ -24,11 +51,7 @@ test('several lists: make, switch, combine into one (with undo), rename, delete'
   };
   const openTripLists = async () => { await page.locator('.list-bar').click(); };
   const newListAndShop = async (n: string) => {
-    await goSetupLists(page);
-    await page.getByLabel('New list name').fill(n);
-    await page.getByRole('button', { name: '+ New' }).click();
-    // Add sheet opens for the new list; close it and select on Shop.
-    await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
+    await createListInSetup(page, n);
     await goShop(page);
     await openTripLists();
     await page.locator('.list-pick', { hasText: n }).click();
@@ -52,16 +75,20 @@ test('several lists: make, switch, combine into one (with undo), rename, delete'
   expect(await names()).toEqual(['Apples']);
 
   await goSetupLists(page);
+  await selectSetupList(page, 'Taco night');
   await page.getByRole('button', { name: 'More for Taco night' }).click();
-  await page.getByRole('button', { name: 'Rename', exact: true }).click();
   await page.getByLabel('List name', { exact: true }).fill('Taco Tuesday');
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.getByRole('button', { name: 'More for Weekly staples' }).click();
-  await page.getByRole('button', { name: 'Delete list' }).click();
-  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await selectSetupList(page, 'Weekly staples');
+  await page.getByRole('group', { name: 'Actions for Weekly staples' }).getByRole('button', { name: 'Delete' }).click();
+  await page.locator('.list-confirm').getByRole('button', { name: 'Delete' }).click();
   await expect(page.locator('.toast')).toContainText('Deleted');
-  await expect(page.locator('.lists-manage .list-pick .name')).toHaveText(['Shopping list', 'Taco Tuesday']);
-  await expect(page.getByRole('button', { name: 'More for Shopping list' })).toHaveCount(1);
+  await expect(page.locator('.lists-select option').filter({ hasNotText: 'New list' })).toHaveText([
+    /Shopping list/,
+    /Taco Tuesday/,
+  ]);
+  await selectSetupList(page, 'Taco Tuesday');
+  await expect(page.getByRole('button', { name: 'More for Taco Tuesday' })).toHaveCount(1);
   const lists = await saved<{ name: string }[]>(page, 'lists');
   expect(lists.map((l) => l.name)).toContain('Taco Tuesday');
   expect(lists.map((l) => l.name)).not.toContain('Weekly staples');
@@ -70,25 +97,72 @@ test('several lists: make, switch, combine into one (with undo), rename, delete'
 test('create in Setup does not change Shop trip; duplicate and add onto another list', async ({ page }) => {
   await fresh(page, { items: [{ id: 'a', name: 'Apples', done: false }] });
   const names = async () => (await page.locator('main .name').allInnerTexts()).map((t) => t.split('\n')[0].trim()).sort();
-  await goSetupLists(page);
-  await page.getByLabel('New list name').fill('Party');
-  await page.getByRole('button', { name: '+ New' }).click();
-  await page.getByLabel('Item to add').fill('Chips');
-  await page.getByLabel('Item to add').press('Enter');
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
+  await createListInSetup(page, 'Party');
+  await addInlineOnSetup(page, 'Chips');
+  await expect(page.locator('.lists-manage-items .name')).toContainText(['Chips']);
+  // No cart control while editing lists.
+  await expect(page.locator('.add-inline .s-btn.cart')).toHaveCount(0);
   await goShop(page);
   await expect(page.locator('.list-bar-name')).toHaveText('Shopping list');
   expect(await names()).toEqual(['Apples']);
 
   await goSetupLists(page);
-  await page.getByRole('button', { name: 'More for Party' }).click();
+  await selectSetupList(page, 'Party');
   await page.getByRole('button', { name: 'Duplicate' }).click();
   await expect(page.locator('.toast')).toContainText('Duplicated');
-  await expect(page.locator('.lists-manage .list-pick .name')).toHaveText(['Shopping list', 'Party', 'Party (again)']);
+  await expect(page.locator('.lists-select option').filter({ hasNotText: 'New list' })).toHaveText([
+    /Shopping list/,
+    /Party/,
+    /Party \(again\)/,
+  ]);
   await goShop(page);
   await page.locator('.list-bar').click();
   await page.locator('.list-pick', { has: page.locator('.name', { hasText: /^Party$/ }) }).click();
   expect(await names()).toEqual(['Chips']);
+});
+
+test('Setup Lists: sort cycles and search badges show List / Cart', async ({ page }) => {
+  await fresh(page, {
+    items: [
+      { id: 'a', name: 'Apples', done: false },
+      { id: 'm', name: 'Milk', done: true, productId: 'p-milk' },
+    ],
+    display: { noAskStores: ['demo'] },
+  });
+  await goSetupLists(page);
+  await addInlineOnSetup(page, 'Eggs');
+  await expect(page.locator('.lists-manage-items .name')).toContainText(['Apples', 'Eggs']);
+
+  const sort = page.getByRole('button', { name: /Sort by order of entry/ });
+  await expect(sort).toBeVisible();
+  await sort.click();
+  await expect(page.getByRole('button', { name: /Sort by category/ })).toBeVisible();
+  await page.getByRole('button', { name: /Sort by category/ }).click();
+  await expect(page.getByRole('button', { name: /Sort alphabetically/ })).toBeVisible();
+
+  await page.getByLabel('Item to add').fill('Milk');
+  const milkSug = page.locator('.add-inline .suggestion', { hasText: 'Milk' }).first();
+  await expect(milkSug.locator('.status-pill.in-cart')).toHaveText('Cart');
+  await page.getByLabel('Item to add').fill('Apples');
+  const appleSug = page.locator('.add-inline .suggestion', { hasText: 'Apples' }).first();
+  await expect(appleSug.locator('.status-pill.on-list')).toHaveText('List');
+});
+
+test('Grocery Items marks List and Cart badges', async ({ page }) => {
+  await fresh(page, {
+    items: [
+      { id: 'a', name: 'Apples', done: false },
+      { id: 'm', name: 'Milk', done: true, productId: 'p-milk' },
+    ],
+  });
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await page.getByLabel('Search or add grocery items').fill('Apples');
+  const apples = page.locator('.item-entry').filter({ has: page.locator('.item-name', { hasText: /^Apples$/ }) }).first();
+  await expect(apples.locator('.status-pill.on-list')).toHaveText('List');
+  await page.getByLabel('Search or add grocery items').fill('Milk');
+  const milk = page.locator('.item-entry').filter({ has: page.locator('.item-name', { hasText: /^Milk$/ }) }).first();
+  await expect(milk.locator('.status-pill.in-cart')).toHaveText('Cart');
 });
 
 test('move an item to another list from the item menu', async ({ page }) => {

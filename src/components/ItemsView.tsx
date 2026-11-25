@@ -34,6 +34,10 @@ interface Props {
   onAddToList: (product: Product) => void;
   /** Ids of products already on the active shopping list. */
   onList: Set<string>;
+  /** Product ids waiting (to-buy) on any list. */
+  onAnyListIds?: Set<string>;
+  /** Product ids checked off (in cart) on any list. */
+  inCartIds?: Set<string>;
   /** Active-list rows keyed by product id (unchecked first). */
   listItemOf: (productId: string) => ListItem | undefined;
   /**
@@ -108,6 +112,7 @@ export function ItemsView(props: Props) {
           listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? props.listName}
           catalog={props.catalog}
           onList={props.onListIds(addingFor)}
+          inCart={props.inCartIds}
           whereText={(p) => whereText(p, props.layout, props.catalog)}
           iconOf={(id) => lookOf(id)?.icon}
           onAdd={(names, mode) => props.quickAddTo(addingFor, names, mode)}
@@ -163,8 +168,8 @@ interface ItemsToast {
 }
 
 function ProductList({
-  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, listItemOf, onPatchProduct,
-  snapshot, undo, listName, display, setDisplay,
+  catalog, layouts, layout, setProducts, setCategories, onAddToList, onList, onAnyListIds, inCartIds,
+  listItemOf, onPatchProduct, snapshot, undo, listName, display, setDisplay,
 }: Props) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<ItemFilter>('all');
@@ -379,13 +384,18 @@ function ProductList({
     onInterim: (transcript) => setQuery(transcript.trim()),
   });
 
+  const anyList = onAnyListIds ?? onList;
+  const inCart = inCartIds ?? new Set<string>();
+
   const row = (p: Product, keyPrefix = '') => {
     const key = keyPrefix + p.id;
     const open = openKey === key;
     const listed = onList.has(p.id);
+    const onSomeList = anyList.has(p.id);
+    const held = inCart.has(p.id);
     const listItem = listed ? listItemOf(p.id) : undefined;
     return (
-    <li key={key} id={`item-${key}`} className={`item-entry${open ? ' open' : ''}${selecting && selected.has(p.id) ? ' chosen' : ''}`}>
+    <li key={key} id={`item-${key}`} className={`item-entry${open ? ' open' : ''}${selecting && selected.has(p.id) ? ' chosen' : ''}${onSomeList ? ' on-list' : ''}${held ? ' in-cart' : ''}`}>
       <SwipeRow
         disabled={selecting || open}
         onSwipeRight={listed ? undefined : () => addManyToList([p])}
@@ -404,9 +414,19 @@ function ProductList({
           <input type="checkbox" className="select-box" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} aria-label={`Select ${p.name}`} />
         )}
         <button className="product-row" onClick={() => (selecting ? toggleSelect(p.id) : setOpenKey(open ? undefined : key))} aria-expanded={selecting ? undefined : open}>
-          <span className="name">{keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}{p.name}</span>
+          <span className="name">
+            {keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}
+            <span className="item-name">{p.name}</span>
+            {onSomeList && <span className="status-pill on-list" aria-hidden="true">List</span>}
+            {held && <span className="status-pill in-cart" aria-hidden="true">Cart</span>}
+          </span>
           <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>
-            {[whereText(p, layout, catalog), showPrice ? priceCue(p, layout.id, layouts, listItem?.price) : undefined].filter(Boolean).join(' · ')}
+            {[
+              onSomeList && !listed ? 'On another list' : undefined,
+              held ? 'In cart' : undefined,
+              whereText(p, layout, catalog),
+              showPrice ? priceCue(p, layout.id, layouts, listItem?.price) : undefined,
+            ].filter(Boolean).join(' · ')}
           </span>
         </button>
         {showQty && (

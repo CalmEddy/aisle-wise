@@ -1615,11 +1615,18 @@ export default function App() {
           catalog={catalog}
           layout={layout}
           looks={looks}
+          allItems={allItems}
+          setListItems={(id, fn) => setAllItems((all) => updateList(all, id, fn))}
           onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+          inCartIds={new Set(allItems.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+          onAnyListIds={new Set(allItems.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           quickAddTo={quickAddTo}
           buyAgain={buyAgainChips}
           lastTripNames={lastTripNames}
           undo={undo}
+          snapshot={snapshotNow}
+          display={display}
+          setDisplay={setDisplay}
         />
       )}
       {view === 'setup' && setupTab === 'items' && (
@@ -1632,6 +1639,8 @@ export default function App() {
           setLayouts={setLayouts}
           onAddToList={addToList}
           onList={onList}
+          inCartIds={new Set(allItems.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+          onAnyListIds={new Set(allItems.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           listItemOf={(productId) => {
             const waiting = items.find((i) => !i.done && productFor(i, catalog)?.id === productId);
             return waiting ?? items.find((i) => productFor(i, catalog)?.id === productId);

@@ -100,7 +100,7 @@ test('Items tab: × and $ toggles work while browsing items not yet on the list'
   await expect(priceToggle).toHaveAttribute('aria-pressed', 'false');
 
   // × on: steppers show on catalog rows (not only on-list items).
-  const apples = page.locator('.item-entry').filter({ has: page.locator('.product-row .name', { hasText: /^Apples$/ }) }).first();
+  const apples = page.locator('.item-entry').filter({ has: page.locator('.product-row .item-name', { hasText: /^Apples$/ }) }).first();
   await expect(apples.getByRole('button', { name: 'One more Apples' })).toBeVisible();
   await qtyToggle.click();
   await expect(qtyToggle).toHaveAttribute('aria-pressed', 'false');
