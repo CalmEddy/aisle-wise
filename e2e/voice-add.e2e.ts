@@ -96,7 +96,8 @@ test('Items tab mic fills search for review instead of auto-adding', async ({ pa
     activeList: 'aldi',
   });
 
-  await page.getByRole('tab', { name: 'Items' }).click();
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
   await page.getByRole('button', { name: 'Add by voice' }).click();
   await fireFinal(page, 'Butter');
 

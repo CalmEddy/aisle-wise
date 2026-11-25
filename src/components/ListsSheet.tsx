@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { MAIN_LIST, type ShoppingList } from '../core/types';
 import type { ClearMode } from '../core/lists';
 
-/** What the Shop tab can do with the household's lists. */
+/** What the Shop tab / Setup → Lists can do with the household's lists. */
 export interface ListsApi {
   all: ShoppingList[];
-  /** The list being shopped. */
+  /** The list being shopped (Shop) or focused for stocking (Setup). */
   current: string;
   /** Things still to buy on each list. */
   counts: Map<string, number>;
@@ -32,7 +32,7 @@ export interface ListsApi {
   setShopWith: (ids: string[]) => void;
 }
 
-/** The list switcher (in the header): the list being shopped; opens the lists sheet. */
+/** The list switcher (in the Shop header): the list being shopped; opens the trip lists sheet. */
 export function ListBar({ name, toBuy, otherPending, overlays = [], onOpen }: {
   name: string;
   /** Still to buy on the active list (or trip union on Shop). */
@@ -72,15 +72,17 @@ export function ListBar({ name, toBuy, otherPending, overlays = [], onOpen }: {
 }
 
 /**
- * All lists: switch, rename, delete, start a new one, add onto a list without
- * shopping it, and fill the current trip from others.
+ * Trip mode (Shop): switch the selected list and combine from others.
+ * Manage mode (Setup → Lists): create / rename / delete / add items — no trip framing.
  */
-export function ListsSheet({ lists, onCombined, onRemoved, onCleared, onDuplicated, onAddItems, onClose }: {
+export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onCleared, onDuplicated, onAddItems, onClose }: {
   lists: ListsApi;
-  onCombined: (text: string, snapshot: import('../App').Snapshot) => void;
-  onRemoved: (text: string, snapshot: import('../App').Snapshot) => void;
-  onCleared: (text: string, snapshot: import('../App').Snapshot) => void;
-  onDuplicated: (text: string, snapshot: import('../App').Snapshot) => void;
+  /** Shop trip picker vs Setup list admin. */
+  mode?: 'trip' | 'manage';
+  onCombined?: (text: string, snapshot: import('../App').Snapshot) => void;
+  onRemoved?: (text: string, snapshot: import('../App').Snapshot) => void;
+  onCleared?: (text: string, snapshot: import('../App').Snapshot) => void;
+  onDuplicated?: (text: string, snapshot: import('../App').Snapshot) => void;
   /** Open the add sheet for a list (may not be the one being shopped). */
   onAddItems: (listId: string) => void;
   onClose: () => void;
@@ -103,56 +105,137 @@ export function ListsSheet({ lists, onCombined, onRemoved, onCleared, onDuplicat
   function status(id: string) {
     const n = toBuy(id);
     if (n > 0) return `${n} to buy`;
-    if (done(id) > 0) return 'All in the cart';
+    if (done(id) > 0) return 'All checked';
     return 'Empty';
   }
 
-  function toggleAlsoShop(id: string, on: boolean) {
-    const next = on
-      ? [...lists.shopWith.filter((x) => x !== id), id]
-      : lists.shopWith.filter((x) => x !== id);
-    lists.setShopWith(next);
+  if (mode === 'manage') {
+    return (
+      <div className="sheet-backdrop" onClick={onClose}>
+        <div className="sheet lists-sheet" role="dialog" aria-label="Manage lists" onClick={(e) => e.stopPropagation()}>
+          <h2>Your lists</h2>
+          <p className="muted small">Create and stock lists here. Pick which list to shop on the Shop tab.</p>
+          <ul className="lists">
+            {lists.all.map((l) => {
+              const openMenu = menuFor === l.id;
+              const deleting = confirmDelete === l.id;
+              if (renaming === l.id) {
+                return (
+                  <li key={l.id}>
+                    <form className="rename-list" onSubmit={(e) => {
+                      e.preventDefault();
+                      if (name.trim()) lists.rename(l.id, name.trim());
+                      setRenaming(undefined);
+                    }}>
+                      <input value={name} onChange={(e) => setName(e.target.value)} aria-label="List name" autoFocus />
+                      <button className="btn primary">Save</button>
+                      <button type="button" className="btn" onClick={() => setRenaming(undefined)}>Cancel</button>
+                    </form>
+                    {name.trim() && nameTaken(name, l.id) && (
+                      <p className="muted small list-warn">You already have a list called “{lists.all.find((x) => x.id !== l.id && x.name.trim().toLowerCase() === name.trim().toLowerCase())?.name}”.</p>
+                    )}
+                  </li>
+                );
+              }
+              if (deleting) {
+                return (
+                  <li key={l.id} className="list-confirm">
+                    <p>Delete “{l.name}” and its {toBuy(l.id) + done(l.id)} item{(toBuy(l.id) + done(l.id)) === 1 ? '' : 's'}?</p>
+                    <div className="sheet-actions">
+                      <button className="btn" onClick={() => setConfirmDelete(undefined)}>Keep</button>
+                      <span style={{ flex: 1 }} />
+                      <button className="btn danger" onClick={() => {
+                        const snap = lists.remove(l.id);
+                        setConfirmDelete(undefined);
+                        if (snap) onRemoved?.(`Deleted “${l.name}”.`, snap);
+                      }}>Delete</button>
+                    </div>
+                  </li>
+                );
+              }
+              return (
+                <li key={l.id} className={l.id === lists.current ? 'current' : ''}>
+                  <button
+                    className="list-pick"
+                    onClick={() => { lists.switchTo(l.id); onAddItems(l.id); }}
+                    aria-current={l.id === lists.current}
+                  >
+                    <span className="name">{l.name}</span>
+                    <span className="muted small">{status(l.id)}</span>
+                  </button>
+                  <button className="icon" onClick={() => { setMenuFor(openMenu ? undefined : l.id); setConfirmDelete(undefined); }} aria-label={`More for ${l.name}`} aria-expanded={openMenu}>⋯</button>
+                  {openMenu && (
+                    <div className="list-row-menu" role="group" aria-label={`Actions for ${l.name}`}>
+                      <button className="pick" onClick={() => { onAddItems(l.id); }}>＋ Add items</button>
+                      <button className="pick" onClick={() => { setRenaming(l.id); setName(l.name); setMenuFor(undefined); }}>Rename</button>
+                      <button className="pick" onClick={() => {
+                        const r = lists.duplicate(l.id);
+                        setMenuFor(undefined);
+                        if (r) onDuplicated?.(`Duplicated as “${r.name}”.`, r.snapshot);
+                      }}>Duplicate</button>
+                      <button className="pick" onClick={() => { lists.reorder(l.id, -1); }} disabled={lists.all[0]?.id === l.id}>Move up</button>
+                      <button className="pick" onClick={() => { lists.reorder(l.id, 1); }} disabled={lists.all[lists.all.length - 1]?.id === l.id}>Move down</button>
+                      {(toBuy(l.id) > 0 || done(l.id) > 0) && (
+                        <>
+                          {done(l.id) > 0 && (
+                            <button className="pick" onClick={() => {
+                              const snap = lists.clear(l.id, 'checked');
+                              setMenuFor(undefined);
+                              onCleared?.(`Cleared checked items from “${l.name}”.`, snap);
+                            }}>Clear checked</button>
+                          )}
+                          {toBuy(l.id) > 0 && (
+                            <button className="pick" onClick={() => {
+                              const snap = lists.clear(l.id, 'toBuy');
+                              setMenuFor(undefined);
+                              onCleared?.(`Cleared to-buy items from “${l.name}”.`, snap);
+                            }}>Clear to-buy</button>
+                          )}
+                        </>
+                      )}
+                      {l.id !== MAIN_LIST && (
+                        <button className="pick danger" onClick={() => { setConfirmDelete(l.id); setMenuFor(undefined); }}>Delete list</button>
+                      )}
+                    </div>
+                  )}
+                  {createdId === l.id && (
+                    <div className="list-created" role="status">
+                      <span className="muted small">List created.</span>
+                      <button className="btn primary" onClick={() => onAddItems(l.id)}>＋ Add items</button>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <form className="add-row" onSubmit={(e) => {
+            e.preventDefault();
+            if (!newName.trim()) return;
+            const id = lists.create(newName.trim());
+            lists.switchTo(id);
+            setCreatedId(id);
+            setNewName('');
+            setMenuFor(undefined);
+          }}>
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New list, e.g. Taco night" aria-label="New list name" />
+            <button type="submit" disabled={!newName.trim()}>+ New</button>
+          </form>
+          {newName.trim() && nameTaken(newName) && (
+            <p className="muted small list-warn">You already have a list with that name.</p>
+          )}
+          <div className="sheet-actions">
+            <span style={{ flex: 1 }} />
+            <button className="btn" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  const row = (l: ShoppingList, opts?: { shoppingNow?: boolean }) => {
+  // Trip mode: select which list to shop + combine. Include-other-lists lives on the Shop screen.
+  const row = (l: ShoppingList) => {
     const isCurrent = l.id === lists.current;
-    const openMenu = menuFor === l.id;
-    const deleting = confirmDelete === l.id;
-    const also = lists.shopWith.includes(l.id);
-    if (renaming === l.id) {
-      return (
-        <li key={l.id} className={isCurrent ? 'current' : ''}>
-          <form className="rename-list" onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) lists.rename(l.id, name.trim());
-            setRenaming(undefined);
-          }}>
-            <input value={name} onChange={(e) => setName(e.target.value)} aria-label="List name" autoFocus />
-            <button className="btn primary">Save</button>
-            <button type="button" className="btn" onClick={() => setRenaming(undefined)}>Cancel</button>
-          </form>
-          {name.trim() && nameTaken(name, l.id) && (
-            <p className="muted small list-warn">You already have a list called “{lists.all.find((x) => x.id !== l.id && x.name.trim().toLowerCase() === name.trim().toLowerCase())?.name}”.</p>
-          )}
-        </li>
-      );
-    }
-    if (deleting) {
-      return (
-        <li key={l.id} className="list-confirm">
-          <p>Delete “{l.name}” and its {toBuy(l.id) + done(l.id)} item{(toBuy(l.id) + done(l.id)) === 1 ? '' : 's'}?</p>
-          <div className="sheet-actions">
-            <button className="btn" onClick={() => setConfirmDelete(undefined)}>Keep</button>
-            <span style={{ flex: 1 }} />
-            <button className="btn danger" onClick={() => {
-              const snap = lists.remove(l.id);
-              setConfirmDelete(undefined);
-              if (snap) onRemoved(`Deleted “${l.name}”.`, snap);
-            }}>Delete</button>
-          </div>
-        </li>
-      );
-    }
     return (
       <li key={l.id} className={isCurrent ? 'current' : ''}>
         <button
@@ -162,105 +245,24 @@ export function ListsSheet({ lists, onCombined, onRemoved, onCleared, onDuplicat
         >
           <span className="radio" aria-hidden="true">{isCurrent ? '●' : '○'}</span>
           <span className="name">{l.name}</span>
-          <span className="muted small">{opts?.shoppingNow ? 'Shopping now' : also ? 'Also shopping' : status(l.id)}</span>
+          <span className="muted small">{isCurrent ? 'Selected' : status(l.id)}</span>
         </button>
-        {!isCurrent && (
-          <label className="also-shop">
-            <input
-              type="checkbox"
-              checked={also}
-              onChange={(e) => toggleAlsoShop(l.id, e.target.checked)}
-              aria-label={`Also shop ${l.name}`}
-            />
-            <span aria-hidden="true">Also shop</span>
-          </label>
-        )}
-        <button className="icon" onClick={() => { setMenuFor(openMenu ? undefined : l.id); setConfirmDelete(undefined); }} aria-label={`More for ${l.name}`} aria-expanded={openMenu}>⋯</button>
-        {openMenu && (
-          <div className="list-row-menu" role="group" aria-label={`Actions for ${l.name}`}>
-            <button className="pick" onClick={() => { onAddItems(l.id); }}>＋ Add items</button>
-            {!isCurrent && <button className="pick" onClick={() => { lists.switchTo(l.id); onClose(); }}>Shop this list</button>}
-            {!isCurrent && (
-              <button className="pick" onClick={() => { toggleAlsoShop(l.id, !also); setMenuFor(undefined); }}>
-                {also ? 'Stop also shopping' : 'Also shop this list'}
-              </button>
-            )}
-            <button className="pick" onClick={() => { setRenaming(l.id); setName(l.name); setMenuFor(undefined); }}>Rename</button>
-            <button className="pick" onClick={() => {
-              const r = lists.duplicate(l.id);
-              setMenuFor(undefined);
-              if (r) onDuplicated(`Duplicated as “${r.name}”.`, r.snapshot);
-            }}>Duplicate</button>
-            <button className="pick" onClick={() => { lists.reorder(l.id, -1); }} disabled={lists.all[0]?.id === l.id}>Move up</button>
-            <button className="pick" onClick={() => { lists.reorder(l.id, 1); }} disabled={lists.all[lists.all.length - 1]?.id === l.id}>Move down</button>
-            {(toBuy(l.id) > 0 || done(l.id) > 0) && (
-              <>
-                {done(l.id) > 0 && (
-                  <button className="pick" onClick={() => {
-                    const snap = lists.clear(l.id, 'checked');
-                    setMenuFor(undefined);
-                    onCleared(`Cleared checked items from “${l.name}”.`, snap);
-                  }}>Clear checked</button>
-                )}
-                {toBuy(l.id) > 0 && (
-                  <button className="pick" onClick={() => {
-                    const snap = lists.clear(l.id, 'toBuy');
-                    setMenuFor(undefined);
-                    onCleared(`Cleared to-buy items from “${l.name}”.`, snap);
-                  }}>Clear to-buy</button>
-                )}
-              </>
-            )}
-            {l.id !== MAIN_LIST && (
-              <button className="pick danger" onClick={() => { setConfirmDelete(l.id); setMenuFor(undefined); }}>Delete list</button>
-            )}
-          </div>
-        )}
-        {createdId === l.id && (
-          <div className="list-created" role="status">
-            <span className="muted small">List created.</span>
-            <button className="btn" onClick={() => onAddItems(l.id)}>＋ Add items</button>
-            <button className="btn primary" onClick={() => { lists.switchTo(l.id); onClose(); }}>Shop this list</button>
-          </div>
-        )}
       </li>
     );
   };
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
-      <div className="sheet lists-sheet" role="dialog" aria-label="Your lists" onClick={(e) => e.stopPropagation()}>
-        <h2>Your lists</h2>
+      <div className="sheet lists-sheet" role="dialog" aria-label="Choose list" onClick={(e) => e.stopPropagation()}>
+        <h2>Choose list</h2>
+        <p className="muted small">Select the list for this trip. Include more lists from the Shop screen.</p>
 
         <section className="lists-section">
-          <h3>Shopping now</h3>
-          <ul className="lists">{row(current, { shoppingNow: true })}</ul>
+          <h3>Lists</h3>
+          <ul className="lists">{lists.all.map((l) => row(l))}</ul>
         </section>
 
-        {others.length > 0 && (
-          <section className="lists-section">
-            <h3>Other lists</h3>
-            <p className="muted small also-shop-hint">Tick Also shop to see a list’s to-buy on Shop without copying it onto “{current.name}”.</p>
-            <ul className="lists">{others.map((l) => row(l))}</ul>
-          </section>
-        )}
-
-        <form className="add-row" onSubmit={(e) => {
-          e.preventDefault();
-          if (!newName.trim()) return;
-          const id = lists.create(newName.trim());
-          setCreatedId(id);
-          setNewName('');
-          setMenuFor(undefined);
-        }}>
-          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New list, e.g. Taco night" aria-label="New list name" />
-          <button type="submit" disabled={!newName.trim()}>+ New</button>
-        </form>
-        {newName.trim() && nameTaken(newName) && (
-          <p className="muted small list-warn">You already have a list with that name.</p>
-        )}
-
-        {others.length > 0 && (
+        {others.length > 0 && onCombined && (
           <section className="combine">
             <h3>Add from other lists</h3>
             <p className="muted small">

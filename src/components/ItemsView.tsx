@@ -69,6 +69,8 @@ export function ItemsView(props: Props) {
   /** Stock a (possibly non-active) list from ListsSheet without switching the trip. */
   const [addingFor, setAddingFor] = useState<string>();
   const [listToast, setListToast] = useState<{ text: string; snapshot: Snapshot } | null>(null);
+  const [localListsOpen, setLocalListsOpen] = useState(false);
+  const listsOpen = props.listsOpen || localListsOpen;
 
   useEffect(() => {
     if (!listToast) return;
@@ -81,17 +83,24 @@ export function ItemsView(props: Props) {
     return (id?: string) => (id ? m.get(id) : undefined);
   }, [props.catalog.categories]);
 
+  function closeLists() {
+    setLocalListsOpen(false);
+    props.onListsClose();
+  }
+
+  const toBuy = props.lists.counts.get(props.lists.current) ?? 0;
+
   return (
     <>
-      {props.listsOpen && (
+      {listsOpen && (
         <ListsSheet
+          mode="manage"
           lists={props.lists}
-          onClose={props.onListsClose}
-          onCombined={(note, snap) => setListToast({ text: note, snapshot: snap })}
+          onClose={closeLists}
           onRemoved={(note, snap) => setListToast({ text: note, snapshot: snap })}
           onCleared={(note, snap) => setListToast({ text: note, snapshot: snap })}
           onDuplicated={(note, snap) => setListToast({ text: note, snapshot: snap })}
-          onAddItems={(id) => { props.onListsClose(); setAddingFor(id); }}
+          onAddItems={(id) => { closeLists(); setAddingFor(id); }}
         />
       )}
       {addingFor && (
@@ -115,6 +124,17 @@ export function ItemsView(props: Props) {
           <button className="icon" onClick={() => setListToast(null)} aria-label="Dismiss">×</button>
         </div>
       )}
+      <button
+        type="button"
+        className="list-bar items-list-target"
+        onClick={() => setLocalListsOpen(true)}
+        aria-label={`List: ${props.listName}${toBuy ? `, ${toBuy} to buy` : ''}. Change list`}
+      >
+        <span aria-hidden="true">📝</span>
+        <span className="list-bar-name">{props.listName}</span>
+        {toBuy > 0 && <span className="list-bar-count" aria-hidden="true">{toBuy}</span>}
+        <span aria-hidden="true" className="list-bar-more">▾</span>
+      </button>
       <div className="segmented" role="tablist">
         <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Grocery items</button>
         <button className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}>Categories</button>

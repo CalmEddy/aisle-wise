@@ -4,7 +4,7 @@ import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { IntroSheet } from './components/IntroSheet';
-import { ListBar } from './components/ListsSheet';
+import { ListsManageView } from './components/ListsManageView';
 import { StoreSheet } from './components/StoreSheet';
 import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
@@ -50,7 +50,8 @@ import { renumberSelection } from './core/renumber';
 import { useHousehold } from './sync/useHousehold';
 import { usePersistentState } from './usePersistentState';
 
-type View = 'list' | 'items';
+type View = 'list' | 'setup';
+type SetupTab = 'lists' | 'items' | 'stores';
 
 export interface QuickAddResult {
   snapshot: Snapshot;
@@ -94,9 +95,10 @@ export type BuildOutcome =
 export default function App() {
   const [layouts, setLayouts] = usePersistentState<StoreLayout[]>('aw.layouts', [demoLayout]);
   const [activeId, setActiveId] = usePersistentState('aw.activeLayout', demoLayout.id);
-  const [savedView, setView] = usePersistentState<View | 'layout'>('aw.view', 'list');
-  // The old "Store layout" tab is now build mode on the Shop tab.
-  const view: View = savedView === 'layout' ? 'list' : savedView;
+  const [savedView, setView] = usePersistentState<View | 'layout' | 'items'>('aw.view', 'list');
+  // Old tabs: "layout" → Shop; "items" → Setup → Items & Categories.
+  const view: View = savedView === 'layout' || savedView === 'items' ? (savedView === 'items' ? 'setup' : 'list') : savedView;
+  const [setupTab, setSetupTab] = usePersistentState<SetupTab>('aw.setupTab', 'lists');
   // Every list's items; the app works on the list being shopped (`items`).
   const [allItems, setAllItems] = usePersistentState<ListItem[]>('aw.items', []);
   const [savedLists, setLists] = usePersistentState<ShoppingList[]>('aw.lists', defaultLists);
@@ -126,10 +128,22 @@ export default function App() {
   const [display, setDisplay] = usePersistentState<Display>('aw.display', defaultDisplay);
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
   useEffect(() => {
-    if (savedView !== 'layout') return;
-    setView('list');
-    setDisplay((d) => ({ ...d, buildMode: true }));
-  }, [savedView, setView, setDisplay]);
+    if (savedView === 'layout') {
+      setView('setup');
+      setSetupTab('stores');
+      setDisplay((d) => ({ ...d, buildMode: true }));
+    } else if (savedView === 'items') {
+      setView('setup');
+      setSetupTab('items');
+    }
+  }, [savedView, setView, setSetupTab, setDisplay]);
+
+  // Setup → Stores hosts map editing; leave build mode when leaving that subsection.
+  useEffect(() => {
+    if (view === 'setup' && setupTab === 'stores') return;
+    if (!display.buildMode) return;
+    setDisplay((d) => (d.buildMode ? { ...d, buildMode: false } : d));
+  }, [view, setupTab, display.buildMode, setDisplay]);
 
   useMoveOldLocationsIntoProducts(setProducts);
 
@@ -1445,6 +1459,107 @@ export default function App() {
     </button>
   );
 
+  const setupSub = (id: SetupTab, label: string) => (
+    <button
+      role="tab"
+      aria-selected={setupTab === id}
+      className={setupTab === id ? 'active' : ''}
+      onClick={() => {
+        setSetupTab(id);
+        if (id === 'stores') setDisplay((d) => ({ ...d, buildMode: true }));
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  const listsApi = {
+    all: lists, current: listId, counts: listCounts, doneCounts: listDoneCounts,
+    switchTo: setActiveListId,
+    create: createList, rename: renameList, remove: deleteList, combine: combineInto,
+    preview: (sources: string[]) => combineLists(allItems, listId, sources, catalog),
+    duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
+    shopWith, setShopWith: (ids: string[]) => setShopWith(() => cleanShopWith(ids, listId, lists)),
+  };
+
+  const shoppingProps = {
+    listsOpen,
+    usuals: buyAgain,
+    lastTripNames,
+    mapChanges: mapChanges[layout.id] ?? [],
+    onSeenChange: seenChange,
+    onListsClose: () => setListsOpen(false),
+    onOpenLists: () => setListsOpen(true),
+    onOpenStores: openStores,
+    lists: listsApi,
+    listSnapshot: listsSnapshot,
+    tripSourcesOf,
+    moveItemTo,
+    copyItemTo,
+    quickAddTo,
+    onListIds: (id: string) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
+    layout: shownLayout,
+    layouts,
+    floor,
+    catalog,
+    items: shopItems,
+    setItems: setShopItems,
+    setLocation,
+    quickAdd,
+    build: {
+      pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
+      startBlankStore, clearSetup, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, addArea, markAt, brushStep, brushBack, aisles: aisleApi,
+      store: {
+        layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => openShare({ list: false, map: true }), resetDemo, isDemo: layout.id === demoLayout.id,
+        gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,
+      },
+    },
+    setItemCategory,
+    where: {
+      ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip,
+      place: (ref: string, placement: import('./core/types').Placement, dir?: import('./core/types').Orientation) => setGen({
+        placements: { ...layout.gen?.placements, [ref]: placement },
+        ...(dir && { directions: { ...layout.gen?.directions, [ref]: dir } }),
+      }),
+      skipPlacement: (ref: string) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); },
+      setLabels,
+      clearWhere,
+      door: doorAsk,
+      setDoor: (f: number | undefined) => {
+        const gen = layout.gen;
+        if (!gen) return undefined;
+        if (f === undefined) {
+          setGen({ skipped: [...(gen.skipped ?? []), 'entrance'], setup: undefined });
+          return undefined;
+        }
+        return setGen({
+          door: f,
+          sure: [...(gen.sure ?? []), 'entrance'],
+          locked: gen.locked.filter((id) => id !== 'g-entrance' && id !== 'g-checkout-point'),
+          setup: undefined,
+        });
+      },
+      clearSetup,
+    },
+    undo,
+    shelves: { due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd },
+    here: { options: hereChoices, place: placeHere },
+    setProductLocation,
+    setProductPrice,
+    setAvailable,
+    position,
+    setPosition: (point: import('./core/types').Point) => setPos({ layoutId: layout.id, point }),
+    onEditLayout: () => {
+      setView('setup');
+      setSetupTab('stores');
+      setDisplay((d) => ({ ...d, buildMode: true }));
+    },
+    display,
+    setDisplay,
+    mapLook,
+    looks,
+  };
+
   return (
     <div className="app">
       <header className="top">
@@ -1462,19 +1577,6 @@ export default function App() {
             <button className="store-pick" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
               {layout.name} <span aria-hidden="true">▾</span>
             </button>
-            {(view === 'list' || view === 'items') && (
-              <ListBar
-                name={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
-                toBuy={view === 'list' ? trip.toBuy.length : (listCounts.get(listId) ?? 0)}
-                otherPending={[...listCounts.entries()].filter(([id, n]) => id !== listId && !shopWith.includes(id) && n > 0).length}
-                overlays={shopWith.map((id) => ({
-                  id,
-                  name: lists.find((l) => l.id === id)?.name ?? id,
-                  toBuy: listCounts.get(id) ?? 0,
-                }))}
-                onOpen={() => setListsOpen(true)}
-              />
-            )}
           </div>
         </div>
         {view === 'list' && (
@@ -1487,92 +1589,40 @@ export default function App() {
         )}
       </header>
 
-      <nav className="tabs" role="tablist">
-        {tab('items', 'Items')}
+      <nav className="tabs" role="tablist" aria-label="Main">
         {tab('list', 'Shop')}
+        {tab('setup', 'Setup')}
       </nav>
+
+      {view === 'setup' && (
+        <nav className="tabs setup-tabs" role="tablist" aria-label="Setup">
+          {setupSub('lists', 'Lists')}
+          {setupSub('items', 'Items & Categories')}
+          {setupSub('stores', 'Stores')}
+        </nav>
+      )}
 
       {view === 'list' && (
         <ShoppingView
           key={listId}
-          listsOpen={listsOpen}
-          usuals={buyAgain}
-          lastTripNames={lastTripNames}
-          mapChanges={mapChanges[layout.id] ?? []}
-          onSeenChange={seenChange}
-          onListsClose={() => setListsOpen(false)}
-          lists={{
-            all: lists, current: listId, counts: listCounts, doneCounts: listDoneCounts,
-            switchTo: setActiveListId,
-            create: createList, rename: renameList, remove: deleteList, combine: combineInto,
-            preview: (sources) => combineLists(allItems, listId, sources, catalog),
-            duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
-            shopWith, setShopWith: (ids) => setShopWith(() => cleanShopWith(ids, listId, lists)),
-          }}
-          listSnapshot={listsSnapshot}
-          tripSourcesOf={tripSourcesOf}
-          moveItemTo={moveItemTo}
-          copyItemTo={copyItemTo}
-          quickAddTo={quickAddTo}
-          onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
-          layout={shownLayout}
-          layouts={layouts}
-          floor={floor}
-          catalog={catalog}
-          items={shopItems}
-          setItems={setShopItems}
-          setLocation={setLocation}
-          quickAdd={quickAdd}
-          build={{
-            pickUpHere, moveHereAndBuild, placeChosen, addShelves, turnShelfHere, renamePlace, addAreaHere, stepTo, markHere,
-            startBlankStore, clearSetup, updatePlace, swapPlace, movePlaceOnto, deletePlace, snapshot: snapshotNow, addPlaceAt, addArea, markAt, brushStep, brushBack, aisles: aisleApi,
-            store: {
-              layouts, renameStore, resizeStore, copyStore, deleteStore, shareStore: () => openShare({ list: false, map: true }), resetDemo, isDemo: layout.id === demoLayout.id,
-              gen: layout.gen, setGen, answers: products.filter((p) => p.clues?.[layout.id]).length, question: learned.question, answer: answerLayout, layoutHas, blocks: storeBlocks,
-            },
-          }}
-          setItemCategory={setItemCategory}
-          where={{ ask: askWhere, setAsk: setAskWhere, setClue, notePick, newTrip: endTrip, question: learned.question, answer: answerLayout, trip: currentTrip,
-            place: (ref, placement, dir) => setGen({
-              placements: { ...layout.gen?.placements, [ref]: placement },
-              ...(dir && { directions: { ...layout.gen?.directions, [ref]: dir } }),
-            }),
-            skipPlacement: (ref) => { setGen({ placementsSkipped: [...(layout.gen?.placementsSkipped ?? []), ref] }); },
-            setLabels,
-            clearWhere,
-            door: doorAsk,
-            setDoor: (f) => {
-              const gen = layout.gen;
-              if (!gen) return undefined;
-              if (f === undefined) {
-                setGen({ skipped: [...(gen.skipped ?? []), 'entrance'], setup: undefined });
-                return undefined;
-              }
-              return setGen({
-                door: f,
-                sure: [...(gen.sure ?? []), 'entrance'],
-                locked: gen.locked.filter((id) => id !== 'g-entrance' && id !== 'g-checkout-point'),
-                setup: undefined,
-              });
-            },
-            clearSetup,
-          }}
-          undo={undo}
-          shelves={{ due: extendDue, extend: extendShelf, keep: keepShelfLength, notePastEnd }}
-          here={{ options: hereChoices, place: placeHere }}
-          setProductLocation={setProductLocation}
-          setProductPrice={setProductPrice}
-          setAvailable={setAvailable}
-          position={position}
-          setPosition={(point) => setPos({ layoutId: layout.id, point })}
-          onEditLayout={() => setDisplay((d) => ({ ...d, buildMode: true }))}
-          display={display}
-          setDisplay={setDisplay}
-          mapLook={mapLook}
-          looks={looks}
+          role="shop"
+          {...shoppingProps}
         />
       )}
-      {view === 'items' && (
+      {view === 'setup' && setupTab === 'lists' && (
+        <ListsManageView
+          lists={listsApi}
+          catalog={catalog}
+          layout={layout}
+          looks={looks}
+          onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+          quickAddTo={quickAddTo}
+          buyAgain={buyAgainChips}
+          lastTripNames={lastTripNames}
+          undo={undo}
+        />
+      )}
+      {view === 'setup' && setupTab === 'items' && (
         <ItemsView
           catalog={catalog}
           layouts={layouts}
@@ -1587,7 +1637,6 @@ export default function App() {
             return waiting ?? items.find((i) => productFor(i, catalog)?.id === productId);
           }}
           onPatchProduct={(product, patch) => {
-            // Add to the active list if needed, then apply qty/price (so Items × / $ work while browsing).
             const existing = items.find((i) => !i.done && (i.productId === product.id || productFor(i, catalog)?.id === product.id));
             setItems((prev) => {
               const idx = prev.findIndex((i) => !i.done && (i.productId === product.id || productFor(i, catalog)?.id === product.id));
@@ -1611,18 +1660,18 @@ export default function App() {
           setDisplay={setDisplay}
           listsOpen={listsOpen}
           onListsClose={() => setListsOpen(false)}
-          lists={{
-            all: lists, current: listId, counts: listCounts, doneCounts: listDoneCounts,
-            switchTo: setActiveListId,
-            create: createList, rename: renameList, remove: deleteList, combine: combineInto,
-            preview: (sources) => combineLists(allItems, listId, sources, catalog),
-            duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
-            shopWith, setShopWith: (ids) => setShopWith(() => cleanShopWith(ids, listId, lists)),
-          }}
+          lists={listsApi}
           onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           quickAddTo={quickAddTo}
           buyAgain={buyAgainChips}
           lastTripNames={lastTripNames}
+        />
+      )}
+      {view === 'setup' && setupTab === 'stores' && (
+        <ShoppingView
+          key={`stores-${layout.id}`}
+          role="stores"
+          {...shoppingProps}
         />
       )}
       {introOpen && (

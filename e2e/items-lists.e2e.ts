@@ -7,15 +7,17 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
     items: [{ id: 'a', name: 'Apples', done: false }],
   });
 
-  await page.getByRole('tab', { name: 'Items' }).click();
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
   await expect(page.locator('.list-bar-name')).toHaveText('Shopping list');
   await expect(page.locator('.also-list')).toContainText('Add to “Shopping list”');
 
-  // Create a list from Items without leaving the catalog.
+  // Create a list from Items & Categories without leaving the catalog.
   await page.locator('.list-bar').click();
   await page.getByLabel('New list name').fill('Party');
   await page.getByRole('button', { name: '+ New' }).click();
-  await page.getByRole('button', { name: 'Shop this list' }).click();
+  await page.locator('.list-created').getByRole('button', { name: '＋ Add items' }).click();
+  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.list-bar-name')).toHaveText('Party');
   await expect(page.locator('.also-list')).toContainText('Add to “Party”');
   await expect(page.getByRole('button', { name: 'Grocery items' })).toHaveClass(/active/);
@@ -56,7 +58,8 @@ test('Items tab: qty stepper and price toggle match Shop, prices are line totals
     items: [{ id: 'm1', name: 'Milk', done: false, productId: 'p-milk' }],
   });
 
-  await page.getByRole('tab', { name: 'Items' }).click();
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
   await page.getByLabel('Search or add grocery items').fill('Milk');
   const milk = page.locator('.item-entry').filter({ has: page.getByRole('button', { name: /Milk is on/ }) }).first();
 
@@ -87,7 +90,8 @@ test('Items tab: qty stepper and price toggle match Shop, prices are line totals
 test('Items tab: × and $ toggles work while browsing items not yet on the list', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page); // empty shopping list
-  await page.getByRole('tab', { name: 'Items' }).click();
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
   await page.getByLabel('Search or add grocery items').fill('Apples');
 
   const qtyToggle = page.getByRole('button', { name: 'Quantity stepper' });

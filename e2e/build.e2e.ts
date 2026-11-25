@@ -22,8 +22,10 @@ async function blankStore(page: Page) {
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
   const skip = page.getByRole('button', { name: 'Skip for now' });
-  if (await skip.count()) await skip.click();
-  await page.locator('.toast .icon').click().catch(() => {});
+  if (await skip.count()) await skip.click({ timeout: 2000 }).catch(() => {});
+  // Dismiss any toast without waiting the full test timeout if it's covered.
+  await page.locator('.toast .icon').click({ timeout: 1000 }).catch(() => {});
+  await expect(page.getByRole('region', { name: 'Edit map' })).toBeVisible();
 }
 
 test('aisle brush: paints both sides with categories and an aisle label, and backs up', async ({ page }) => {
