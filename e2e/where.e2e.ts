@@ -566,13 +566,19 @@ test('things put just past a shelf’s end: the shelf is offered longer at the e
   await page.getByRole('button', { name: 'Show map' }).click();
   const dropPast = async (name: string, gy: number) => {
     const handle = page.getByLabel(new RegExp(`^Drag ${name}`)).first();
+    // Trip chrome can push rows below the fold; the drag must start on-screen.
+    await handle.scrollIntoViewIfNeeded();
     const from = (await handle.boundingBox())!;
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
     await page.mouse.down();
     await page.mouse.move(from.x + 20, from.y - 40, { steps: 4 });
     const to = await page.evaluate(([x, y]) => {
       const maps = [...document.querySelectorAll('svg.map')] as SVGSVGElement[];
-      const svg = maps.find((m) => { const r = m.getBoundingClientRect(); return m.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }) ?? maps[0];
+      // Prefer the drag preview overlay map when present (fixed at the top).
+      const overlay = document.querySelector('.drop-overlay svg.map') as SVGSVGElement | null;
+      const svg = overlay
+        ?? maps.find((m) => { const r = m.getBoundingClientRect(); return m.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); })
+        ?? maps[0];
       const q = svg.createSVGPoint();
       q.x = x + 0.5; q.y = y + 0.5;
       const r = q.matrixTransform(svg.getScreenCTM()!);
