@@ -4,7 +4,7 @@ import { addItems, fresh, newStore, saved, tick } from './helpers';
 // Blank store: category areas appear from check-off order (serpentine auto-build).
 test('blank store builds category areas as items are checked off', async ({ page }) => {
   await fresh(page);
-  await newStore(page, 'Order Market');
+  await newStore(page, 'Order Market', { autoBuild: true });
 
   const store = async () => (await saved<any[]>(page, 'layouts')).find((l) => l.name === 'Order Market');
   await expect.poll(async () => (await store())?.auto?.enabled).toBe(true);
