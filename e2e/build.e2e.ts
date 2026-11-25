@@ -356,3 +356,70 @@ test('a new store in the editor starts from a default map too', async ({ page })
   await expect(page.locator('svg.map .aisle-label text').first()).toBeAttached();
   ok();
 });
+
+test('shelf block: draw once, drag to move, corner resize, then add; stamp is grouped', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await blankStore(page);
+  await page.getByRole('button', { name: 'Shelf block' }).click();
+  await dragMap(page, [4, 6], [14, 14]);
+  await expect(page.locator('.map-block-outline')).toBeVisible();
+  await expect(page.locator('.block-corner-handle')).toHaveCount(4);
+  expect(await page.locator('svg.map .map-ghost.block').count()).toBeGreaterThan(0);
+  // Tap inside the draft: must keep the same block (not redraw from scratch).
+  const outline = () => page.locator('.map-block-outline').evaluate((r) => ({
+    x: +r.getAttribute('x')!, y: +r.getAttribute('y')!, w: +r.getAttribute('width')!, h: +r.getAttribute('height')!,
+  }));
+  const before = await outline();
+  await tapMap(page, before.x + 2, before.y + 2);
+  await expect.poll(outline).toEqual(before);
+  // Drag inside to move the draft.
+  await dragMap(page, [before.x + 2, before.y + 2], [before.x + 4, before.y + 2]);
+  const moved = await outline();
+  expect(moved.x).toBe(before.x + 2);
+  expect(moved.w).toBe(before.w);
+  // Drag SE corner further along x to lengthen (vertical shelves → along = height… wait vertical = along y).
+  // Vertical orientation: along = height (length), across = width (count). Drag SE rightward → more shelves.
+  const se = { x: moved.x + moved.w - 1, y: moved.y + moved.h - 1 };
+  await dragMap(page, [se.x, se.y], [se.x + 3, se.y]);
+  const wider = await outline();
+  expect(wider.w).toBeGreaterThan(moved.w);
+  await page.getByRole('button', { name: /Add \d+ shel/ }).click();
+  const l = await layout(page, 'New store');
+  expect(l.places.filter((p: any) => p.kind === 'shelf').length).toBeGreaterThan(1);
+  expect(l.groups?.length).toBe(1);
+  expect(l.groups[0].ids.length).toBe(l.places.filter((p: any) => p.kind === 'shelf').length);
+  ok();
+});
+
+test('select: group shelves so they move together; ungroup splits them', async ({ page }) => {
+  const ok = noPageErrors(page);
+  const sh = (id: string, x: number) => ({ kind: 'shelf', id, label: id, orientation: 'vertical', x, y: 6, length: 8, categories: [] });
+  await fresh(page, {
+    layouts: [{
+      id: 's1', name: 'Groupy', width: 30, height: 24, entrance: { x: 1, y: 23 }, checkout: { x: 10, y: 23 },
+      places: [sh('a', 8), sh('b', 11), sh('c', 14)],
+    }],
+    activeLayout: 's1',
+  });
+  await enterBuildMode(page);
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await dragMap(page, [8, 6], [12, 10]);
+  const tools = page.getByRole('toolbar', { name: 'Change 2 shelves' });
+  await expect(tools).toBeVisible();
+  await tools.getByRole('button', { name: 'Group so they move together' }).click();
+  await expect(page.locator('.toast')).toContainText('Grouped');
+  // Tap one grouped shelf: whole group stays selected.
+  await tapMap(page, 20, 20); // clear via empty? — clear button instead
+  await tools.getByRole('button', { name: 'Clear the selection' }).click();
+  await tapMap(page, 8, 8);
+  await expect(page.getByRole('toolbar', { name: 'Change 2 shelves' })).toBeVisible();
+  await page.getByRole('toolbar', { name: 'Change 2 shelves' }).getByRole('button', { name: 'Move them down' }).click();
+  const l = await layout(page);
+  expect(l.places.find((p: any) => p.id === 'a').y).toBe(7);
+  expect(l.places.find((p: any) => p.id === 'b').y).toBe(7);
+  expect(l.places.find((p: any) => p.id === 'c').y).toBe(6);
+  await page.getByRole('toolbar', { name: 'Change 2 shelves' }).getByRole('button', { name: 'Ungroup' }).click();
+  await expect(page.locator('.toast')).toContainText('Ungrouped');
+  expect((await layout(page)).groups ?? []).toEqual([]);
+  ok();
+});

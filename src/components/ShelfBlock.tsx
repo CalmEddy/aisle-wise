@@ -1,18 +1,30 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { nextBlockStart, sequenceLabels } from '../core/labels';
 import { blockOrientation, fillBlock } from '../core/rows';
 import type { Orientation, Point, Rect, Shelf, StoreLayout } from '../core/types';
 import { toGrid } from './StoreMap';
 
 /** Squares from one corner to another, inclusive (may extend past the store). */
-const rectBetween = (a: Point, b: Point): Rect => ({
+export const rectBetween = (a: Point, b: Point): Rect => ({
   x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x) + 1, h: Math.abs(a.y - b.y) + 1,
 });
 
+const containsCell = (r: Rect, p: Point) =>
+  p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
+
+export type BlockCorner = 'nw' | 'ne' | 'sw' | 'se';
+
+const cornerPoint = (r: Rect, c: BlockCorner): Point => ({
+  x: c === 'nw' || c === 'sw' ? r.x : r.x + r.w - 1,
+  y: c === 'nw' || c === 'ne' ? r.y : r.y + r.h - 1,
+});
+
+const opposite = (c: BlockCorner): BlockCorner =>
+  ({ nw: 'se', ne: 'sw', sw: 'ne', se: 'nw' }[c] as BlockCorner);
+
 /**
- * Dragging out a rectangle on the store map. Pass the returned handlers to
- * the map's <svg>; `rect` is what's been dragged so far. Cells may lie past
- * the current store edge — stamping expands the map.
+ * Dragging out a rectangle on the store map (select / cut). Pass handlers to
+ * the map's <svg>; `rect` is what's been dragged so far.
  */
 export function useBlockDrag(_layout: StoreLayout) {
   const [start, setStart] = useState<Point>();
@@ -23,6 +35,7 @@ export function useBlockDrag(_layout: StoreLayout) {
   };
   return {
     rect,
+    setRect,
     dragging: !!start,
     clear: () => { setStart(undefined); setRect(undefined); },
     down(e: React.PointerEvent<SVGSVGElement>) {
@@ -37,12 +50,13 @@ export function useBlockDrag(_layout: StoreLayout) {
     up() {
       setStart(undefined);
     },
+    cell,
   };
 }
 
 /**
  * Options for a dragged-out block of shelves, with a live count. The shelves
- * themselves are shown as ghosts on the map by the caller (`blockShelves`).
+ * themselves are shown as ghosts on the map by the caller.
  */
 export function ShelfBlockPanel({ rect, shelves, orientation, setOrientation, double, setDouble, lane, setLane, startLabel, setStartLabel, onAdd, onCancel }: {
   rect?: Rect;
@@ -67,7 +81,7 @@ export function ShelfBlockPanel({ rect, shelves, orientation, setOrientation, do
         <b>▤ Shelf block</b>
         <span className="muted small">
           {rect
-            ? `${rect.w} × ${rect.h} squares · ${shelves.length} shel${shelves.length === 1 ? 'f' : 'ves'}${preview ? ` · ${preview}` : ''}`
+            ? `${rect.w} × ${rect.h} squares · ${shelves.length} shel${shelves.length === 1 ? 'f' : 'ves'}${preview ? ` · ${preview}` : ''} · drag to move · corners to resize`
             : 'Drag across the map to mark where the shelves go. Tap a ghost to set which is first.'}
         </span>
       </div>
@@ -113,26 +127,29 @@ export function ShelfBlockPanel({ rect, shelves, orientation, setOrientation, do
   );
 }
 
+type Gesture =
+  | { kind: 'draw'; anchor: Point }
+  | { kind: 'move'; origin: Point; startRect: Rect }
+  | { kind: 'resize'; corner: BlockCorner; fixed: Point };
+
 /**
- * Everything a screen needs for the shelf-block tool: the drag, the options
- * (direction follows the drag's longer side until changed), proposed labels,
- * and the shelves that would be added.
+ * Shelf-block tool: draw a rect once, then treat it as one object — drag to
+ * move, corner handles to resize (along = shelf length, across = how many).
  */
 export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number) {
-  const drag = useBlockDrag(layout);
+  const [rect, setRect] = useState<Rect>();
   const [chosen, setChosen] = useState<Orientation>();
   const defaultStart = nextBlockStart(layout.places.map((p) => p.label), layout.labels);
   const [startLabel, setStartLabel] = useState(defaultStart);
   const [startTouched, setStartTouched] = useState(false);
   const [flip, setFlip] = useState(false);
   const [startIndex, setStartIndex] = useState(0);
-  // Keep suggesting the next free code until the shopper edits First.
+  const gesture = useRef<Gesture>();
   const effectiveStart = startTouched ? startLabel : defaultStart;
-  const orientation = chosen ?? (drag.rect ? blockOrientation(drag.rect) : 'vertical');
-  const raw = drag.rect
-    ? fillBlock(layout, drag.rect, { orientation, double, lane, open: true, overlap: true })
+  const orientation = chosen ?? (rect ? blockOrientation(rect) : 'vertical');
+  const raw = rect
+    ? fillBlock(layout, rect, { orientation, double, lane, open: true, overlap: true })
     : [];
-  // Reorder from startIndex, optionally flipped, then apply sequential labels.
   const ordered = (() => {
     if (!raw.length) return [] as Shelf[];
     const n = raw.length;
@@ -143,27 +160,36 @@ export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number
   const labels = sequenceLabels(effectiveStart || 'B1', ordered.length, layout.labels);
   const shelves = ordered.map((s, i) => ({ ...s, label: labels[i] ?? s.label }));
 
+  const cell = (e: React.PointerEvent<SVGSVGElement>): Point => {
+    const p = toGrid(e.currentTarget, e.clientX, e.clientY);
+    return { x: Math.floor(p.x), y: Math.floor(p.y) };
+  };
+
+  /** Hit-test a corner within ~1.5 squares of the pointer. */
+  const hitCorner = (r: Rect, p: Point): BlockCorner | undefined => {
+    const corners: BlockCorner[] = ['nw', 'ne', 'sw', 'se'];
+    let best: BlockCorner | undefined;
+    let bestD = 1.6;
+    for (const c of corners) {
+      const q = cornerPoint(r, c);
+      const d = Math.hypot(p.x - q.x, p.y - q.y);
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  };
+
   return {
-    drag,
+    rect,
     orientation,
-    setOrientation: setChosen,
+    setOrientation: (o: Orientation) => setChosen(o),
     shelves,
     startLabel: effectiveStart,
     setStartLabel: (s: string) => { setStartTouched(true); setStartLabel(s); setStartIndex(0); },
     flip,
     setFlip,
-    /** Tap a ghost (by index in the current labelled list) to make it first. */
-    setFirstAt(index: number) {
-      if (!shelves.length) return;
-      // Map labelled index back to raw order considering flip/rotation.
-      // Simpler: set startIndex so this ghost becomes first in geometric order.
-      const geo = flip ? shelves.length - 1 - index : index;
-      const abs = (startIndex + geo) % raw.length;
-      setStartIndex(abs);
-      setFlip(false);
-      // Keep the typed start; sequence still begins at startLabel.
-    },
-    /** Make the tapped raw-order shelf the first (by footprint match). */
     setFirstShelf(shelf: Shelf) {
       const i = raw.findIndex((s) => s.x === shelf.x && s.y === shelf.y && s.orientation === shelf.orientation);
       if (i >= 0) {
@@ -172,21 +198,64 @@ export function useShelfBlock(layout: StoreLayout, double: boolean, lane: number
       }
     },
     reset: () => {
-      drag.clear();
+      gesture.current = undefined;
+      setRect(undefined);
       setChosen(undefined);
       setFlip(false);
       setStartIndex(0);
     },
+    /** Corner handle positions for the map (when a rect exists). */
+    corners: (rect ? (['nw', 'ne', 'sw', 'se'] as BlockCorner[]).map((c) => ({ corner: c, ...cornerPoint(rect, c) })) : []),
+    beginCorner(corner: BlockCorner, e: React.PointerEvent) {
+      if (!rect) return;
+      e.stopPropagation();
+      // Capture on the map <svg> so move/up still run through svgHandlers.
+      const el = e.currentTarget as SVGElement;
+      const svg = el.ownerSVGElement ?? el;
+      svg.setPointerCapture?.(e.pointerId);
+      gesture.current = { kind: 'resize', corner, fixed: cornerPoint(rect, opposite(corner)) };
+    },
     svgHandlers: {
       onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        const c = cell(e);
+        if (rect) {
+          const corner = hitCorner(rect, c);
+          if (corner) {
+            gesture.current = { kind: 'resize', corner, fixed: cornerPoint(rect, opposite(corner)) };
+            return;
+          }
+          if (containsCell(rect, c)) {
+            gesture.current = { kind: 'move', origin: c, startRect: rect };
+            return;
+          }
+        }
+        // Empty floor: start a new block (replaces the draft).
         setChosen(undefined);
         setStartIndex(0);
         setFlip(false);
-        drag.down(e);
+        gesture.current = { kind: 'draw', anchor: c };
+        setRect(rectBetween(c, c));
       },
-      onPointerMove: drag.move,
-      onPointerUp: drag.up,
-      onPointerCancel: drag.up,
+      onPointerMove: (e: React.PointerEvent<SVGSVGElement>) => {
+        const g = gesture.current;
+        if (!g) return;
+        const c = cell(e);
+        if (g.kind === 'draw') {
+          setRect(rectBetween(g.anchor, c));
+          return;
+        }
+        if (g.kind === 'move') {
+          const dx = c.x - g.origin.x;
+          const dy = c.y - g.origin.y;
+          setRect({ ...g.startRect, x: g.startRect.x + dx, y: g.startRect.y + dy });
+          return;
+        }
+        // Resize: opposite corner fixed; pointer sets the free corner.
+        setRect(rectBetween(g.fixed, c));
+      },
+      onPointerUp: () => { gesture.current = undefined; },
+      onPointerCancel: () => { gesture.current = undefined; },
     },
   };
 }

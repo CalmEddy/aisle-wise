@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cutPreview, cutsVertical, shelvesUnder, type CutNumbers } from '../core/cut';
 import { CutPanel } from './CutPanel';
-import { useBlockDrag } from './ShelfBlock';
+import { ShelfBlockPanel, useBlockDrag, useShelfBlock } from './ShelfBlock';
+import { expandSelection, isExactGroup } from '../core/groups';
 import type { Usual } from '../core/trips';
 import type { LayoutQuestion } from '../core/learn';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
@@ -9,7 +10,7 @@ import { planBuild, type BuildChoice, type Direction } from '../core/build';
 import { addedRect, nextShelves, skippedShelves } from '../core/rows';
 import type { Catalog } from '../core/catalog';
 import { Floor } from '../core/floor';
-import { exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
+import { contains, exactKey, exactSpotAt, footprint, placeAt, stripFocus } from '../core/geometry';
 import { touchingInLine } from '../core/swap';
 import { endKey, pastEnd, type Extension } from '../core/extend';
 import { hereOptions, type HereOption } from '../core/here';
@@ -22,7 +23,6 @@ import { DisplayToggles, ListSortToggle } from './DisplayToggles';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
 import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
 import { nextAisleLabel, walkwayAt } from '../core/aisles';
-import { contains } from '../core/geometry';
 import { PlacePanel, clamp, handlePoint } from './PlacePanel';
 import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
@@ -35,7 +35,6 @@ import { orderOf } from '../core/taxonomy';
 import { aislesUsed, describeClue, islandKey } from '../core/clues';
 import { usePersistentState } from '../usePersistentState';
 import { ListsSheet, type ListsApi } from './ListsSheet';
-import { ShelfBlockPanel, useShelfBlock } from './ShelfBlock';
 import { type Drag, ItemRows, type ItemPatch } from './ItemRows';
 import { type Toast, ToastBar } from './ToastBar';
 import { ItemMenu } from './ItemMenu';
@@ -198,6 +197,8 @@ export interface BuildApi {
     turn: (ids: string | string[]) => Snapshot | undefined;
     deleteMany: (ids: string[]) => Snapshot;
     makeBlock: (ids: string[]) => Snapshot | undefined;
+    group: (ids: string[]) => Snapshot;
+    ungroup: (ids: string[]) => Snapshot;
     cutUnder: (areaId: string) => { snapshot: Snapshot; cut: number };
     within: (box: Rect) => string[];
     cut: (box: Rect, numbers: CutNumbers) => { snapshot: Snapshot; cut: number; renamed: string[] };
@@ -268,33 +269,79 @@ export function ShoppingView(props: Props) {
   const [renumberMode, setRenumberMode] = useState<{ ids: string[]; start: string; flip: boolean }>();
   const selecting = building && tool === 'select';
   const chosenAisles = selecting ? selectedAisles.filter((id) => layout.aisles?.some((a) => a.id === id) || layout.places.some((p) => p.id === id)) : [];
+  /** Dragging the current selection on the map (not a new marquee). Tap (no move) still toggles. */
+  const selectMove = useRef<{ last: Point; ids: string[]; snapshot: Snapshot; moved: boolean } | null>(null);
+
+  const isAisleId = (id: string) => !!layout.aisles?.some((a) => a.id === id);
+  /** Shelves that come with these aisles anyway. */
+  const alongAisles = (ids: string[]) => new Set((layout.aisles ?? []).filter((a) => ids.includes(a.id)).flatMap((a) => aisleShelves(layout, a).map((x) => x.id)));
+
+  function toggleSelectAt(cell: Point) {
+    const r = { x: cell.x, y: cell.y, w: 1, h: 1 };
+    const here = props.build.aisles.within(r);
+    const id = here.find((x) => !isAisleId(x)) ?? here.find(isAisleId) ?? placeUnder(layout, r.x + 0.5, r.y + 0.5)?.id;
+    if (!id) return;
+    setSelectedAisles((prev) => {
+      const bunch = expandSelection(layout, [id]);
+      if (prev.some((x) => bunch.includes(x))) return prev.filter((x) => !bunch.includes(x));
+      // A shelf of a selected aisle: take that aisle out.
+      const owner = prev.filter((x) => isAisleId(x) && alongAisles([x]).has(id));
+      if (owner.length) return prev.filter((x) => !owner.includes(x));
+      return expandSelection(layout, [...prev, id]);
+    });
+  }
+
   function finishSelect() {
+    if (selectMove.current) {
+      const m = selectMove.current;
+      selectMove.current = null;
+      if (m.moved) say(`Moved ${selectionTitle(m.ids)}.`, m.snapshot);
+      else toggleSelectAt(m.last);
+      return;
+    }
     const r = selectDrag.rect;
     selectDrag.up();
     selectDrag.clear();
     if (!r) return;
-    const isAisle = (id: string) => !!layout.aisles?.some((a) => a.id === id);
-    /** Shelves that come with these aisles anyway. */
-    const alongAisles = (ids: string[]) => new Set((layout.aisles ?? []).filter((a) => ids.includes(a.id)).flatMap((a) => aisleShelves(layout, a).map((x) => x.id)));
     if (r.w === 1 && r.h === 1) {
-      // A tap adds or takes out the one thing under it: what's on that square, else the aisle's walkway, else a thin shelf just beside it.
-      const here = props.build.aisles.within(r);
-      const id = here.find((x) => !isAisle(x)) ?? here.find(isAisle) ?? placeUnder(layout, r.x + 0.5, r.y + 0.5)?.id;
-      if (!id) return;
-      setSelectedAisles((prev) => {
-        if (prev.includes(id)) return prev.filter((x) => x !== id);
-        // A shelf of a selected aisle: take that aisle out.
-        const owner = prev.filter((x) => isAisle(x) && alongAisles([x]).has(id));
-        if (owner.length) return prev.filter((x) => !owner.includes(x));
-        return [...prev, id];
-      });
+      toggleSelectAt({ x: r.x, y: r.y });
       return;
     }
-    // A box picks everything it touches (aisles bring their shelves).
+    // A box picks everything it touches (aisles bring their shelves), then whole groups.
     const ids = props.build.aisles.within(r);
     const along = alongAisles(ids);
-    setSelectedAisles(ids.filter((id) => !along.has(id)));
+    setSelectedAisles(expandSelection(layout, ids.filter((id) => !along.has(id))));
   }
+
+  const selectSvgHandlers = {
+    onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => {
+      const p = toGrid(e.currentTarget, e.clientX, e.clientY);
+      const c = { x: Math.floor(p.x), y: Math.floor(p.y) };
+      const box = selectionRect(layout, chosenAisles);
+      if (chosenAisles.length && box && contains(box, c)) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        selectMove.current = { last: c, ids: chosenAisles, snapshot: props.build.snapshot(), moved: false };
+        return;
+      }
+      selectDrag.down(e);
+    },
+    onPointerMove: (e: React.PointerEvent<SVGSVGElement>) => {
+      const m = selectMove.current;
+      if (m) {
+        const p = toGrid(e.currentTarget, e.clientX, e.clientY);
+        const c = { x: Math.floor(p.x), y: Math.floor(p.y) };
+        const dx = c.x - m.last.x;
+        const dy = c.y - m.last.y;
+        if ((dx || dy) && props.build.aisles.move(m.ids, dx, dy)) {
+          selectMove.current = { ...m, last: c, moved: true };
+        }
+        return;
+      }
+      selectDrag.move(e);
+    },
+    onPointerUp: finishSelect,
+    onPointerCancel: finishSelect,
+  };
   /** What's selected, in words: "Aisle 3", "3 aisles", "2 aisles, 4 shelves". */
   function selectionTitle(ids: string[]): string {
     const aisles = (layout.aisles ?? []).filter((a) => ids.includes(a.id));
@@ -344,6 +391,7 @@ export function ShoppingView(props: Props) {
     setToolState(t);
     block.reset();
     selectDrag.clear();
+    selectMove.current = null;
     if (t !== 'select') setSelectedAisles([]);
     cutDrag.clear();
     setCutWidth(undefined);
@@ -419,6 +467,18 @@ export function ShoppingView(props: Props) {
               say(`${title} are their own block now: say where on the map.`, snapshot);
             },
           }] : []),
+          ...(ids.length >= 2 && !isExactGroup(layout, ids) ? [{
+            key: 'group', icon: '☍', label: 'Group so they move together', onClick: () => {
+              const snapshot = props.build.aisles.group(ids);
+              say(`Grouped ${title}.`, snapshot);
+            },
+          }] : []),
+          ...(isExactGroup(layout, ids) ? [{
+            key: 'ungroup', icon: '🔓', label: 'Ungroup', onClick: () => {
+              const snapshot = props.build.aisles.ungroup(ids);
+              say(`Ungrouped ${title}.`, snapshot);
+            },
+          }] : []),
           { key: 'delete', icon: '🗑', label: onlyAisles ? `Delete ${what} and shelves` : `Delete ${title}`, danger: true, onClick: () => {
             const snapshot = props.build.aisles.deleteMany(ids);
             onGone();
@@ -480,7 +540,7 @@ export function ShoppingView(props: Props) {
     };
   }
   const blockTools = blocking && block.shelves.length ? {
-    anchor: block.drag.rect ?? footprint(block.shelves[0]),
+    anchor: block.rect ?? footprint(block.shelves[0]),
     title: block.shelves.map((s) => s.label).filter(Boolean).slice(0, 3).join('·') || 'Block',
     rows: [[
       {
@@ -1530,7 +1590,7 @@ export function ShoppingView(props: Props) {
             } : undefined}
             svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : selecting ? {
               className: 'map drawing',
-              onPointerDown: selectDrag.down, onPointerMove: selectDrag.move, onPointerUp: finishSelect, onPointerCancel: finishSelect,
+              ...selectSvgHandlers,
             } : cutting ? {
               className: 'map drawing',
               onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => { setCutWidth(undefined); cutDrag.down(e); },
@@ -1544,15 +1604,20 @@ export function ShoppingView(props: Props) {
               : !mapStrip ? { className: 'map tappable' }
                 : { className: 'map strip tappable' }}
           >
-            {selecting && selectDrag.rect && (
+            {selecting && selectDrag.rect && !selectMove.current && (
               <rect className="map-select-outline" x={selectDrag.rect.x} y={selectDrag.rect.y} width={selectDrag.rect.w} height={selectDrag.rect.h} />
             )}
             {cutting && cutBox && (
               <rect className="map-cut-outline" x={cutBox.x} y={cutBox.y} width={cutBox.w} height={cutBox.h} />
             )}
-            {blocking && block.drag.rect && (
-              <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
+            {blocking && block.rect && (
+              <rect className="map-block-outline" x={block.rect.x} y={block.rect.y} width={block.rect.w} height={block.rect.h} />
             )}
+            {blocking && block.corners.map(({ corner, x, y }) => (
+              <circle key={corner} className="block-corner-handle" cx={x + 0.5} cy={y + 0.5} r={0.7}
+                aria-label={`Resize block ${corner}`}
+                onPointerDown={(e) => block.beginCorner(corner, e)} />
+            ))}
             {building && tool === 'walk' && (['entrance', 'checkout'] as const).map((which) => (
               <rect key={which} className="marker-hit" x={layout[which].x - 0.5} y={layout[which].y - 0.5} width={2} height={2}
                 onPointerDown={(e) => beginMapDrag({ mode: which, start: cellOf(e), snapshot: props.build.snapshot(), moved: false }, e)} />
@@ -1962,7 +2027,7 @@ export function ShoppingView(props: Props) {
               } : undefined}
               svgProps={blocking ? { className: 'map drawing', ...block.svgHandlers } : selecting ? {
                 className: 'map drawing',
-                onPointerDown: selectDrag.down, onPointerMove: selectDrag.move, onPointerUp: finishSelect, onPointerCancel: finishSelect,
+                ...selectSvgHandlers,
               } : cutting ? {
                 className: 'map drawing',
                 onPointerDown: (e: React.PointerEvent<SVGSVGElement>) => { setCutWidth(undefined); cutDrag.down(e); },
@@ -1974,15 +2039,20 @@ export function ShoppingView(props: Props) {
                 onPointerCancel: endMapDrag,
               } : mapStrip ? { className: 'map strip tappable' } : undefined}
             >
-              {selecting && selectDrag.rect && (
+              {selecting && selectDrag.rect && !selectMove.current && (
                 <rect className="map-select-outline" x={selectDrag.rect.x} y={selectDrag.rect.y} width={selectDrag.rect.w} height={selectDrag.rect.h} />
               )}
               {cutting && cutBox && (
                 <rect className="map-cut-outline" x={cutBox.x} y={cutBox.y} width={cutBox.w} height={cutBox.h} />
               )}
-              {blocking && block.drag.rect && (
-                <rect className="map-block-outline" x={block.drag.rect.x} y={block.drag.rect.y} width={block.drag.rect.w} height={block.drag.rect.h} />
+              {blocking && block.rect && (
+                <rect className="map-block-outline" x={block.rect.x} y={block.rect.y} width={block.rect.w} height={block.rect.h} />
               )}
+              {blocking && block.corners.map(({ corner, x, y }) => (
+                <circle key={corner} className="block-corner-handle" cx={x + 0.5} cy={y + 0.5} r={0.7}
+                  aria-label={`Resize block ${corner}`}
+                  onPointerDown={(e) => block.beginCorner(corner, e)} />
+              ))}
               {building && tool === 'walk' && (['entrance', 'checkout'] as const).map((which) => (
                 <rect key={which} className="marker-hit" x={layout[which].x - 0.5} y={layout[which].y - 0.5} width={2} height={2}
                   onPointerDown={(e) => beginMapDrag({ mode: which, start: cellOf(e), snapshot: props.build.snapshot(), moved: false }, e)} />
@@ -2043,7 +2113,7 @@ export function ShoppingView(props: Props) {
           )}
           {blocking && (
             <ShelfBlockPanel
-              rect={block.drag.rect}
+              rect={block.rect}
               shelves={block.shelves}
               orientation={block.orientation}
               setOrientation={block.setOrientation}

@@ -88,6 +88,8 @@ export interface StoreLayout {
   reach?: ShelfReach[];
   /** Shelf ends the shopper said go no further ("placeId:start" / "placeId:end"). */
   keepLength?: string[];
+  /** Sets of places/aisles that move together when any member is selected. */
+  groups?: { id: string; ids: string[] }[];
 }
 
 /** Something found past a shelf's end: how far the shelf would have to run to reach it. */
