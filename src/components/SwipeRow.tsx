@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import { markSwipeHintSeen } from '../swipeHint';
 import { SWIPE_REVEAL, SWIPE_TRIGGER, swipeDirection, swipeRelease } from '../core/items';
 
 /**
@@ -7,13 +8,15 @@ import { SWIPE_REVEAL, SWIPE_TRIGGER, swipeDirection, swipeRelease } from '../co
  * left to the page so scrolling still works. A tap that ends a swipe doesn't
  * reach the row's own buttons.
  */
-export function SwipeRow({ children, onSwipeRight, rightLabel, leftActions, disabled }: {
+export function SwipeRow({ children, onSwipeRight, rightLabel, leftActions, disabled, hint }: {
   children: ReactNode;
   onSwipeRight?: () => void;
   rightLabel: ReactNode;
   /** Buttons revealed by swiping left. Each should close the row (it re-renders closed after acting). */
   leftActions: (close: () => void) => ReactNode;
   disabled?: boolean;
+  /** Play the one-time nudge that shows the row can be swiped. */
+  hint?: boolean;
 }) {
   const [offset, setOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -35,10 +38,12 @@ export function SwipeRow({ children, onSwipeRight, rightLabel, leftActions, disa
         <span className="swipe-left">{leftActions(close)}</span>
       </div>
       <div
-        className="swipe-top"
+        className={`swipe-top${hint && !dragging && offset === 0 && !revealed ? ' swipe-hint' : ''}`}
+        onAnimationEnd={() => markSwipeHintSeen()}
         style={{ transform: `translateX(${offset}px)` }}
         onPointerDown={(e) => {
           if (disabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
+          if (hint) markSwipeHintSeen();
           start.current = { x: e.clientX, y: e.clientY, id: e.pointerId, mode: 'undecided' };
         }}
         onPointerMove={(e) => {

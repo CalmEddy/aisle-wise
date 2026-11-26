@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { fresh, saved } from './helpers';
+import { fresh, saved, toggleListOptions, goSetup } from './helpers';
 
 async function goSetupLists(page: import('@playwright/test').Page) {
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Lists', exact: true }).click();
+  await goSetup(page, 'Lists');
 }
 
 async function goShop(page: import('@playwright/test').Page) {
@@ -177,8 +176,7 @@ test('Grocery Items marks List and Cart badges', async ({ page }) => {
       { id: 'm', name: 'Milk', done: true, productId: 'p-milk' },
     ],
   });
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await goSetup(page, 'Items & Categories');
   await page.getByLabel('Search or add grocery items').fill('Apples');
   const apples = page.locator('.item-entry').filter({ has: page.locator('.item-name', { hasText: /^Apples$/ }) }).first();
   await expect(apples.locator('.status-pill.on-list')).toHaveText('List');
@@ -236,7 +234,7 @@ test('Include other lists on this trip without copying onto the active list', as
   expect(await toBuyNames()).toEqual(['Apples', 'Bread']);
   expect((await mainItems()).length).toBe(2);
 
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByLabel('Include Weekly staples on this trip').check();
 
   await expect(page.locator('.list-pick-hero-name')).toHaveText('Shopping list');

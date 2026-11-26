@@ -18,6 +18,7 @@ import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, ShelfReach, Stop, StoreLayout, Temp, Wall } from '../core/types';
 import { resolveListSort, type Display, type SectionLook } from '../display';
 import { DisplayToggles, ListSortToggle } from './DisplayToggles';
+import { Icon } from './Icon';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
 import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
 import { nextAisleLabel, walkwayAt } from '../core/aisles';
@@ -1555,7 +1556,7 @@ export function ShoppingView(props: Props) {
       <main>
         {laterHere.length > 0 && !tripDone && (
           <button className={`later-chip${items.every((i) => i.done) ? ' trip-done' : ''}`} onClick={() => setListOpen(true)}>
-            📍 {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>
+            <Icon name="map-pinned" /> {laterHere.length} to place{items.every((i) => i.done) ? ' before you go' : ''} · <b>Review</b>
           </button>
         )}
         {items.length === 0 && (
@@ -1689,8 +1690,8 @@ export function ShoppingView(props: Props) {
                     setWhereBarFor(item);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                >📍</button>
-                <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
+                ><Icon name="map-pinned" /></button>
+                <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}><Icon name="grip-vertical" /></span>
                 <label>
                   <input type="checkbox" checked={false} onChange={() => toggle(item)} aria-label={building ? `Got ${item.name} here` : `Got ${item.name}`} />
                   {iconOf(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}

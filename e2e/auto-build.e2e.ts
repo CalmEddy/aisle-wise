@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addItems, fresh, newStore, saved, tick } from './helpers';
+import { addItems, fresh, newStore, saved, tick, toggleListOptions } from './helpers';
 
 // Blank store: category areas appear from check-off order (serpentine auto-build).
 test('blank store builds category areas as items are checked off', async ({ page }) => {
@@ -36,9 +36,9 @@ test('blank store builds category areas as items are checked off', async ({ page
   expect(milk.locations[layout.id]).toMatch(/^ab-dairy_eggs/);
 
   // Map shows the three areas once opened.
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   const showMap = page.getByRole('button', { name: 'Whole map' });
   if (await showMap.count()) await showMap.click();
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await expect(page.locator('svg.map .place')).toHaveCount(3);
 });

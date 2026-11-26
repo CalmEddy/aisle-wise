@@ -7,8 +7,26 @@ export async function fresh(page: Page, data: Record<string, unknown> = {}) {
     localStorage.clear();
     localStorage.setItem('aw.view', JSON.stringify('list'));
     localStorage.setItem('aw.welcomed', '1');
+    localStorage.setItem('aw.swipeHintSeen', 'true');
     for (const [k, v] of Object.entries(d)) localStorage.setItem(`aw.${k}`, JSON.stringify(v));
   }, data);
+  await page.reload();
+}
+
+/** Opens the ⚙ List options menu on Shop (toggle: call again to close it). */
+export async function toggleListOptions(page: Page) {
+  await page.getByRole('button', { name: 'List options' }).click();
+}
+
+/** Opens a main section by tab name ("Setup" and its sub-tabs for now). */
+export async function goSetup(page: Page, sub?: 'Lists' | 'Items & Categories' | 'Stores') {
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  if (sub) await page.getByRole('tab', { name: sub, exact: true }).click();
+}
+
+/** Turns on developer-only controls (e.g. the per-item "Clear where" button). */
+export async function enableDebug(page: Page) {
+  await page.evaluate(() => localStorage.setItem('aw.debug', 'true'));
   await page.reload();
 }
 

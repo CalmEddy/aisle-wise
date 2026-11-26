@@ -7,6 +7,7 @@ import { IntroSheet } from './components/IntroSheet';
 import { ListsManageView } from './components/ListsManageView';
 import { StoreSheet } from './components/StoreSheet';
 import { DisplayToggles } from './components/DisplayToggles';
+import { Icon } from './components/Icon';
 import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
@@ -197,6 +198,8 @@ export default function App() {
   const [sending, setSending] = useState<{ list: boolean; map: boolean } | null>(null);
   const [incoming, setIncoming] = useState<Share | 'error' | null>(null);
   const [notice, setNotice] = useState('');
+  const [confirmClearWhere, setConfirmClearWhere] = useState(false);
+  useEffect(() => { if (!listOptsOpen) setConfirmClearWhere(false); }, [listOptsOpen]);
   useEffect(() => {
     const check = () => {
       const join = /^#join=([A-Za-z0-9]+)$/.exec(location.hash)?.[1];
@@ -1601,7 +1604,7 @@ export default function App() {
                   aria-label={`List: ${listName}. Change list`}
                 >
                   <span className="list-pick-hero-name">{listName}</span>
-                  <span className="list-bar-more" aria-hidden="true">▾</span>
+                  <Icon name="chevron-down" className="chev" />
                 </button>
                 <button
                   type="button"
@@ -1612,66 +1615,83 @@ export default function App() {
                   title="List options · more lists on this trip"
                   onClick={() => setListOptsOpen((v) => !v)}
                 >
-                  📋
+                  <Icon name="sliders-horizontal" />
                 </button>
               </div>
               <div className="title-sub">
                 <button className="store-pick quiet" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
-                  {layout.name} <span aria-hidden="true">▾</span>
+                  {layout.name} <Icon name="chevron-down" className="chev" />
                 </button>
               </div>
               {listOptsOpen && (
                 <div className="list-opts-menu" role="group" aria-label="List options">
-                  <p className="muted small view-menu-lead">Show on each row</p>
+                  <button
+                    type="button"
+                    className="menu-row"
+                    onClick={() => {
+                      setListOptsOpen(false);
+                      setView('setup');
+                      setSetupTab('stores');
+                      setDisplay((d) => ({ ...d, buildMode: true }));
+                    }}
+                    aria-label="Edit map"
+                    title="Edit the store map in Setup"
+                  >
+                    <Icon name="map" />
+                    <span>Edit store map</span>
+                    <Icon name="chevron-right" className="chev" />
+                  </button>
+                  <p className="menu-section">Show on each row</p>
                   <DisplayToggles
                     display={display}
                     setDisplay={setDisplay}
                     show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
                     offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
                   />
-                  <p className="muted small view-menu-lead">Map &amp; list look</p>
+                  <p className="menu-section">Map &amp; list look</p>
                   <DisplayToggles
                     display={display}
                     setDisplay={setDisplay}
                     show={['mapFull', 'listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
                     offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice', 'mapFull']}
-                    extra={(
-                      <button
-                        type="button"
-                        className="toggle"
-                        onClick={() => {
-                          setListOptsOpen(false);
-                          setView('setup');
-                          setSetupTab('stores');
-                          setDisplay((d) => ({ ...d, buildMode: true }));
-                        }}
-                        aria-label="Edit map"
-                        title="Edit the store map in Setup"
-                      >🛠 Edit map</button>
-                    )}
                   />
-                  <button
-                    type="button"
-                    className="link danger-link"
-                    onClick={() => {
-                      const these = shopItems.filter((i) => {
-                        const p = productFor(i, catalog);
-                        return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]);
-                      });
-                      if (!these.length) {
-                        setNotice(`Nothing on the list has a place at ${layout.name}.`);
-                        return;
-                      }
-                      clearWhere(these);
-                      setListOptsOpen(false);
-                      setNotice(`Cleared where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.`);
-                    }}
-                  >
-                    Clear all locations at this store
-                  </button>
+                  <div className="danger-zone">
+                    <p className="menu-section">Danger zone</p>
+                    {confirmClearWhere ? (
+                      <div className="danger-confirm">
+                        <p className="small">Forget where everything on this list is at {layout.name}?</p>
+                        <div className="row-btns">
+                          <button type="button" className="btn" onClick={() => setConfirmClearWhere(false)}>Cancel</button>
+                          <button
+                            type="button"
+                            className="btn danger-solid"
+                            onClick={() => {
+                              setConfirmClearWhere(false);
+                              const these = shopItems.filter((i) => {
+                                const p = productFor(i, catalog);
+                                return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]);
+                              });
+                              if (!these.length) {
+                                setNotice(`Nothing on the list has a place at ${layout.name}.`);
+                                return;
+                              }
+                              clearWhere(these);
+                              setListOptsOpen(false);
+                              setNotice(`Cleared where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.`);
+                            }}
+                          >Clear all</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className="link danger-link" onClick={() => setConfirmClearWhere(true)}>
+                        <Icon name="trash-2" />
+                        Clear all locations at this store
+                      </button>
+                    )}
+                  </div>
                   {otherLists.length > 0 && (
                     <div className="trip-include in-header">
-                      <p className="muted small view-menu-lead">More lists on this trip</p>
+                      <p className="menu-section">More lists on this trip</p>
                       <p className="muted small">Show another list’s to-buy here without copying it onto “{listName}”.</p>
                       <ul className="trip-include-list">
                         {otherLists.map((l) => {
@@ -1705,8 +1725,9 @@ export default function App() {
             </div>
             <div className="top-right">
               {shopItems.length > 0 && (
-                <div className="progress" aria-label="Progress">
-                  <strong>{done}</strong>/{shopItems.length}
+                <div className="progress" role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={shopItems.length} aria-valuenow={done}>
+                  <span className="progress-text"><strong>{done}</strong> of {shopItems.length}</span>
+                  <span className="progress-bar" aria-hidden="true"><span style={{ width: `${Math.round((done / shopItems.length) * 100)}%` }} /></span>
                 </div>
               )}
             </div>
@@ -1716,7 +1737,7 @@ export default function App() {
             <div className="title">
               <div className="title-line">
                 <button className="store-pick setup-store" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
-                  {layout.name} <span aria-hidden="true">▾</span>
+                  {layout.name} <Icon name="chevron-down" className="chev" />
                 </button>
                 {household.configured && (
                   <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />

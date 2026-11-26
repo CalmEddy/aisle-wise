@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addItems, fresh, noPageErrors, row, saved, tick } from './helpers';
+import { addItems, fresh, noPageErrors, row, saved, tick, toggleListOptions } from './helpers';
 
 // Shopping the demo store: adding, the route, checking off, trip done. "Where was it?" is off here.
 test.beforeEach(async ({ page }) => {
@@ -26,7 +26,8 @@ test('adds items with amounts and notes, sorted into a walk through the store', 
 test('checks off by the checkbox, with progress and undoable removal', async ({ page }) => {
   await addItems(page, 'apples, pasta, milk');
   await tick(page, 'Pasta');
-  await expect(page.locator('.progress')).toHaveText(/1\s*\/\s*3/);
+  await expect(page.locator('.progress')).toHaveText(/1\s*of\s*3/);
+  await expect(page.getByRole('progressbar', { name: 'Progress' })).toHaveAttribute('aria-valuenow', '1');
   await row(page, 'Milk').getByRole('button', { name: /More options/ }).click();
   await page.getByRole('button', { name: 'Remove from list' }).click();
   await expect(page.locator('.toast')).toContainText('Removed Milk');
@@ -48,7 +49,7 @@ test('inline qty and rename work without opening the menu', async ({ page }) => 
 
 test('the item menu sets unit, price and note, and pins it on the map', async ({ page }) => {
   await addItems(page, 'milk');
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByRole('button', { name: 'Prices' }).click();
   await row(page, 'Milk').getByRole('button', { name: /More options/ }).click();
   const menu = page.getByRole('dialog', { name: /Options for Milk/ });
@@ -143,7 +144,7 @@ test('sort sits by the search box; map toggle lives in List options', async ({ p
   await expect(page.getByRole('button', { name: /Sort / })).toBeVisible();
   // Phone keeps the map hidden until List options → map, or item placement.
   await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByRole('button', { name: 'Whole map' }).click();
   await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(1);
   const shown = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
@@ -202,4 +203,26 @@ test('Not available section is collapsible with a red outline', async ({ page })
   await section.locator('summary').click();
   await expect(section).toHaveAttribute('open', '');
   await expect(section.locator('.name')).toContainText('Saffron');
+});
+
+test('row buttons have a 44px touch area', async ({ page }) => {
+  await addItems(page, 'apples');
+  const more = row(page, 'Apples').getByRole('button', { name: /More options/ });
+  const box = (await more.boundingBox())!;
+  // Just above and below the drawn button still lands on it (the hit area is bigger than the glyph).
+  for (const dy of [-3, box.height + 3]) {
+    const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('button')?.getAttribute('aria-label'), [box.x + box.width / 2, box.y + dy]);
+    expect(hit).toMatch(/More options/);
+  }
+});
+
+test('List options: Edit map row, danger zone asks before clearing, no debug controls', async ({ page }) => {
+  await addItems(page, 'apples');
+  await expect(page.getByRole('button', { name: /Clear where/ })).toHaveCount(0);
+  await toggleListOptions(page);
+  await expect(page.getByRole('button', { name: 'Edit map', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear all locations at this store' }).click();
+  await expect(page.getByRole('button', { name: 'Clear all', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('button', { name: 'Clear all locations at this store' })).toBeVisible();
 });

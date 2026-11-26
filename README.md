@@ -63,7 +63,7 @@ A **Blank** store starts empty and builds itself from check-off order
 from the lower right toward the lower left, updating live as you tick items,
 and refining across trips. Hand-editing the map turns that off.
 
-**🛠 Edit map** (under Shop **⚙** view settings) is for drawing shelves by
+**Edit map** (the “Edit store map” row in Shop’s **List options** menu) is for drawing shelves by
 hand while you walk. Check items off or tap 🛒 Cart where you stand; the map
 grows around you (`src/core/build.ts`). Nearby shelves extend automatically;
 only a **Keep / Move here** conflict still asks. Tap a shelf or area to edit

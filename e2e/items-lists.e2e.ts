@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { fresh, noPageErrors, saved } from './helpers';
+import { fresh, noPageErrors, saved, goSetup } from './helpers';
 
 test('Items tab: list bar, create list, named add toast, sort and group toggles', async ({ page }) => {
   const ok = noPageErrors(page);
@@ -7,8 +7,7 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
     items: [{ id: 'a', name: 'Apples', done: false }],
   });
 
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await goSetup(page, 'Items & Categories');
   await expect(page.locator('.list-bar-name')).toHaveText('Shopping list');
   await expect(page.locator('.also-list')).toContainText('Add to “Shopping list”');
 
@@ -58,8 +57,7 @@ test('Items tab: qty stepper and price toggle match Shop, prices are line totals
     items: [{ id: 'm1', name: 'Milk', done: false, productId: 'p-milk' }],
   });
 
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await goSetup(page, 'Items & Categories');
   await page.getByLabel('Search or add grocery items').fill('Milk');
   const milk = page.locator('.item-entry').filter({ has: page.getByRole('button', { name: /Milk is on/ }) }).first();
 
@@ -90,8 +88,7 @@ test('Items tab: qty stepper and price toggle match Shop, prices are line totals
 test('Items tab: × and $ toggles work while browsing items not yet on the list', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page); // empty shopping list
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await goSetup(page, 'Items & Categories');
   await page.getByLabel('Search or add grocery items').fill('Apples');
 
   const qtyToggle = page.getByRole('button', { name: 'Quantity stepper' });
