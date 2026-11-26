@@ -1,12 +1,12 @@
-import type { Display, ItemsSort, ListSort, ListsEditSort } from '../display';
-import { resolveItemsSort, resolveListSort, resolveListsEditSort } from '../display';
+import type { Display, ListSort, ListsEditSort } from '../display';
+import { resolveItemsGroupByCategory, resolveListSort, resolveListsEditSort } from '../display';
 import { Icon, type IconName } from './Icon';
 
 /** Display settings that are on/off switches. */
 type Switch = Exclude<
   { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display],
   // Map editing and the old grouping flag are set elsewhere, not from these chips.
-  'buildMode' | 'buildArea' | 'buildDouble' | 'buildMoreTools' | 'groupList'
+  'buildMode' | 'buildArea' | 'buildDouble' | 'buildMoreTools' | 'groupList' | 'itemsGroupByCategory'
 >;
 
 /** Full names, for screen readers and tooltips. */
@@ -15,7 +15,6 @@ const LABELS: Record<Switch, string> = {
   mapIcons: 'Icons on map',
   listCategories: 'Categories in list',
   listGroupByCategory: 'Group by category',
-  itemsGroupByCategory: 'Group by category',
   listQty: 'Quantity stepper',
   listPrice: 'Prices',
   listLocation: 'Place under name',
@@ -28,7 +27,6 @@ const LABELS: Record<Switch, string> = {
 const CHIPS: Record<Switch, { icon: IconName; word: string }> = {
   listCategories: { icon: 'tag', word: 'Category' },
   listGroupByCategory: { icon: 'layers', word: 'Group' },
-  itemsGroupByCategory: { icon: 'layers', word: 'Group' },
   listQty: { icon: 'hash', word: 'Qty' },
   listPrice: { icon: 'dollar-sign', word: 'Price' },
   listLocation: { icon: 'map-pin', word: 'Place' },
@@ -93,17 +91,26 @@ export function ListSortToggle({ display, setDisplay }: {
   return <SortSegment options={SORTS} value={resolveListSort(display)} onPick={(id) => setDisplay((d) => ({ ...d, listSort: id }))} />;
 }
 
-const ITEM_SORTS: SortOption<ItemsSort>[] = [
-  { id: 'category', icon: 'tag', word: 'Category', label: 'Sort by category' },
-  { id: 'alpha', icon: 'arrow-down-a-z', word: 'A–Z', label: 'Sort alphabetically' },
+type ItemsViewId = 'grouped' | 'alpha';
+const ITEM_VIEWS: SortOption<ItemsViewId>[] = [
+  { id: 'grouped', icon: 'layers', word: 'By category', label: 'Show by category' },
+  { id: 'alpha', icon: 'arrow-down-a-z', word: 'A–Z', label: 'Show A–Z' },
 ];
 
-/** Grocery Items catalog order: category or A–Z (nearest needs a shopper position). */
-export function ItemsSortToggle({ display, setDisplay }: {
+/** Grocery Items: grouped by category (in walking order) or one A–Z list. */
+export function ItemsViewToggle({ display, setDisplay }: {
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
 }) {
-  return <SortSegment options={ITEM_SORTS} value={resolveItemsSort(display)} onPick={(id) => setDisplay((d) => ({ ...d, itemsSort: id }))} />;
+  const grouped = resolveItemsGroupByCategory(display);
+  return (
+    <SortSegment
+      name="View"
+      options={ITEM_VIEWS}
+      value={grouped ? 'grouped' : 'alpha'}
+      onPick={(id) => setDisplay((d) => ({ ...d, itemsGroupByCategory: id === 'grouped', itemsSort: id === 'grouped' ? 'category' : 'alpha' }))}
+    />
+  );
 }
 
 const LISTS_EDIT_SORTS: SortOption<ListsEditSort>[] = [

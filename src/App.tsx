@@ -42,9 +42,9 @@ import {
 import type { Clue, GeoPoint, ItemUnit, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Area, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import {
-  clearList, clearTripCart, cleanShopWith, combineLists, copyItem, copyListName, defaultLists, duplicateList,
-  itemsOn, listOf, moveItem, moveListOrder, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
-  updateList, type ClearMode,
+  clearTripCart, cleanShopWith, combineLists, copyItem, defaultLists,
+  itemsOn, listOf, moveItem, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
+  updateList,
 } from './core/lists';
 import { boundsOf, clearFor } from './core/expand';
 import { clampPlace, footprint } from './core/geometry';
@@ -1295,30 +1295,6 @@ export default function App() {
     return snapshot;
   }
 
-  function duplicateOneList(id: string): { id: string; name: string; snapshot: Snapshot } | undefined {
-    const source = lists.find((l) => l.id === id);
-    if (!source) return undefined;
-    const snapshot = listsSnapshot();
-    const name = copyListName(source.name, lists.map((l) => l.name));
-    const r = duplicateList(allItems, lists, id, name);
-    setLists(() => r.lists);
-    setAllItems(() => r.items);
-    return { id: r.id, name, snapshot };
-  }
-
-  function clearOneList(id: string, mode: ClearMode): Snapshot {
-    const snapshot = listsSnapshot();
-    setAllItems((all) => clearList(all, id, mode));
-    return snapshot;
-  }
-
-  function reorderList(id: string, dir: -1 | 1) {
-    setLists((prev) => {
-      const base = prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev];
-      return moveListOrder(base, id, dir);
-    });
-  }
-
   /** Copies what's still to buy on other lists onto this one. Returns what Undo restores and the counts. */
   function combineInto(sources: string[]): { added: number; skipped: number; snapshot: Snapshot } {
     const snapshot: Snapshot = { items, products, layouts };
@@ -1500,7 +1476,6 @@ export default function App() {
     switchTo: setActiveListId,
     create: createList, rename: renameList, remove: deleteList, combine: combineInto,
     preview: (sources: string[]) => combineLists(allItems, listId, sources, catalog),
-    duplicate: duplicateOneList, clear: clearOneList, reorder: reorderList,
     shopWith, setShopWith: (ids: string[]) => setShopWith(() => cleanShopWith(ids, listId, lists)),
   };
 
@@ -1815,11 +1790,6 @@ export default function App() {
           undo={undo}
           display={display}
           setDisplay={setDisplay}
-          listsOpen={listsOpen}
-          onListsClose={() => setListsOpen(false)}
-          lists={listsApi}
-          onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
-          quickAddTo={quickAddTo}
         />
       )}
       {view === 'setup' && setupTab === 'stores' && (

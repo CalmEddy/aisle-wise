@@ -152,8 +152,6 @@ button { cursor: pointer; }
 .stores-setup-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .stores-setup-actions .btn { min-height: 44px; }
 
-.items-list-target { margin-bottom: 8px; width: 100%; }
-
 /* Add form */
 .add { display: flex; gap: 8px; margin-bottom: 8px; position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 4px 0; }
 
@@ -641,9 +639,8 @@ button { cursor: pointer; }
 .items-sub { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }
 .also-list { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; }
 .also-list input { width: 18px; height: 18px; accent-color: var(--accent); }
-.chips.filters, .chips.jump { padding: 4px 0; }
+.chips.filters{ padding: 4px 0; }
 .chips.filters .count { opacity: 0.7; font-weight: 400; }
-.chips.jump .chip { font-size: 0.8rem; padding: 5px 9px; white-space: nowrap; }
 .group-head { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; padding: 0; font: inherit; color: inherit; text-align: left; }
 .group-head:disabled { cursor: default; opacity: 1; }
 .group-head .chev { color: var(--muted); }
@@ -728,12 +725,6 @@ button { cursor: pointer; }
 .bulk-actions .btn { padding: 9px 4px; font-size: 0.82rem; }
 
 /* Several lists */
-.list-bar {
-  display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 70%; padding: 2px 8px; margin: 0;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 0.82rem; font-weight: 600;
-}
-.list-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.list-bar-count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .lists-sheet .lists { list-style: none; padding: 0; margin: 0 0 10px; }
 .lists-sheet .lists li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
@@ -752,13 +743,11 @@ button { cursor: pointer; }
   font-size: var(--text-min); color: var(--muted); white-space: nowrap; padding: 4px 2px;
 }
 .lists-sheet .also-shop input { margin: 0; }
-.lists-sheet .list-row-menu { flex: 1 0 100%; display: flex; flex-direction: column; gap: 0; padding: 0 0 8px 28px; }
 .source-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 1px; }
 .source-badge {
   display: inline-block; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.01em;
   padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent);
 }
-.lists-sheet .list-created { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 0 10px 28px; }
 .lists-sheet .list-confirm { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 4px; }
 .lists-sheet .list-confirm p { margin: 0; }
 .lists-sheet .list-warn { margin: 0 0 8px; }
