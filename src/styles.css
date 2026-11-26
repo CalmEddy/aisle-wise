@@ -123,9 +123,11 @@ button { cursor: pointer; }
   background: transparent;
 }
 .shop-compose {
-  margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
+  margin-top: 8px; margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
   background: var(--surface);
 }
+/* Phone: keep add-at-bottom close to the list without sitting between map and items. */
+.shop-list-col > main { margin-bottom: 0; }
 .add-compose.with-tools { display: flex; align-items: stretch; gap: 6px; }
 .add-compose.with-tools .add-row { flex: 1; min-width: 0; }
 .add-tools {
