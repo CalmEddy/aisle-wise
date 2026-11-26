@@ -1609,3 +1609,23 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .seg { min-width: 0; max-width: 100%; }
 .seg-btn { min-width: 0; padding: 4px 6px; }
 @media (max-width: 359px) { .seg-name { display: none; } .seg-btn .icon-svg { display: none; } }
+
+/* Add flow: mic as its own button, a visible listening state, icon pills, the Got it hint */
+.add-row button.mic { min-width: 48px; min-height: 48px; padding: 0; display: grid; place-items: center; border-radius: 12px; }
+.add-row button.mic.listening { animation: mic-pulse 1.3s ease-out infinite; }
+@keyframes mic-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  100% { box-shadow: 0 0 0 12px transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .add-row button.mic.listening { animation: none; box-shadow: 0 0 0 3px var(--accent); } }
+.add-row .add-submit { min-width: 64px; min-height: 48px; font-size: 1rem; }
+.status-pill .icon-svg { width: 0.9em; height: 0.9em; margin-right: 3px; vertical-align: -0.12em; }
+.s-btn { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; }
+.s-btn .icon-svg { width: 1em; height: 1em; }
+.got-it-hint {
+  display: flex; align-items: center; gap: 8px; margin: 6px 0 0; padding: 8px 10px; border-radius: 10px;
+  background: var(--accent-soft); font-size: var(--text-min); line-height: 1.35;
+}
+.got-it-hint > span { flex: 1; }
+.got-it-hint .icon-svg { flex: none; color: var(--c-cart); }
+.got-it-hint .link { min-height: 36px; padding: 0 8px; font-weight: 700; }

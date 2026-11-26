@@ -8,6 +8,7 @@ export async function fresh(page: Page, data: Record<string, unknown> = {}) {
     localStorage.setItem('aw.view', JSON.stringify('list'));
     localStorage.setItem('aw.welcomed', '1');
     localStorage.setItem('aw.swipeHintSeen', 'true');
+    localStorage.setItem('aw.gotItHintSeen', 'true');
     for (const [k, v] of Object.entries(d)) localStorage.setItem(`aw.${k}`, JSON.stringify(v));
   }, data);
   await page.reload();

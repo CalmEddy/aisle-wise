@@ -13,6 +13,7 @@ import { resolveItemsGroupByCategory, resolveItemsSort, type Display } from '../
 import { autoWhereText, whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker } from './CategoryPicker';
+import { Icon } from './Icon';
 import { DisplayToggles, ItemsSortToggle } from './DisplayToggles';
 import { ListsSheet, type ListsApi } from './ListsSheet';
 import { AddItemsSheet } from './AddItemsSheet';
@@ -414,8 +415,8 @@ function ProductList({
           <span className="name">
             {keyPrefix && <span aria-hidden="true">{lookOf(p.categoryId)?.icon ?? '·'} </span>}
             <span className="item-name">{p.name}</span>
-            {onSomeList && <span className="status-pill on-list" aria-hidden="true">List</span>}
-            {held && <span className="status-pill in-cart" aria-hidden="true">Cart</span>}
+            {onSomeList && <span className="status-pill on-list" aria-hidden="true"><Icon name="list-checks" />List</span>}
+            {held && <span className="status-pill in-cart" aria-hidden="true"><Icon name="shopping-cart" />Cart</span>}
           </span>
           <span className={`muted small where${p.locations?.[layout.id] ? ' set' : ''}`}>
             {[
@@ -483,7 +484,7 @@ function ProductList({
             aria-pressed={voice.listening}
             onClick={voice.toggle}
           >
-            {voice.listening ? '⏹' : '🎤'}
+            <Icon name={voice.listening ? 'square' : 'mic'} size="1.3rem" filled={voice.listening} />
           </button>
           <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : '+ Add'}</button>
         </form>
