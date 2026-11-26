@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { guessCategory } from '../core/guess';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
@@ -15,7 +15,7 @@ export type BuyAgainChip = { product: Product; cue?: 'due' | 'often' };
  * Default docks as a sheet. `inline` embeds it on the Setup → Lists screen.
  * Cart (🛒) is Shop-only — pass `allowCart={false}` when editing lists.
  */
-export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, hereLabel, whereText, iconOf, onAdd, buyAgain = [], lastTripNames = [], onUndo, onClose, allowCart = true, inline = false }: {
+export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, hereLabel, whereText, iconOf, onAdd, buyAgain = [], lastTripNames = [], onUndo, onClose, allowCart = true, inline = false, tools }: {
   listName: string;
   catalog: Catalog;
   /** Master-list items already waiting on this target list. */
@@ -40,6 +40,8 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
   allowCart?: boolean;
   /** Render on the page instead of a bottom sheet. */
   inline?: boolean;
+  /** Shop: sort / map / view controls beside the search row. */
+  tools?: ReactNode;
 }) {
   const cart = inCart ?? new Set<string>();
   const anywhere = listedAnywhere ?? onList;
@@ -141,27 +143,30 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
           {onClose && <button className="btn primary" onClick={close}>Done</button>}
         </div>
       )}
-      <form className="add-row" onSubmit={(e) => { e.preventDefault(); addFromBox(typed, 'list'); }}>
-        <input
-          value={text}
-          onChange={(e) => { setText(e.target.value); voice.setError(undefined); }}
-          placeholder="Type or speak an item"
-          aria-label="Item to add"
-          autoComplete="off"
-          enterKeyHint="done"
-          autoFocus={!inline}
-        />
-        <button
-          type="button"
-          className={voice.listening ? 'mic listening' : 'mic'}
-          aria-label={voice.listening ? 'Stop listening' : 'Add by voice'}
-          aria-pressed={voice.listening}
-          onClick={() => voice.toggle()}
-        >
-          {voice.listening ? '⏹' : '🎤'}
-        </button>
-        <button type="submit" disabled={!typed}>+ List</button>
-      </form>
+      <div className={`add-compose${tools ? ' with-tools' : ''}`}>
+        <form className="add-row" onSubmit={(e) => { e.preventDefault(); addFromBox(typed, 'list'); }}>
+          <input
+            value={text}
+            onChange={(e) => { setText(e.target.value); voice.setError(undefined); }}
+            placeholder="Type or speak an item"
+            aria-label="Item to add"
+            autoComplete="off"
+            enterKeyHint="done"
+            autoFocus={!inline}
+          />
+          <button
+            type="button"
+            className={voice.listening ? 'mic listening' : 'mic'}
+            aria-label={voice.listening ? 'Stop listening' : 'Add by voice'}
+            aria-pressed={voice.listening}
+            onClick={() => voice.toggle()}
+          >
+            {voice.listening ? '⏹' : '🎤'}
+          </button>
+          <button type="submit" disabled={!typed}>+ List</button>
+        </form>
+        {tools && <div className="add-tools" role="group" aria-label="List tools">{tools}</div>}
+      </div>
       <p className="muted small add-sheet-hint">
         {voice.error
           ? voice.error

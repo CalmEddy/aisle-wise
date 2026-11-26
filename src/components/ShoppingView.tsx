@@ -1481,9 +1481,8 @@ export function ShoppingView(props: Props) {
   // Wide side-by-side uses the full map in the map column (strip is phone-only when map is shown).
   const mapStrip = !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
   const [viewOpen, setViewOpen] = useState(false);
-  const addButton = (
-    <button type="button" className="toggle add-toggle" onClick={() => setAddingFor(props.lists.current)} aria-label="Add items" title="Add items">＋</button>
-  );
+  /** Sheet only when adding onto a list other than the one being shopped (from the lists picker). */
+  const addingOther = addingFor !== undefined && addingFor !== props.lists.current;
 
   const toolInfo = TOOLS.find((t) => t.id === tool)!;
   const toolTitle = editing ? (editing.label || (editing.kind === 'shelf' ? 'Shelf' : 'Area'))
@@ -1602,14 +1601,13 @@ export function ShoppingView(props: Props) {
           <div className="empty">
             <p>Your list is empty.</p>
             <p className="muted">
-              Add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
+              Type above to add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
             {lastTripRestock.length > 0 && (
               <button className="btn primary" onClick={restockLastTrip}>
                 Shop last trip · {lastTripRestock.length} item{lastTripRestock.length === 1 ? '' : 's'}
               </button>
             )}
-            <button className={lastTripRestock.length > 0 ? 'btn' : 'btn primary'} onClick={() => setAddingFor(props.lists.current)}>＋ Add items</button>
             <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
           </div>
         )}
@@ -1845,13 +1843,13 @@ export function ShoppingView(props: Props) {
           onStopAsking={() => { props.where.setAsk(false); setWhereFor(null); setReviewing(false); }}
         />
       )}
-      {adding && (
+      {addingOther && (
         <AddItemsSheet
           listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? 'Shopping list'}
           catalog={catalog}
           onList={addingFor ? props.onListIds(addingFor) : onList}
           inCart={new Set(items.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
-          hereLabel={addingFor === props.lists.current ? hereLabel : undefined}
+          hereLabel={undefined}
           whereText={(p) => whereText(p, layout, catalog)}
           iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
           onAdd={addNames}
@@ -1899,116 +1897,60 @@ export function ShoppingView(props: Props) {
             )}
           </div>
           <div className="shop-list-col">
-            <div className="trip-head">
-              <button
-                type="button"
-                className="trip-list-title list-bar"
-                onClick={() => props.onOpenLists?.()}
-                aria-label={`List: ${props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}. Change list`}
-              >
-                <span className="trip-list-name list-bar-name">
-                  {props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
-                </span>
-                <span className="list-bar-more" aria-hidden="true">▾</span>
-              </button>
-              {props.lists.all.filter((l) => l.id !== props.lists.current).length > 0 && (
-                <details className="trip-include">
-                  <summary>
-                    More lists on this trip
-                    {props.lists.shopWith.length > 0 ? ` · ${props.lists.shopWith.length}` : ''}
-                  </summary>
-                  <p className="muted small">Show another list’s to-buy here without copying it onto “{props.lists.all.find((l) => l.id === props.lists.current)?.name}”.</p>
-                  <ul className="trip-include-list">
-                    {props.lists.all.filter((l) => l.id !== props.lists.current).map((l) => {
-                      const on = props.lists.shopWith.includes(l.id);
-                      const n = props.lists.counts.get(l.id) ?? 0;
-                      return (
-                        <li key={l.id}>
-                          <label className="also-shop">
-                            <input
-                              type="checkbox"
-                              checked={on}
-                              onChange={(e) => {
-                                const next = e.target.checked
-                                  ? [...props.lists.shopWith.filter((x) => x !== l.id), l.id]
-                                  : props.lists.shopWith.filter((x) => x !== l.id);
-                                props.lists.setShopWith(next);
-                              }}
-                              aria-label={`Include ${l.name} on this trip`}
-                            />
-                            <span>{l.name}</span>
-                            <span className="muted small">{n ? `${n} to buy` : 'Empty'}</span>
-                          </label>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </details>
-              )}
-            </div>
-            {items.length === 0 && (
-              <DisplayToggles
-                display={props.display}
-                setDisplay={props.setDisplay}
-                show={[]}
-                lead={(
+            <div className="shop-compose" aria-label="Add items">
+              <AddItemsSheet
+                inline
+                listName={props.lists.all.find((l) => l.id === props.lists.current)?.name ?? 'Shopping list'}
+                catalog={catalog}
+                onList={onList}
+                listedAnywhere={new Set([
+                  ...[...onList],
+                  ...props.lists.all.flatMap((l) => [...props.onListIds(l.id)]),
+                ])}
+                inCart={new Set(items.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+                hereLabel={hereLabel}
+                whereText={(p) => whereText(p, layout, catalog)}
+                iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
+                onAdd={addNames}
+                buyAgain={buyAgain}
+                lastTripNames={props.lastTripNames}
+                onUndo={props.undo}
+                tools={(
                   <>
-                    {addButton}
-                    <button type="button" className="toggle" onClick={onEditLayout}
-                      aria-label="Edit map" title="Edit the store map in Setup">🛠 Edit map</button>
+                    <ListSortToggle display={props.display} setDisplay={props.setDisplay} />
+                    <button
+                      type="button"
+                      className="toggle icon-only action"
+                      aria-pressed={mapOpen}
+                      onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
+                      aria-label={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
+                      title={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
+                    >🗺</button>
+                    <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
+                      aria-label="View settings" title="View settings">⚙</button>
                   </>
                 )}
               />
-            )}
-            {items.length > 0 && (
-              <>
-                <DisplayToggles
-                  display={props.display}
-                  setDisplay={props.setDisplay}
-                  show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
-                  offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
-                  lead={(
-                    <>
-                      {addButton}
-                      <ListSortToggle display={props.display} setDisplay={props.setDisplay} />
-                    </>
-                  )}
-                  extra={(
-                    <>
-                      <button
-                        type="button"
-                        className="toggle icon-only action"
-                        aria-pressed={mapOpen}
-                        onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
-                        aria-label={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
-                        title={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
-                      >🗺</button>
-                      <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
-                        aria-label="View settings" title="View settings">⚙</button>
-                    </>
-                  )}
-                />
-                {viewOpen && (
-                  <div className="view-menu" role="group" aria-label="View settings">
-                    <p className="muted small view-menu-lead">List shows</p>
-                    <DisplayToggles
-                      display={props.display}
-                      setDisplay={props.setDisplay}
-                      show={['listGroupByCategory', 'listCategories', 'listQty', 'listPrice', 'listLocation', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
-                      offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
-                      extra={(
-                        <button type="button" className="toggle" onClick={() => { setViewOpen(false); onEditLayout(); }}
-                          aria-label="Edit map" title="Edit the store map in Setup">🛠 Edit map</button>
-                      )}
-                    />
-                    <span className="muted small">☰ group by category · 🏷 categories · × quantity · $ prices · 📍 location · 🎨 colours · 🍎 icons · 🛠 Edit map (Setup → Stores)</span>
-                    <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
-                      Clear all locations at this store
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+              {viewOpen && (
+                <div className="view-menu" role="group" aria-label="View settings">
+                  <p className="muted small view-menu-lead">Map &amp; list look</p>
+                  <DisplayToggles
+                    display={props.display}
+                    setDisplay={props.setDisplay}
+                    show={['listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                    offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
+                    extra={(
+                      <button type="button" className="toggle" onClick={() => { setViewOpen(false); onEditLayout(); }}
+                        aria-label="Edit map" title="Edit the store map in Setup">🛠 Edit map</button>
+                    )}
+                  />
+                  <span className="muted small">☰ group by category · 🎨 colours · 🍎 icons · 🛠 Edit map (Setup → Stores)</span>
+                  <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
+                    Clear all locations at this store
+                  </button>
+                </div>
+              )}
+            </div>
             {listMain}
           </div>
         </div>

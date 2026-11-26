@@ -50,15 +50,34 @@ button { cursor: pointer; }
 .small { font-size: 0.85rem; margin: 0 0 8px; }
 
 /* Header and tabs */
-.top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
 .top h1 { font-size: 1.25rem; margin: 0; white-space: nowrap; }
 .top .title { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .title-line, .title-sub { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .title-line .household-pill { margin-top: 0; }
-.store-name, .store-pick { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+.list-pick-hero {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 12px; text-align: left; color: var(--text);
+  font: inherit; font-weight: 800; font-size: 1.15rem; min-height: 44px;
+}
+.list-pick-hero-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-opts-btn {
+  flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); font-size: 1.15rem; line-height: 1; padding: 0;
+}
+.list-opts-btn.open { border-color: var(--accent); background: var(--accent-soft); }
+.list-opts-menu {
+  display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; margin-top: 4px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+.list-opts-menu .trip-include.in-header { margin-top: 6px; border: 0; padding: 0; background: none; border-radius: 0; }
+.store-name, .store-pick { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
 .top p { margin: 0; font-size: 0.85rem; }
 .store-pick { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.85rem; }
-.progress { font-size: 1.1rem; color: var(--muted); }
+.store-pick.setup-store { font-weight: 700; font-size: 1rem; color: var(--text); max-width: 70%; }
+.setup-actions { align-items: center; }
+.progress { font-size: 1.1rem; color: var(--muted); padding-top: 6px; }
 .progress strong { color: var(--accent); font-size: 1.4rem; }
 .tabs { display: flex; background: var(--line); border-radius: 12px; padding: 3px; margin-bottom: 8px; }
 .tabs button { flex: 1; border: 0; background: none; padding: 6px; border-radius: 9px; font-weight: 600; color: var(--muted); font-size: 0.9rem; }
@@ -98,13 +117,25 @@ button { cursor: pointer; }
 .lists-manage-items { margin-top: 10px; }
 .lists-manage-items .empty { padding: 20px 12px; }
 .add-inline {
+  margin-bottom: 0; padding: 0; border: 0; border-radius: 0;
+  background: transparent;
+}
+.shop-compose {
   margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px;
   background: var(--surface);
 }
+.add-compose.with-tools { display: flex; align-items: stretch; gap: 6px; }
+.add-compose.with-tools .add-row { flex: 1; min-width: 0; }
+.add-tools {
+  display: flex; align-items: center; gap: 4px; flex: none;
+  padding: 0 0 0 2px;
+}
+.add-tools .toggle { min-height: 44px; }
 .add-inline .suggestions.in-page {
   position: static; max-height: 220px; overflow-y: auto; margin: 6px 0 0; padding: 0;
   list-style: none; box-shadow: none; border: 0;
 }
+.shop-compose .view-menu { margin-top: 8px; }
 .status-pill {
   display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;

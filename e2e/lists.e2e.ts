@@ -37,36 +37,40 @@ async function addInlineOnSetup(page: import('@playwright/test').Page, ...ns: st
   }
 }
 
+/** Add items via the always-visible Shop search box. */
+async function addOnShop(page: import('@playwright/test').Page, ...ns: string[]) {
+  await goShop(page);
+  for (const n of ns) {
+    await page.getByLabel('Item to add').fill(n);
+    await page.getByLabel('Item to add').press('Enter');
+  }
+}
+
+/** Open the Shop list picker sheet. */
+async function openTripLists(page: import('@playwright/test').Page) {
+  await page.locator('.list-pick-hero').click();
+}
+
 test('several lists: make, switch, combine into one (with undo), rename, delete', async ({ page }) => {
   await fresh(page, { items: [{ id: 'a', name: 'Apples', done: false }] });
   const names = async () => (await page.locator('main .name').allInnerTexts()).map((t) => t.split('\n')[0].trim()).sort();
-  const addOnShop = async (...ns: string[]) => {
-    await goShop(page);
-    for (const n of ns) {
-      await page.getByRole('button', { name: 'Add items' }).first().click();
-      await page.getByLabel('Item to add').fill(n);
-      await page.getByLabel('Item to add').press('Enter');
-      await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
-    }
-  };
-  const openTripLists = async () => { await page.locator('.list-bar').click(); };
   const newListAndShop = async (n: string) => {
     await createListInSetup(page, n);
     await goShop(page);
-    await openTripLists();
+    await openTripLists(page);
     await page.locator('.list-pick', { hasText: n }).click();
   };
-  await expect(page.locator('.list-bar-name')).toHaveText('Shopping list');
+  await expect(page.locator('.list-pick-hero-name')).toHaveText('Shopping list');
   await newListAndShop('Weekly staples');
-  await addOnShop('Milk', 'Eggs');
+  await addOnShop(page, 'Milk', 'Eggs');
   await newListAndShop('Taco night');
-  await addOnShop('Tortillas', 'Eggs');
+  await addOnShop(page, 'Tortillas', 'Eggs');
   expect(await names()).toEqual(['Eggs', 'Tortillas']);
 
-  await openTripLists();
+  await openTripLists(page);
   await page.locator('.list-pick', { hasText: 'Shopping list' }).click();
   expect(await names()).toEqual(['Apples']);
-  await openTripLists();
+  await openTripLists(page);
   await page.locator('.lists-sheet .check', { hasText: 'Weekly staples' }).locator('input').check();
   await page.locator('.lists-sheet .check', { hasText: 'Taco night' }).locator('input').check();
   await page.locator('.combine .btn.primary').click();
@@ -103,7 +107,7 @@ test('create in Setup does not change Shop trip; duplicate and add onto another 
   // No cart control while editing lists.
   await expect(page.locator('.add-inline .s-btn.cart')).toHaveCount(0);
   await goShop(page);
-  await expect(page.locator('.list-bar-name')).toHaveText('Shopping list');
+  await expect(page.locator('.list-pick-hero-name')).toHaveText('Shopping list');
   expect(await names()).toEqual(['Apples']);
 
   await goSetupLists(page);
@@ -116,7 +120,7 @@ test('create in Setup does not change Shop trip; duplicate and add onto another 
     /Party \(again\)/,
   ]);
   await goShop(page);
-  await page.locator('.list-bar').click();
+  await openTripLists(page);
   await page.locator('.list-pick', { has: page.locator('.name', { hasText: /^Party$/ }) }).click();
   expect(await names()).toEqual(['Chips']);
 });
@@ -176,17 +180,15 @@ test('move an item to another list from the item menu', async ({ page }) => {
   await page.getByRole('button', { name: 'Party', exact: true }).click();
   await expect(page.locator('.toast')).toContainText('Moved Apples to “Party”');
   expect(await names()).toEqual([]);
-  await page.locator('.list-bar').click();
+  await openTripLists(page);
   await page.locator('.list-pick', { hasText: 'Party' }).click();
   expect(await names()).toEqual(['Apples']);
 });
 
 test('things with no place and things not sold here can be removed from the list', async ({ page }) => {
   await fresh(page, { display: { noAskStores: ['demo'] } });
-  await page.getByRole('button', { name: 'Add items' }).first().click();
   await page.getByLabel('Item to add').fill('Zorblax, Quuxberries, Apples');
   await page.getByLabel('Item to add').press('Enter');
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.off-route .name')).toHaveText(['Zorblax', 'Quuxberries']);
   await page.getByRole('button', { name: 'Remove Zorblax' }).click();
   await expect(page.locator('.off-route .name')).toHaveText(['Quuxberries']);
@@ -216,10 +218,10 @@ test('Include other lists on this trip without copying onto the active list', as
   expect(await toBuyNames()).toEqual(['Apples', 'Bread']);
   expect((await mainItems()).length).toBe(2);
 
-  await page.locator('.trip-include summary').click();
+  await page.getByRole('button', { name: 'List options' }).click();
   await page.getByLabel('Include Weekly staples on this trip').check();
 
-  await expect(page.locator('.list-bar-name')).toHaveText('Shopping list');
+  await expect(page.locator('.list-pick-hero-name')).toHaveText('Shopping list');
   // Union + dedupe: Bread once (on both lists), plus Milk from staples.
   expect(await toBuyNames()).toEqual(['Apples', 'Bread', 'Milk']);
   await expect(page.locator('main .row', { hasText: 'Bread' }).locator('.source-badge')).toHaveText(['Shopping list', 'Weekly staples']);

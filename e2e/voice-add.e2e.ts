@@ -61,7 +61,6 @@ test('voice mic fills the box for review; suggestions show matches already on th
     items: [{ id: 'i1', name: 'Milk', done: false, productId: 'milk' }],
   });
 
-  await page.getByRole('button', { name: 'Add items' }).first().click();
   const mic = page.getByRole('button', { name: 'Add by voice' });
   await expect(mic).toBeVisible();
   await mic.click();
@@ -124,7 +123,6 @@ test('mic stays visible when speech is unavailable and explains why', async ({ p
     w.webkitSpeechRecognition = undefined;
   });
   await fresh(page);
-  await page.getByRole('button', { name: 'Add items' }).first().click();
   const mic = page.getByRole('button', { name: 'Add by voice' });
   await expect(mic).toBeVisible();
   await mic.click();

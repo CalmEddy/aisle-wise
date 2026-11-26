@@ -277,10 +277,8 @@ test('put straight in the cart with no place here: clear map match auto-saves (C
   await addItems(page, 'Cereal');
   await tick(page, 'Cereal');
   await describeAisle(page, '3');
-  await page.getByRole('button', { name: 'Add items' }).first().click();
   await page.getByLabel('Item to add').fill('Oatmeal');
   await page.locator('.suggestions .suggestion', { hasText: 'Oatmeal' }).first().locator('.s-btn.cart').click();
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.toast')).toContainText(/Oatmeal: saved at/i);
   await expect(placeSheet(page)).toHaveCount(0);
   await expect.poll(async () => (await clues(page)).Oatmeal).toEqual({ kind: 'aisle', aisle: '3' });

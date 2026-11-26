@@ -5,14 +5,12 @@ test('brands get a category; the list shows categories and subcategories, and ðŸ
   const ok = noPageErrors(page);
   await fresh(page);
   await newStore(page, 'Corner');
-  // A brand that isn't a starter item: guessed as it's typed.
-  await page.getByRole('button', { name: 'Add items' }).first().click();
+  // A brand that isn't a starter item: guessed as it's typed (inline Shop search).
   await page.getByLabel('Item to add').fill('Cheerios');
   await expect(page.locator('.suggestion.new')).toContainText('Cold Cereal & Granola');
   await page.getByLabel('Item to add').press('Enter');
   await page.getByLabel('Item to add').fill('Tide pods, Jam');
   await page.getByLabel('Item to add').press('Enter');
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   const products = await saved<any[]>(page, 'products');
   expect(products.find((p) => p.name === 'Cheerios').categoryId).toBe('breakfast_cereal_sub');
   expect(products.find((p) => p.name === 'Tide pods').categoryId).toBe('household_laundry');

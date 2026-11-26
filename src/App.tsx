@@ -6,6 +6,7 @@ import { ShoppingView } from './components/ShoppingView';
 import { IntroSheet } from './components/IntroSheet';
 import { ListsManageView } from './components/ListsManageView';
 import { StoreSheet } from './components/StoreSheet';
+import { DisplayToggles } from './components/DisplayToggles';
 import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
@@ -128,6 +129,8 @@ export default function App() {
   const [categories, setCategories] = usePersistentState<Category[]>('aw.categories', defaultCategories);
   const [display, setDisplay] = usePersistentState<Display>('aw.display', defaultDisplay);
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
+  /** Shop header: list options (row fields + more lists on this trip). */
+  const [listOptsOpen, setListOptsOpen] = useState(false);
   useEffect(() => {
     if (savedView === 'layout') {
       setView('setup');
@@ -1483,7 +1486,7 @@ export default function App() {
   }
 
   const tab = (id: View, label: string) => (
-    <button role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
+    <button role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => { setListOptsOpen(false); setView(id); }}>
       {label}
     </button>
   );
@@ -1589,32 +1592,108 @@ export default function App() {
     looks,
   };
 
+  const listName = lists.find((l) => l.id === listId)?.name ?? 'Shopping list';
+  const otherLists = lists.filter((l) => l.id !== listId);
+
   return (
     <div className="app">
       <header className="top">
-        <div className="title">
-          <div className="title-line">
-            <h1>Aisle Wise</h1>
-            {household.configured && (
-              <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
-            )}
-            {view === 'list' && (
-              <button className="info-btn" aria-label="How this works" title="How this works" onClick={() => setIntroOpen(true)}>ⓘ</button>
-            )}
-          </div>
-          <div className="title-sub">
-            <button className="store-pick" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
-              {layout.name} <span aria-hidden="true">▾</span>
-            </button>
-          </div>
-        </div>
-        {view === 'list' && (
-          <div className="top-right">
-            <button className="btn share-btn" onClick={() => openShare({ list: true, map: false })} aria-label="Share">Share</button>
-            <div className="progress" aria-label="Progress">
-              <strong>{done}</strong>/{shopItems.length}
+        {view === 'list' ? (
+          <>
+            <div className="title">
+              <div className="title-line">
+                <button
+                  type="button"
+                  className="list-pick-hero"
+                  onClick={() => { setListOptsOpen(false); setListsOpen(true); }}
+                  aria-label={`List: ${listName}. Change list`}
+                >
+                  <span className="list-pick-hero-name">{listName}</span>
+                  <span className="list-bar-more" aria-hidden="true">▾</span>
+                </button>
+                <button
+                  type="button"
+                  className={`list-opts-btn${listOptsOpen ? ' open' : ''}`}
+                  aria-pressed={listOptsOpen}
+                  aria-expanded={listOptsOpen}
+                  aria-label="List options"
+                  title="List options · more lists on this trip"
+                  onClick={() => setListOptsOpen((v) => !v)}
+                >
+                  📋
+                </button>
+              </div>
+              <div className="title-sub">
+                <button className="store-pick" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
+                  {layout.name} <span aria-hidden="true">▾</span>
+                </button>
+              </div>
+              {listOptsOpen && (
+                <div className="list-opts-menu" role="group" aria-label="List options">
+                  <p className="muted small view-menu-lead">Show on each row</p>
+                  <DisplayToggles
+                    display={display}
+                    setDisplay={setDisplay}
+                    show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
+                    offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
+                  />
+                  {otherLists.length > 0 && (
+                    <div className="trip-include in-header">
+                      <p className="muted small view-menu-lead">More lists on this trip</p>
+                      <p className="muted small">Show another list’s to-buy here without copying it onto “{listName}”.</p>
+                      <ul className="trip-include-list">
+                        {otherLists.map((l) => {
+                          const on = shopWith.includes(l.id);
+                          const n = listsApi.counts.get(l.id) ?? 0;
+                          return (
+                            <li key={l.id}>
+                              <label className="also-shop">
+                                <input
+                                  type="checkbox"
+                                  checked={on}
+                                  onChange={(e) => {
+                                    const next = e.target.checked
+                                      ? [...shopWith.filter((x) => x !== l.id), l.id]
+                                      : shopWith.filter((x) => x !== l.id);
+                                    setShopWith(() => cleanShopWith(next, listId, lists));
+                                  }}
+                                  aria-label={`Include ${l.name} on this trip`}
+                                />
+                                <span>{l.name}</span>
+                                <span className="muted small">{n ? `${n} to buy` : 'Empty'}</span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-          </div>
+            <div className="top-right">
+              <div className="progress" aria-label="Progress">
+                <strong>{done}</strong>/{shopItems.length}
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="title">
+              <div className="title-line">
+                <button className="store-pick setup-store" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
+                  {layout.name} <span aria-hidden="true">▾</span>
+                </button>
+                {household.configured && (
+                  <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
+                )}
+              </div>
+            </div>
+            <div className="top-right setup-actions">
+              <button className="btn share-btn" onClick={() => openShare({ list: true, map: setupTab === 'stores' })} aria-label="Share">Share</button>
+              <button className="info-btn" aria-label="How this works" title="How this works" onClick={() => setIntroOpen(true)}>ⓘ</button>
+            </div>
+          </>
         )}
       </header>
 
