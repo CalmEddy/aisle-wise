@@ -55,7 +55,9 @@ export interface Display {
   buildDouble?: boolean;
   /** Walkway width (squares) between shelves in a shelf block. */
   blockLane?: number;
-  /** Show the whole map while shopping (otherwise a strip around you and the next stop). */
+  /** The Shop map on a phone: a strip around you and the next stop (default), the whole map, or hidden. */
+  mapView?: MapView;
+  /** Older saved flag for the whole map; `mapView` wins when set. */
   mapFull?: boolean;
   /** Build mode shows every tool (single shelves, cut, entrance, checkout), not just the main four. */
   buildMoreTools?: boolean;
@@ -68,6 +70,13 @@ export interface Display {
 }
 
 export const defaultDisplay: Display = { mapColors: true, mapIcons: true, listColors: true, listIcons: true, buildMode: false };
+
+export type MapView = 'strip' | 'full' | 'off';
+
+/** Resolve the Shop map setting (older saves only have `mapFull`). */
+export function resolveMapView(d: Pick<Display, 'mapView' | 'mapFull'>): MapView {
+  return d.mapView ?? (d.mapFull ? 'full' : 'strip');
+}
 
 /** Resolve the list order from new `listSort` or the older `groupList` flag. */
 export function resolveListSort(d: Pick<Display, 'listSort' | 'groupList'>): ListSort {

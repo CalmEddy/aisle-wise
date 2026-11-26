@@ -1570,3 +1570,16 @@ details[open] > summary::before { transform: rotate(90deg); }
 .household-row.status-offline .dot, .household-row.status-connecting .dot { background: var(--c-warn); }
 .household-row-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .household-row-text .small { margin: 0; }
+
+/* Stores screen: the map as a plain picture */
+.store-preview { margin-bottom: 8px; }
+.store-preview .map { pointer-events: none; }
+
+/* Shop map on a phone: a strip by default, with size and hide controls */
+.map-wrap.shop-map { position: relative; }
+.map-ctl { position: absolute; right: 6px; top: 6px; display: flex; gap: 4px; z-index: 3; }
+.map-ctl .map-tool { position: relative; width: 36px; height: 36px; border-radius: 10px; border: 0; background: color-mix(in srgb, var(--surface) 92%, transparent); color: var(--text); box-shadow: 0 1px 4px rgb(0 0 0 / 16%); display: grid; place-items: center; }
+.map-ctl .map-tool::after { content: ''; position: absolute; inset: -4px; }
+.map-show { display: inline-flex; align-items: center; gap: 6px; min-height: var(--hit); padding: 0; }
+.map-view-toggle { margin: 4px 0; }
+@media (min-width: 640px) { .map-ctl, .map-show, .map-view-toggle { display: none; } }

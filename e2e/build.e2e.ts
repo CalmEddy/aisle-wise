@@ -369,3 +369,21 @@ test('stamped shelf block stays grouped: tap one selects all; drag moves them to
   }
   ok();
 });
+
+test('Stores tab is a normal screen: the map as a picture, the editor only on Edit map', async ({ page }) => {
+  await fresh(page);
+  await page.getByRole('tab', { name: 'Stores', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Edit map' })).toHaveCount(0);
+  await expect(page.locator('.store-preview svg.map')).toBeVisible();
+  // Tabs stay reachable and the map ignores taps (no "you are here" marker).
+  await expect(page.getByRole('tablist', { name: 'Main' })).toBeVisible();
+  await expect(page.locator('.store-preview .you, .store-preview [data-you]')).toHaveCount(0);
+  for (const name of ['Edit map', 'Change store', 'Share this store']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
+  }
+  await page.getByRole('button', { name: 'Edit map', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Edit map' })).toBeVisible();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Edit map' })).toHaveCount(0);
+  await expect(page.locator('.store-preview svg.map')).toBeVisible();
+});

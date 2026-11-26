@@ -6,7 +6,7 @@ import { ShoppingView } from './components/ShoppingView';
 import { IntroSheet } from './components/IntroSheet';
 import { ListsManageView } from './components/ListsManageView';
 import { StoreSheet } from './components/StoreSheet';
-import { DisplayToggles } from './components/DisplayToggles';
+import { DisplayToggles, MapViewToggle } from './components/DisplayToggles';
 import { Icon, type IconName } from './components/Icon';
 import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
@@ -1456,7 +1456,6 @@ export default function App() {
     }
     setView('setup');
     setSetupTab(id);
-    if (id === 'stores') setDisplay((d) => ({ ...d, buildMode: true }));
   };
   const navItem = (id: NavTab, label: string, icon: IconName) => (
     <button
@@ -1618,11 +1617,12 @@ export default function App() {
                     offByDefault={['listPrice']}
                   />
                   <p className="menu-section">Map &amp; list look</p>
+                  <MapViewToggle display={display} setDisplay={setDisplay} />
                   <DisplayToggles
                     display={display}
                     setDisplay={setDisplay}
-                    show={['mapFull', 'listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
-                    offByDefault={['listGroupByCategory', 'listPrice', 'mapFull']}
+                    show={['listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                    offByDefault={['listGroupByCategory', 'listPrice']}
                   />
                   <p className="menu-section">Share &amp; help</p>
                   <button type="button" className="menu-row" onClick={() => { setListOptsOpen(false); openShare({ list: true, map: false }); }}>

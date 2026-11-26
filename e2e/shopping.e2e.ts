@@ -123,7 +123,7 @@ test('Shop has no Buy again or Last trip; list sits under the map', async ({ pag
   await fresh(page, {
     trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])],
     items: [],
-    display: { noAskStores: ['demo'], mapFull: true },
+    display: { noAskStores: ['demo'], mapView: 'full' },
   });
   await expect(page.locator('.buy-again')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Last trip|Shop last trip/ })).toHaveCount(0);
@@ -139,17 +139,31 @@ test('Shop has no Buy again or Last trip; list sits under the map', async ({ pag
   expect(colKids.findIndex((c) => c.includes('shop-compose'))).toBeGreaterThan(colKids.findIndex((c) => /^MAIN\b/i.test(c)));
 });
 
-test('sort sits by the search box; map toggle lives in List options', async ({ page }) => {
+test('sort sits by the search box; the phone map starts small and can grow or hide', async ({ page }) => {
   await addItems(page, 'apples, bread, milk');
   await expect(page.locator('.add-tools')).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Sort' })).toBeVisible();
-  // Phone keeps the map hidden until List options → map, or item placement.
-  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
+  // Phone shows a small map near you by default.
+  const strip = page.locator('.map-wrap svg.map.strip');
+  await expect(strip).toBeVisible();
+  const small = (await strip.boundingBox())!.height;
+  // The map's own button grows it to the whole map…
+  await page.getByRole('button', { name: 'Show the whole map' }).click();
+  await expect(strip).toHaveCount(0);
+  const big = (await page.locator('.map-wrap svg.map').boundingBox())!.height;
+  expect(big).toBeGreaterThan(small);
+  // …and the Map switch in List options hides it, then brings it back.
   await toggleListOptions(page);
-  await page.getByRole('button', { name: 'Whole map' }).click();
-  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(1);
-  const shown = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
-  expect(shown).toBeGreaterThan(100);
+  await page.getByRole('radio', { name: 'Hide the map' }).click();
+  await expect(page.locator('.map-wrap svg.map')).toHaveCount(0);
+  await page.getByRole('radio', { name: 'Show a small map near you' }).click();
+  await expect(strip).toBeVisible();
+  await toggleListOptions(page);
+  // A hidden map leaves one "Show map" button.
+  await page.getByRole('button', { name: 'Hide the map' }).click();
+  await expect(page.getByRole('button', { name: 'Show map' })).toBeVisible();
+  await page.getByRole('button', { name: 'Show map' }).click();
+  await expect(strip).toBeVisible();
 });
 
 test('Unplaced Items: place button opens the map for double-tap exact placement', async ({ page }) => {
