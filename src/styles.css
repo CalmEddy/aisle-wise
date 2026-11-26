@@ -1402,8 +1402,9 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .build-toolbar.rail .tool-icons { flex-direction: column; gap: 4px; overflow: visible; }
 .build-toolbar.rail .tool-icons .chip { width: 40px; height: 40px; min-width: 0; flex: none; padding: 0; background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
 .build-toolbar.rail .tool-icons .chip.active { background: var(--accent); color: #fff; }
-.zoom-buttons { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 4; }
-.zoom-buttons .map-tool { width: 40px; height: 40px; background: var(--surface); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
+.zoom-buttons { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; z-index: 4; background: var(--surface); border-radius: 12px; box-shadow: 0 1px 4px rgb(0 0 0 / 16%); overflow: hidden; }
+.zoom-buttons .map-tool { width: 44px; height: 44px; background: none; border: 0; border-radius: 0; box-shadow: none; display: grid; place-items: center; color: var(--text); }
+.zoom-buttons .map-tool + .map-tool { border-top: 1px solid var(--line); }
 .build-sheet {
   display: flex; flex-direction: column; max-height: 62vh; background: var(--surface);
   border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; box-shadow: 0 -4px 16px rgb(0 0 0 / 10%);
@@ -1420,7 +1421,7 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .map-tools { flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 5px; border-radius: 12px; max-width: min(92vw, 360px); }
 .map-tools .map-tool { min-width: 40px; height: 40px; padding: 0 6px; font-size: 0.95rem; }
 .build-toolbar.rail .tool-icons .chip { width: 40px; height: 40px; font-size: 0.95rem; }
-.zoom-buttons .map-tool { width: 40px; height: 40px; }
+.zoom-buttons .map-tool { width: 44px; height: 44px; }
 .build-toolbar.rail { max-height: calc(100% - 12px); overflow-y: auto; scrollbar-width: none; }
 
 /* ---- "Where's the Bakery?" placement card ---- */
@@ -1659,3 +1660,19 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 }
 .top-right.setup-actions { position: relative; }
 .app-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 25; min-width: 200px; box-shadow: 0 8px 24px #0003; }
+
+/* Edit map: warnings as a badge on the Store tab; one disclosure chevron for every <details> */
+.tab-badge {
+  display: inline-grid; place-items: center; min-width: 1.3em; height: 1.3em; margin-left: 6px; padding: 0 5px;
+  border-radius: 99px; background: var(--c-warn); color: #fff; font-size: 0.72rem; font-weight: 700;
+}
+details > summary { list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before {
+  content: ''; display: inline-block; flex: none; width: 1.1em; height: 1.1em; margin-right: 6px; vertical-align: -0.2em;
+  background: currentColor; transition: transform 0.12s ease;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>") center / contain no-repeat;
+}
+details[open] > summary::before { transform: rotate(90deg); }
+.unavailable-section > summary::before { content: ''; margin-right: 6px; color: var(--danger); }

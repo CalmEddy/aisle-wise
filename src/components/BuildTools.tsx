@@ -135,7 +135,7 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
     <>
       {problems.length > 0 && (
         <section className="card problems">
-          <h3>Check your layout</h3>
+          <h3>Check your map</h3>
           <ul>{problems.map((p) => <li key={p}>{p}</li>)}</ul>
         </section>
       )}
