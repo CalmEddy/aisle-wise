@@ -8,7 +8,7 @@ import { productFor } from '../core/locate';
 import { orderOf } from '../core/taxonomy';
 import type { QuickAddResult, Snapshot } from '../App';
 import { resolveListsEditSort, type Display } from '../display';
-import { AddItemsSheet, type BuyAgainChip } from './AddItemsSheet';
+import { AddItemsSheet } from './AddItemsSheet';
 import { ListsEditSortToggle } from './DisplayToggles';
 import { ItemRows, type ItemPatch } from './ItemRows';
 import { type ListsApi } from './ListsSheet';
@@ -22,7 +22,7 @@ const NEW_LIST = '__new__';
  * (qty / rename / remove) without cart check-off.
  * Selecting a list here does not change the Shop trip list.
  */
-export function ListsManageView({ onShare, householdRow, lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, buyAgain, undo, snapshot, display, setDisplay }: {
+export function ListsManageView({ onShare, householdRow, lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, undo, snapshot, display, setDisplay }: {
   /** Opens the share sheet for the list being edited. */
   onShare: (listId: string) => void;
   /** Household status row (only when household sync is configured). */
@@ -40,7 +40,6 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
   /** Product ids waiting (to-buy) on any list. */
   onAnyListIds: Set<string>;
   quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart') => QuickAddResult;
-  buyAgain?: BuyAgainChip[];
   undo: (s: Snapshot) => void;
   snapshot: () => Snapshot;
   display: Display;
@@ -217,26 +216,7 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
       {!creating && !renaming && (
         <div className="lists-manage-actions" role="group" aria-label={`Actions for ${current.name}`}>
           <ListsEditSortToggle display={display} setDisplay={setDisplay} />
-          <button type="button" className="btn" onClick={() => {
-            const r = lists.duplicate(current.id);
-            if (r) {
-              setEditId(r.id);
-              note(`Duplicated as “${r.name}”.`, r.snapshot);
-            }
-          }}>Duplicate</button>
           <button type="button" className="btn" onClick={() => onShare(current.id)}><Icon name="share-2" /> Share</button>
-          {(lists.doneCounts.get(current.id) ?? 0) > 0 && (
-            <button type="button" className="btn" onClick={() => {
-              const snap = lists.clear(current.id, 'checked');
-              note(`Cleared checked items from “${current.name}”.`, snap);
-            }}>Clear checked</button>
-          )}
-          {waiting.length > 0 && (
-            <button type="button" className="btn" onClick={() => {
-              const snap = lists.clear(current.id, 'toBuy');
-              note(`Cleared to-buy items from “${current.name}”.`, snap);
-            }}>Clear to-buy</button>
-          )}
           {current.id !== MAIN_LIST && (
             <button type="button" className="btn danger" onClick={() => setConfirmDelete(true)}>Delete</button>
           )}
@@ -276,7 +256,6 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
               setToast({ ...r, mode: 'list' });
               return r;
             }}
-            buyAgain={buyAgain}
             onUndo={undo}
           />
 
@@ -298,6 +277,7 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
                   noCheck
                   onToggle={() => {}}
                   onRemove={removeItem}
+                  removable
                   onPatch={patchItem}
                   showQty
                   showPrice={!!display.listPrice}

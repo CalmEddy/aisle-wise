@@ -62,7 +62,6 @@ interface Props {
   /** Add names onto any list without forcing a switch. */
   quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart') => QuickAddResult;
   /** Things bought before (Setup list-making chips). */
-  buyAgain?: import('./AddItemsSheet').BuyAgainChip[];
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -115,7 +114,6 @@ export function ItemsView(props: Props) {
           whereText={(p) => whereText(p, props.layout, props.catalog)}
           iconOf={(id) => lookOf(id)?.icon}
           onAdd={(names, mode) => props.quickAddTo(addingFor, names, mode)}
-          buyAgain={props.buyAgain}
           onUndo={props.undo}
           onClose={() => setAddingFor(undefined)}
         />
@@ -515,7 +513,7 @@ function ProductList({
           display={display}
           setDisplay={setDisplay}
           show={['itemsGroupByCategory', 'listQty', 'listPrice']}
-          offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
+          offByDefault={['listPrice']}
         />
         <div className="chips filters" role="group" aria-label="Show">
           {FILTERS.map((f) => (

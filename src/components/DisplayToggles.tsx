@@ -1,16 +1,18 @@
-import type { ReactNode } from 'react';
 import type { Display, ItemsSort, ListSort, ListsEditSort } from '../display';
 import { resolveItemsSort, resolveListSort, resolveListsEditSort } from '../display';
 import { Icon, type IconName } from './Icon';
 
 /** Display settings that are on/off switches. */
-type Switch = { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display];
+type Switch = Exclude<
+  { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display],
+  // Map editing and the old grouping flag are set elsewhere, not from these chips.
+  'buildMode' | 'buildArea' | 'buildDouble' | 'buildMoreTools' | 'groupList'
+>;
 
 /** Full names, for screen readers and tooltips. */
 const LABELS: Record<Switch, string> = {
   mapColors: 'Colors on map',
   mapIcons: 'Icons on map',
-  groupList: 'Group by section',
   listCategories: 'Categories in list',
   listGroupByCategory: 'Group by category',
   itemsGroupByCategory: 'Group by category',
@@ -19,17 +21,11 @@ const LABELS: Record<Switch, string> = {
   listLocation: 'Location under name',
   listColors: 'Colors in list',
   listIcons: 'Icons in list',
-  buildMode: 'Edit map',
-  buildArea: 'Map areas',
-  buildDouble: 'Double shelves',
   mapFull: 'Whole map',
-  buildMoreTools: 'More build tools',
 };
 
 /** What each switch shows: an icon and a short word (the full name is its accessible name). */
 const CHIPS: Record<Switch, { icon: IconName; word: string }> = {
-  buildMode: { icon: 'map', word: 'Edit map' },
-  groupList: { icon: 'layers', word: 'Sections' },
   listCategories: { icon: 'tag', word: 'Category' },
   listGroupByCategory: { icon: 'layers', word: 'Group' },
   itemsGroupByCategory: { icon: 'layers', word: 'Group' },
@@ -40,10 +36,7 @@ const CHIPS: Record<Switch, { icon: IconName; word: string }> = {
   mapIcons: { icon: 'smile', word: 'Icons' },
   listColors: { icon: 'palette', word: 'Colors' },
   listIcons: { icon: 'smile', word: 'Icons' },
-  buildArea: { icon: 'layers', word: 'Areas' },
-  buildDouble: { icon: 'layers', word: 'Double' },
   mapFull: { icon: 'map', word: 'Whole map' },
-  buildMoreTools: { icon: 'ellipsis', word: 'More' },
 };
 
 /** Switches shown together under a heading ("List: Colors, Icons"). Field toggles (Category, Qty, Place) stay individual. */
@@ -130,17 +123,14 @@ export function ListsEditSortToggle({ display, setDisplay }: {
 /**
  * On/off switches: an icon and a short word each (full names for screen readers
  * and tooltips). A switch that is on shows a check. The colour/icon pairs are
- * grouped under "Map" and "List". `extra` goes at the end.
+ * grouped under "Map" and "List".
  */
-export function DisplayToggles({ display, setDisplay, show, offByDefault = ['buildMode', 'buildArea', 'buildDouble'], lead, extra }: {
+export function DisplayToggles({ display, setDisplay, show, offByDefault = [] }: {
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
   show: Switch[];
   /** Switches that start off when never set. */
   offByDefault?: Switch[];
-  /** Goes at the start of the row (e.g. the add button). */
-  lead?: ReactNode;
-  extra?: ReactNode;
 }) {
   const on = (k: Switch) => display[k] ?? !offByDefault.includes(k);
   const button = (k: Switch) => (
@@ -160,7 +150,6 @@ export function DisplayToggles({ display, setDisplay, show, offByDefault = ['bui
   const grouped = new Set(GROUPS.flatMap((g) => g.keys));
   return (
     <div className="toggles" role="group" aria-label="Display">
-      {lead}
       {show.filter((k) => !grouped.has(k)).map(button)}
       {GROUPS.map((g) => {
         const keys = g.keys.filter((k) => show.includes(k));
@@ -172,7 +161,6 @@ export function DisplayToggles({ display, setDisplay, show, offByDefault = ['bui
           </span>
         );
       })}
-      {extra}
     </div>
   );
 }

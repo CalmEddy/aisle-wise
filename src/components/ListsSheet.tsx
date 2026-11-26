@@ -33,45 +33,6 @@ export interface ListsApi {
   setShopWith: (ids: string[]) => void;
 }
 
-/** The list switcher (in the Shop header): the list being shopped; opens the trip lists sheet. */
-export function ListBar({ name, toBuy, otherPending, overlays = [], onOpen }: {
-  name: string;
-  /** Still to buy on the active list (or trip union on Shop). */
-  toBuy: number;
-  /** How many other lists still have something to buy (not already overlaid). */
-  otherPending: number;
-  /** Lists also being shopped this trip. */
-  overlays?: { id: string; name: string; toBuy: number }[];
-  onOpen: () => void;
-}) {
-  const overlayBit = overlays.length === 1
-    ? ` + ${overlays[0].name}`
-    : overlays.length > 1
-      ? ` +${overlays.length}`
-      : '';
-  const extra = otherPending > 0 && !overlays.length
-    ? ` · +${otherPending} list${otherPending === 1 ? '' : 's'}`
-    : '';
-  const overlayToBuy = overlays.reduce((n, o) => n + o.toBuy, 0);
-  return (
-    <button
-      className="list-bar"
-      onClick={onOpen}
-      aria-label={`List: ${name}${toBuy ? `, ${toBuy} to buy` : ''}${overlays.length ? `, also shopping ${overlays.map((o) => o.name).join(' and ')}` : ''}${otherPending && !overlays.length ? `, ${otherPending} other list${otherPending === 1 ? '' : 's'} with items` : ''}. Change list`}
-    >
-      <Icon name="notebook-pen" />
-      <span className="list-bar-name">{name}{overlayBit}</span>
-      {toBuy > 0 && <span className="list-bar-count" aria-hidden="true">{toBuy}</span>}
-      {overlays.length > 0 && overlayToBuy > 0 && (
-        <span className="list-bar-others" aria-hidden="true">+{overlayToBuy}</span>
-      )}
-      {otherPending > 0 && !overlays.length && <span className="list-bar-others" aria-hidden="true">+{otherPending}</span>}
-      <Icon name="chevron-down" className="chev" />
-      <span className="sr-only">{extra}</span>
-    </button>
-  );
-}
-
 /**
  * Trip mode (Shop): switch the selected list and combine from others.
  * Manage mode (Setup → Lists): create / rename / delete / add items — no trip framing.

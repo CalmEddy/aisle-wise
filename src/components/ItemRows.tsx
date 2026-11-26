@@ -1,11 +1,10 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
-import type { ItemUnit, ListItem, Stop } from '../core/types';
+import type { ItemUnit, ListItem } from '../core/types';
 import { formatPrice, parsePrice, qtyUnitPriceText } from '../core/items';
 import { isDebug } from '../debug';
 import { swipeHintSeen } from '../swipeHint';
 import { Icon } from './Icon';
 import { SwipeRow } from './SwipeRow';
-import { capitalize } from './whereText';
 
 export interface Drag {
   item: ListItem;
@@ -13,89 +12,6 @@ export interface Drag {
   y: number;
   /** Spot key under the finger, if any. */
   over?: string;
-}
-
-
-export function overKey(drag: Drag | null, key: string) {
-  return drag?.over === key ? ' drop-over' : '';
-}
-
-/**
- * One numbered stop: a place, with its items grouped by spot in walking
- * order. Each spot is a drop target, so dropping on an item puts the
- * dragged item right next to it.
- */
-export function VisitCard({ visit, next, drag, rows, onGoTo, colorOf, sectionName, likely }: {
-  visit: { number: number; stops: Stop[] };
-  next?: boolean;
-  /** Placed here only by the store's default map (a guess until said). */
-  likely?: boolean;
-  drag: Drag | null;
-  /** The item rows for a stop; `sub` gives each a second line (used when a stop is shown as one line). */
-  rows: (stop: Stop, sub?: (item: ListItem) => string | undefined) => React.ReactNode;
-  /** Tapping the place or a section moves the "you are here" marker there. */
-  onGoTo: (stop: Stop) => void;
-  /** Section tint (category colour), or undefined for none. */
-  colorOf?: (stop: Stop) => string | undefined;
-  /** Name for a section with no detail of its own (its category). */
-  sectionName?: (stop: Stop) => string | undefined;
-}) {
-  const first = visit.stops[0];
-  const count = visit.stops.reduce((n, st) => n + st.items.length, 0);
-  const showDetails = visit.stops.length > 1 || !!first.detail;
-  const over = visit.stops.some((st) => drag?.over === st.key);
-  // The current stop stays green. Elsewhere, tint by category: the whole card
-  // when it's all one colour, otherwise each section on its own.
-  const colors = next ? [] : visit.stops.map((st) => colorOf?.(st));
-  const oneColor = colors.length > 0 && colors.every((c) => c && c === colors[0]) ? colors[0] : undefined;
-  const tint = (c: string | undefined) => (c ? ({ '--cat': c } as React.CSSProperties) : undefined);
-  const where = `${first.placeLabel || 'Unnamed'}${likely ? ' · likely' : ''}${first.detail ? ` · ${first.detail}` : sectionName?.(first) && visit.stops.length > 1 ? ` · ${sectionName(first)}` : ''}`;
-  // One item at one spot: a single line, with where it is under the name.
-  if (count === 1) {
-    return (
-      <section
-        className={`visit single${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
-        style={tint(oneColor)}
-        data-drop={first.key}
-      >
-        <button className="goto single-num" onClick={() => onGoTo(first)} aria-label={`I'm at ${first.label}`}>
-          {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
-        </button>
-        <div className="single-body">{rows(first, () => where)}</div>
-      </section>
-    );
-  }
-  return (
-    <section
-      className={`visit${next ? ' next-card' : ''}${over ? ' drop-over' : ''}${oneColor ? ' tinted' : ''}`}
-      style={tint(oneColor)}
-      data-drop={first.key}
-    >
-      <div className="stop-head">
-        {next ? <span className="badge">Next</span> : <span className="num">{visit.number}</span>}
-        <button className="goto" onClick={() => onGoTo(first)} aria-label={`I'm at ${first.placeLabel || 'this place'}`}>
-          {next ? <h2>{first.placeLabel || 'Unnamed'}</h2> : <h3>{first.placeLabel || 'Unnamed'}</h3>}
-          {likely && <span className="muted small likely"> likely</span>}
-        </button>
-        {count > 1 && <span className="muted small count-pill">{count} items</span>}
-      </div>
-      {visit.stops.map((st, i) => (
-        <div
-          key={st.key}
-          className={`spot${overKey(drag, st.key)}${!oneColor && colors[i] ? ' tinted' : ''}`}
-          style={oneColor ? undefined : tint(colors[i])}
-          data-drop={st.key}
-        >
-          {showDetails && (
-            <button className="spot-detail goto" onClick={() => onGoTo(st)} aria-label={`I'm at ${st.label}`}>
-              {capitalize(st.detail ?? sectionName?.(st) ?? 'anywhere here')}
-            </button>
-          )}
-          {rows(st)}
-        </div>
-      ))}
-    </section>
-  );
 }
 
 export type DragHandlers = (item: ListItem) => React.HTMLAttributes<HTMLSpanElement>;
@@ -222,10 +138,12 @@ export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
+export function ItemRows({ removable, items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
+  /** Show a Remove button on each row (Setup → Lists, where rows have no ⋯ menu or cart). */
+  removable?: boolean;
   onMenu?: (i: ListItem) => void;
   drag?: DragHandlers;
   dragging?: string;
@@ -347,6 +265,9 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                 {onPatch && !item.done && showPrice && <InlinePrice item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot"><Icon name="map-pin" filled title="Shown on the map" /></span>}
                 {clearBtn(item)}
+                {removable && (
+                  <button type="button" className="icon remove-from-list" onClick={() => onRemove(item)} aria-label={`Remove ${item.name} from list`}><Icon name="trash-2" /></button>
+                )}
                 {onMenu && (
                   <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
                 )}
