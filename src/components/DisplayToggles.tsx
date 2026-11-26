@@ -1,12 +1,12 @@
-import type { Display, ListSort, ListsEditSort } from '../display';
-import { resolveItemsGroupByCategory, resolveListSort, resolveListsEditSort } from '../display';
+import type { Display, ListSort, ListsEditSort, MapView } from '../display';
+import { resolveItemsGroupByCategory, resolveListSort, resolveListsEditSort, resolveMapView } from '../display';
 import { Icon, type IconName } from './Icon';
 
 /** Display settings that are on/off switches. */
 type Switch = Exclude<
   { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display],
   // Map editing and the old grouping flag are set elsewhere, not from these chips.
-  'buildMode' | 'buildArea' | 'buildDouble' | 'buildMoreTools' | 'groupList' | 'itemsGroupByCategory'
+  'buildMode' | 'buildArea' | 'buildDouble' | 'buildMoreTools' | 'groupList' | 'itemsGroupByCategory' | 'mapFull'
 >;
 
 /** Full names, for screen readers and tooltips. */
@@ -20,7 +20,6 @@ const LABELS: Record<Switch, string> = {
   listLocation: 'Place under name',
   listColors: 'Colors in list',
   listIcons: 'Icons in list',
-  mapFull: 'Whole map',
 };
 
 /** What each switch shows: an icon and a short word (the full name is its accessible name). */
@@ -34,7 +33,6 @@ const CHIPS: Record<Switch, { icon: IconName; word: string }> = {
   mapIcons: { icon: 'smile', word: 'Icons' },
   listColors: { icon: 'palette', word: 'Colors' },
   listIcons: { icon: 'smile', word: 'Icons' },
-  mapFull: { icon: 'map', word: 'Whole map' },
 };
 
 /** Switches shown together under a heading ("List: Colors, Icons"). Field toggles (Category, Qty, Place) stay individual. */
@@ -110,6 +108,24 @@ export function ItemsViewToggle({ display, setDisplay }: {
       value={grouped ? 'grouped' : 'alpha'}
       onPick={(id) => setDisplay((d) => ({ ...d, itemsGroupByCategory: id === 'grouped', itemsSort: id === 'grouped' ? 'category' : 'alpha' }))}
     />
+  );
+}
+
+const MAP_VIEWS: SortOption<MapView>[] = [
+  { id: 'off', icon: 'x', word: 'Off', label: 'Hide the map' },
+  { id: 'strip', icon: 'locate-fixed', word: 'Mini', label: 'Show a small map near you' },
+  { id: 'full', icon: 'map', word: 'Whole', label: 'Show the whole map' },
+];
+
+/** Shop map on a phone: hidden, a strip around you and the next stop, or the whole store. */
+export function MapViewToggle({ display, setDisplay }: {
+  display: Display;
+  setDisplay: (fn: (d: Display) => Display) => void;
+}) {
+  return (
+    <div className="map-view-toggle">
+      <SortSegment name="Map" options={MAP_VIEWS} value={resolveMapView(display)} onPick={(id) => setDisplay((d) => ({ ...d, mapView: id }))} />
+    </div>
   );
 }
 

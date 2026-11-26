@@ -16,7 +16,7 @@ import { TemplatePicker } from './TemplatePicker';
 import { groupIntoStops, locateItem, locateProduct, productFor, resolveSpot } from '../core/locate';
 import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, ShelfReach, Stop, StoreLayout, Temp, Wall } from '../core/types';
-import { resolveListSort, type Display, type SectionLook } from '../display';
+import { resolveListSort, resolveMapView, type Display, type SectionLook } from '../display';
 import { DisplayToggles, ListSortToggle } from './DisplayToggles';
 import { EmptyArt } from './EmptyArt';
 import { Icon } from './Icon';
@@ -237,7 +237,7 @@ export function ShoppingView(props: Props) {
     if (setupKind === 'blank') setBlankStep('entrance');
   }, [layout.id, setupKind]);
   useEffect(() => {
-    if (setupKind) props.setDisplay((d) => (d.mapFull ? d : { ...d, mapFull: true }));
+    if (setupKind) props.setDisplay((d) => (resolveMapView(d) === 'full' ? d : { ...d, mapView: 'full' }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout.id, setupKind]);
   const role = props.role ?? 'shop';
@@ -1440,11 +1440,12 @@ export function ShoppingView(props: Props) {
     return () => mq.removeEventListener('change', sync);
   }, []);
   const mapForced = !!whereBarFor || !!setupKind;
-  const mapOpen = mapForced || !!props.display.mapFull || wideShop;
+  const mapView = resolveMapView(props.display);
+  const mapOpen = mapForced || wideShop || mapView !== 'off';
   // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
   // While placing an item, always show the whole map so taps hit shelves clearly on a phone.
   // Wide side-by-side uses the full map in the map column (strip is phone-only when map is shown).
-  const mapStrip = role === 'shop' && !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
+  const mapStrip = role === 'shop' && !building && !wideShop && mapView === 'strip' && !whereBarFor && !setupKind;
   /** The Stores screen shows the whole map as a plain picture (no you-are-here, items or taps). */
   const mapPreview = role === 'stores' && !building;
 
@@ -1827,14 +1828,36 @@ export function ShoppingView(props: Props) {
       )}
       {!building && role === 'shop' && (
         <div className="shop-columns">
-          <div className={`shop-map-slot${mapOpen ? ' is-open' : ''}`}>
+          <div className="shop-map-slot is-open">
             {(items.length > 0 || !!setupKind) && (layout.places.length > 0 || !!setupKind) && (
-              <div className={`map-wrap shop-map${setupKind ? ' setup-map' : ''}`}>
-                {storeMap}
-                {hereLabel && items.length > 0 && (
-                  <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
-                )}
-              </div>
+              mapOpen ? (
+                <div className={`map-wrap shop-map${setupKind ? ' setup-map' : ''}`}>
+                  {storeMap}
+                  {!mapForced && !wideShop && (
+                    <div className="map-ctl" role="group" aria-label="Map size">
+                      <button
+                        type="button"
+                        className="map-tool"
+                        onClick={() => props.setDisplay((d) => ({ ...d, mapView: mapView === 'full' ? 'strip' : 'full' }))}
+                        aria-label={mapView === 'full' ? 'Show less of the map' : 'Show the whole map'}
+                      ><Icon name={mapView === 'full' ? 'minimize-2' : 'maximize-2'} /></button>
+                      <button
+                        type="button"
+                        className="map-tool"
+                        onClick={() => props.setDisplay((d) => ({ ...d, mapView: 'off' }))}
+                        aria-label="Hide the map"
+                      ><Icon name="x" /></button>
+                    </div>
+                  )}
+                  {hereLabel && items.length > 0 && (
+                    <p className="you-at muted small" aria-live="polite">You’re at {hereLabel}</p>
+                  )}
+                </div>
+              ) : (
+                <button type="button" className="link map-show" onClick={() => props.setDisplay((d) => ({ ...d, mapView: 'strip' }))}>
+                  <Icon name="map" /> Show map
+                </button>
+              )
             )}
             {setupKind && (
               <section className="card setup-card" aria-label="Set up the map">
