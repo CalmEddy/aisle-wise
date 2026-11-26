@@ -1565,7 +1565,7 @@ export function ShoppingView(props: Props) {
             <p className="muted">
               Type below to add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
-            <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
+            <button className="link" onClick={onEditLayout}>Set up your store map</button>
           </div>
         )}
 
@@ -1818,7 +1818,7 @@ export function ShoppingView(props: Props) {
           <p className="muted small">Edit the map for <b>{layout.name}</b>. Pick which store you’re shopping from the Shop tab.</p>
           <div className="stores-setup-actions">
             <button type="button" className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
-              aria-label="Edit map">🛠 Edit map</button>
+              aria-label="Edit map"><Icon name="map" /> Edit map</button>
             <button type="button" className="btn" onClick={() => props.onOpenStores?.()}>Change store</button>
           </div>
         </div>
@@ -1878,10 +1878,7 @@ export function ShoppingView(props: Props) {
           <div className="build-top">
             <button className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: false }))}>Done</button>
             <span className="build-top-name">{layout.name}</span>
-            <button className="btn" onClick={undoLast} disabled={!undoStack.length} aria-label="Undo">↶ Undo</button>
-            {problems.length > 0 && !layout.gen?.enabled && (
-              <button className="btn warn" onClick={() => { setSheetTab('store'); setSheetOpen(true); }} aria-label={`${problems.length} things to check`}>⚠ {problems.length}</button>
-            )}
+            <button className="btn" onClick={undoLast} disabled={!undoStack.length} aria-label="Undo"><Icon name="undo-2" /> Undo</button>
           </div>
           <div className="build-map" {...zoom.handlers}>
             <div className="map-wrap">
@@ -1973,9 +1970,9 @@ export function ShoppingView(props: Props) {
             <BuildToolbar rail tool={tool} setTool={setTool} more={!!props.display.buildMoreTools}
               setMore={(more) => props.setDisplay((d) => ({ ...d, buildMoreTools: more }))} />
             <div className="zoom-buttons" role="group" aria-label="Zoom">
-              <button className="map-tool" onClick={() => zoom.zoomIn(mapTools ? { x: mapTools.anchor.x + mapTools.anchor.w / 2, y: mapTools.anchor.y + mapTools.anchor.h / 2 } : undefined)} aria-label="Zoom in" disabled={zoom.scale >= MAX_ZOOM}>＋</button>
-              <button className="map-tool" onClick={zoom.zoomOut} aria-label="Zoom out" disabled={zoom.scale <= 1}>－</button>
-              <button className="map-tool" onClick={zoom.fit} aria-label="Show the whole store" disabled={zoom.scale <= 1}>⤢</button>
+              <button className="map-tool" onClick={() => zoom.zoomIn(mapTools ? { x: mapTools.anchor.x + mapTools.anchor.w / 2, y: mapTools.anchor.y + mapTools.anchor.h / 2 } : undefined)} aria-label="Zoom in" disabled={zoom.scale >= MAX_ZOOM}><Icon name="zoom-in" size="1.3rem" /></button>
+              <button className="map-tool" onClick={zoom.zoomOut} aria-label="Zoom out" disabled={zoom.scale <= 1}><Icon name="zoom-out" size="1.3rem" /></button>
+              <button className="map-tool" onClick={zoom.fit} aria-label="Show the whole store" disabled={zoom.scale <= 1}><Icon name="maximize-2" size="1.3rem" /></button>
             </div>
           </div>
           <section className={`build-sheet${sheetOpen ? ' open' : ''}`} aria-label="Editor details">
@@ -1983,10 +1980,15 @@ export function ShoppingView(props: Props) {
               <div className="segmented mini-seg" role="tablist" aria-label="Editor">
                 {([['tool', toolTitle], ['list', `List${items.filter((i) => !i.done).length ? ` (${items.filter((i) => !i.done).length})` : ''}`], ['store', 'Store']] as const).map(([t, text]) => (
                   <button key={t} role="tab" aria-selected={sheetTab === t} className={sheetTab === t ? 'active' : ''}
-                    onClick={() => { if (sheetTab === t) setSheetOpen((o) => !o); else { setSheetTab(t); setSheetOpen(true); } }}>{text}</button>
+                    onClick={() => { if (sheetTab === t) setSheetOpen((o) => !o); else { setSheetTab(t); setSheetOpen(true); } }}>
+                    {text}
+                    {t === 'store' && problems.length > 0 && !layout.gen?.enabled && (
+                      <span className="tab-badge" role="img" aria-label={`${problems.length} things to check`}>{problems.length}</span>
+                    )}
+                  </button>
                 ))}
               </div>
-              <button className="icon sheet-toggle" onClick={() => setSheetOpen((o) => !o)} aria-expanded={sheetOpen} aria-label={sheetOpen ? 'Smaller' : 'Bigger'}>{sheetOpen ? '▾' : '▴'}</button>
+              <button className="icon sheet-toggle" onClick={() => setSheetOpen((o) => !o)} aria-expanded={sheetOpen} aria-label={sheetOpen ? 'Smaller' : 'Bigger'}><Icon name={sheetOpen ? 'chevron-down' : 'chevron-up'} size="1.3rem" /></button>
             </div>
             {!sheetOpen && <p className="build-sheet-peek muted small" onClick={() => setSheetOpen(true)}>{toolHint}</p>}
             {sheetOpen && (

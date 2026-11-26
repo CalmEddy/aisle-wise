@@ -93,7 +93,7 @@ export function TemplatePicker({ name, onCreate, onBack, onClose }: {
         {templateId !== 'blank' && (
           <label className="mirror-toggle">
             <input type="checkbox" checked={mirror} onChange={(e) => setMirror(e.target.checked)} />
-            <span>Mirror layout (aisle 1 on the other side)</span>
+            <span>Mirror the map (aisle 1 on the other side)</span>
           </label>
         )}
         <div className="sheet-actions">

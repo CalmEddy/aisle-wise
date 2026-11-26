@@ -12,8 +12,9 @@ test('first visit: a short intro, straight into picking a store; not shown again
   await page.locator('.store-sheet').getByRole('button', { name: 'Close' }).click();
   await page.reload();
   await expect(intro).toHaveCount(0);
-  // ⓘ lives on Setup now.
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
+  // "How this works" lives in the ⋯ More menu on Lists / Items / Stores (and in List options on Shop).
+  await page.getByRole('tab', { name: 'Lists', exact: true }).click();
+  await page.getByRole('button', { name: 'More', exact: true }).click();
   await page.getByRole('button', { name: 'How this works' }).click();
   await expect(intro).toBeVisible();
   await intro.getByRole('button', { name: 'Start my list' }).click();
@@ -26,4 +27,24 @@ test('people who already use the app don’t get the intro', async ({ page }) =>
   await page.reload();
   await expect(page.locator('main .name').first()).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'How Aisle Wise works' })).toHaveCount(0);
+});
+
+test('four bottom tabs reach every screen in one tap', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => { localStorage.clear(); localStorage.setItem('aw.welcomed', '1'); });
+  await page.reload();
+  const tabs = page.getByRole('tablist', { name: 'Main' });
+  await expect(tabs.getByRole('tab')).toHaveText(['Shop', 'Lists', 'Items', 'Stores']);
+  await expect(tabs.getByRole('tab', { name: 'Shop' })).toHaveAttribute('aria-selected', 'true');
+  for (const name of ['Lists', 'Items', 'Shop']) {
+    await tabs.getByRole('tab', { name }).click();
+    await expect(tabs.getByRole('tab', { name })).toHaveAttribute('aria-selected', 'true');
+  }
+  // Setup is gone.
+  await expect(page.getByRole('tab', { name: 'Setup' })).toHaveCount(0);
+  // The bar stays at the bottom edge and is at least 56px tall.
+  const box = (await tabs.boundingBox())!;
+  const vh = page.viewportSize()!.height;
+  expect(Math.round(box.y + box.height)).toBe(vh);
+  expect(box.height).toBeGreaterThanOrEqual(56);
 });

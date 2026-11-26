@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { fresh, noPageErrors, saved, goSetup } from './helpers';
+import { fresh, noPageErrors, saved, goTab } from './helpers';
 
 test('tap a subcategory heading to move it under another category', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page);
-  await goSetup(page, 'Items & Categories');
+  await goTab(page, 'Items');
   // Open Breakfast & Cereal so Nut Butters heading is visible.
   await page.locator('.group-head', { hasText: 'Breakfast & Cereal' }).click();
   await page.getByRole('button', { name: 'Edit subcategory Nut Butters, Jams & Honey' }).click();
@@ -24,7 +24,7 @@ test('tap a subcategory heading to move it under another category', async ({ pag
 test('after reparent, Automatic follows the new top-level category (or says no shelf)', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page);
-  await goSetup(page, 'Items & Categories');
+  await goTab(page, 'Items');
   await page.locator('.group-head', { hasText: 'Breakfast & Cereal' }).click();
   await page.getByRole('button', { name: 'Edit subcategory Nut Butters, Jams & Honey' }).click();
   const sheet = page.getByRole('dialog', { name: /Edit Nut Butters/ });
