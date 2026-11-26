@@ -3,6 +3,7 @@ import { isBlock, placementOptions, subjectPlaces, type PlacementSubject } from 
 import type { Orientation, Placement, Product, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { StoreMap, type MapGhost } from './StoreMap';
+import { Icon } from './Icon';
 
 /**
  * "Where's the Bakery?": a mini-map with the spots it could go, numbered.
@@ -45,7 +46,7 @@ export function PlacementCard({ layout, products, subject, look, onPlace, onNotS
         <div className="segmented mini-seg placement-dir" role="group" aria-label="Which way its shelves run">
           {(['vertical', 'horizontal'] as const).map((o) => (
             <button key={o} className={dir === o ? 'active' : ''} aria-pressed={dir === o} onClick={() => { setDir(o); setChosen(undefined); }}>
-              {o === 'vertical' ? '↕ Up & down' : '↔ Side to side'}
+              <Icon name={o === 'vertical' ? 'arrow-up-down' : 'arrow-left-right'} /> {o === 'vertical' ? 'Up & down' : 'Side to side'}
             </button>
           ))}
         </div>

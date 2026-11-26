@@ -124,7 +124,7 @@ export function ItemsView(props: Props) {
         <div className="toast" role="status">
           <span className="toast-text">{listToast.text}</span>
           <button className="toast-btn" onClick={() => { props.undo(listToast.snapshot); setListToast(null); }}>Undo</button>
-          <button className="icon" onClick={() => setListToast(null)} aria-label="Dismiss">×</button>
+          <button className="icon" onClick={() => setListToast(null)} aria-label="Dismiss"><Icon name="x" /></button>
         </div>
       )}
       <button
@@ -133,10 +133,10 @@ export function ItemsView(props: Props) {
         onClick={() => setLocalListsOpen(true)}
         aria-label={`List: ${props.listName}${toBuy ? `, ${toBuy} to buy` : ''}. Change list`}
       >
-        <span aria-hidden="true">📝</span>
+        <Icon name="notebook-pen" />
         <span className="list-bar-name">{props.listName}</span>
         {toBuy > 0 && <span className="list-bar-count" aria-hidden="true">{toBuy}</span>}
-        <span aria-hidden="true" className="list-bar-more">▾</span>
+        <Icon name="chevron-down" className="chev" />
       </button>
       <div className="segmented" role="tablist">
         <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Grocery items</button>
@@ -397,11 +397,11 @@ function ProductList({
       <SwipeRow
         disabled={selecting || open}
         onSwipeRight={listed ? undefined : () => addManyToList([p])}
-        rightLabel={<>＋ Add to “{listName}”</>}
+        rightLabel={<><Icon name="plus" /> Add to “{listName}”</>}
         leftActions={(close) => (
           <>
             <button className="swipe-btn sold" onClick={() => { close(); setSoldHere([p], notSoldHere(p)); }}>
-              {notSoldHere(p) ? '✓ Sold here' : '🚫 Not sold here'}
+              {notSoldHere(p) ? <><Icon name="check" /> Sold here</> : <><Icon name="ban" /> Not sold here</>}
             </button>
             <button className="swipe-btn delete" onClick={() => { close(); remove(p); }}>Delete</button>
           </>
@@ -445,7 +445,7 @@ function ProductList({
           disabled={listed}
           aria-label={listed ? `${p.name} is on “${listName}”` : `Add ${p.name} to “${listName}”`}
         >
-          {listed ? '✓' : '+'}
+          <Icon name={listed ? 'check' : 'plus'} />
         </button>
       </div>
       </SwipeRow>
@@ -507,7 +507,7 @@ function ProductList({
                       : 'Swipe an item for shortcuts.'}
           </span>
           <button className={`chip select-toggle${selecting ? ' active' : ''}`} aria-pressed={selecting} onClick={() => startSelecting(!selecting)}>
-            {selecting ? 'Done' : '☑ Select'}
+            {selecting ? 'Done' : <><Icon name="square-check-big" /> Select</>}
           </button>
         </div>
         <ItemsSortToggle display={display} setDisplay={setDisplay} />
@@ -580,7 +580,7 @@ function ProductList({
                 {look ? <span className="cat-dot" style={{ background: look.color }} aria-hidden="true">{look.icon}</span> : null}
                 <span>{g.name}</span> <span className="muted small">{g.products.length}</span>
                 <span style={{ flex: 1 }} />
-                {!allOpen && <span className="chev" aria-hidden="true">{open ? '▾' : '▸'}</span>}
+                {!allOpen && <span className="chev" aria-hidden="true"><Icon name={open ? 'chevron-down' : 'chevron-right'} /></span>}
               </button>
               {selecting && (
                 <button className="link group-select" onClick={() => selectAll(g.products)}>
@@ -638,7 +638,7 @@ function ProductList({
               {shown.length && shown.every((p) => selected.has(p.id)) ? 'Select none' : `Select all ${shown.length}`}
             </button>
             <span style={{ flex: 1 }} />
-            <button className="icon" onClick={() => startSelecting(false)} aria-label="Stop selecting">×</button>
+            <button className="icon" onClick={() => startSelecting(false)} aria-label="Stop selecting"><Icon name="x" /></button>
           </div>
           <div className="bulk-actions">
             <button className="btn" disabled={!chosen.length} onClick={() => setBulkCategory(true)}>Category…</button>
@@ -648,7 +648,7 @@ function ProductList({
               onClick={() => addManyToList(chosen)}
               aria-label={`Add selected to “${listName}”`}
             >
-              ＋ “{listName}”
+              <Icon name="plus" /> “{listName}”
             </button>
             <button className="btn" disabled={!chosen.length} onClick={() => setSoldHere(chosen, chosen.every(notSoldHere))}>
               {chosen.length && chosen.every(notSoldHere) ? 'Sold here' : 'Not sold here'}
@@ -715,7 +715,7 @@ function ProductList({
           {toast.openId && catalog.productById.has(toast.openId) && (
             <button className="toast-btn" onClick={() => { openItem(catalog.productById.get(toast.openId!)!); setToast(null); }}>Change</button>
           )}
-          <button className="icon" onClick={() => setToast(null)} aria-label="Dismiss">×</button>
+          <button className="icon" onClick={() => setToast(null)} aria-label="Dismiss"><Icon name="x" /></button>
         </div>
       )}
     </div>
@@ -863,7 +863,7 @@ function CategoriesEditor({ product, catalog, iconOf, onChange }: {
                   aria-label={`Remove ${catalog.categoryById.get(id)?.name ?? id}`}
                   onClick={() => onChange((p) => removeCategory(p, id),
                     `${product.name}: removed ${catalog.categoryById.get(id)?.name ?? 'category'}.`)}
-                >×</button>
+                ><Icon name="x" /></button>
               </li>
             ))}
           </ul>
@@ -908,7 +908,7 @@ function CategoriesEditor({ product, catalog, iconOf, onChange }: {
             />
           ) : (
             <button type="button" className="link add-cat" onClick={() => setAdding(true)}>
-              ＋ Add another category
+              <Icon name="plus" /> Add another category
             </button>
           )}
         </>
@@ -1090,12 +1090,12 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
             >
               <option value="">Automatic: {autoText}</option>
               <option value="__unknown__">Unknown — no place yet</option>
-              {exactSpot && <option value={key}>📍 {exactSpot.label}</option>}
+              {exactSpot && <option value={key}>Exact spot · {exactSpot.label}</option>}
               {forTops.map((pl) => placeOption(pl))}
               {otherCat.map((pl) => placeOption(pl))}
               {noCat.map((pl) => placeOption(pl, true))}
             </select>
-            <button type="button" className="btn" onClick={() => setMapFor(l)}>📍 Map</button>
+            <button type="button" className="btn" onClick={() => setMapFor(l)}><Icon name="map-pin" /> Map</button>
             {!unknown && (
               <button type="button" className="btn" onClick={() => clearLocation(l)} aria-label={`Clear location of ${product.name} at ${l.name}`}>
                 Clear
@@ -1105,7 +1105,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
         )}
         {sold && (
           <div className="clue-row">
-            <span className="muted small">🏷 {clue ? describeClue(clue) : 'No aisle or department yet'}</span>
+            <span className="muted small"><Icon name="tag" /> {clue ? describeClue(clue) : 'No aisle or department yet'}</span>
             <button type="button" className="link" onClick={() => setWhereAt(l)}>{clue ? 'Change' : 'Set'}</button>
             {clue && (
               <button type="button" className="link" onClick={() => onChange((p) => {
@@ -1295,7 +1295,7 @@ function CategoryList({ catalog, setCategories, setProducts, setLayouts }: Props
               {parentId ? catalog.categoryById.get(parentId)?.name ?? 'Move' : 'Move'}
             </button>
           )}
-          <button className="icon" onClick={() => remove(c)} aria-label={`Delete ${c.name}`}>×</button>
+          <button className="icon" onClick={() => remove(c)} aria-label={`Delete ${c.name}`}><Icon name="x" /></button>
         </div>
         {iconFor === c.id && (
           <div className="icon-grid" role="listbox" aria-label={`Choose an icon for ${c.name}`}>

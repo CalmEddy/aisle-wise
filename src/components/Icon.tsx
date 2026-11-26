@@ -36,3 +36,8 @@ export function Icon({ name, size = '1.15em', filled, className, title }: {
     />
   );
 }
+
+/** The arrow icon for a direction (map editing: move, extend, step). */
+export const ARROW_ICON: Record<'up' | 'down' | 'left' | 'right', IconName> = {
+  up: 'arrow-up', down: 'arrow-down', left: 'arrow-left', right: 'arrow-right',
+};

@@ -21,7 +21,7 @@ test('item editor: switch subcategory quickly and add a second category', async 
   let products = await saved<{ name: string; categoryId?: string; extraCategoryIds?: string[] }[]>(page, 'products');
   expect(products.find((p) => p.name === 'Peanut butter')?.categoryId).toBe('breakfast_cereal_sub');
   // Add another category (Condiments).
-  await page.getByRole('button', { name: '＋ Add another category' }).click();
+  await page.getByRole('button', { name: 'Add another category' }).click();
   const add = page.getByRole('combobox', { name: 'Add another category' });
   await add.fill('Ketchup');
   await page.getByRole('listbox', { name: 'Add another category' }).getByRole('option').filter({ hasText: 'Ketchup, Mustard & Mayo' }).click();

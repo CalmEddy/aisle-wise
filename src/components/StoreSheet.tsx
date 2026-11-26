@@ -4,6 +4,7 @@ import { formatPrice } from '../core/items';
 import { cheapestStoreTotal, type StoreListTotal } from '../core/prices';
 import { AT_STORE_METRES, distanceText, storesByDistance } from '../core/stores';
 import type { GeoPoint, StoreLayout } from '../core/types';
+import { Icon } from './Icon';
 
 /**
  * Picking a store: nearest first (when we know where you are), a new store
@@ -76,12 +77,12 @@ export function StoreSheet({ layouts, activeId, here, locating, listTotals, onPi
 
         <form className="add-row new-store" onSubmit={(e) => { e.preventDefault(); setNaming(name.trim() || 'New store'); }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New store, e.g. Kroger Main St" aria-label="New store name" />
-          <button type="submit">＋ Here</button>
+          <button type="submit"><Icon name="plus" /> Here</button>
         </form>
         <p className="muted small">Next, start from a typical supermarket map (you can change that). It learns where things are as you shop{here ? ', and remembers where it is' : ''}.</p>
 
         {here && active && (activeHere === undefined || activeHere > AT_STORE_METRES) && (
-          <button className="btn wide" onClick={() => { onSaveHere(); onClose(); }}>📍 I’m at {active.name} – remember it’s here</button>
+          <button className="btn wide" onClick={() => { onSaveHere(); onClose(); }}><Icon name="map-pin" /> I’m at {active.name} – remember it’s here</button>
         )}
         <div className="sheet-actions">
           <span style={{ flex: 1 }} />

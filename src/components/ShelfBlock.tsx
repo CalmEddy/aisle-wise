@@ -3,6 +3,7 @@ import { nextBlockStart, sequenceLabels } from '../core/labels';
 import { blockOrientation, fillBlock } from '../core/rows';
 import type { Orientation, Point, Rect, Shelf, StoreLayout } from '../core/types';
 import { toGrid } from './StoreMap';
+import { Icon } from './Icon';
 
 /** Squares from one corner to another, inclusive (may extend past the store). */
 export const rectBetween = (a: Point, b: Point): Rect => ({
@@ -89,7 +90,7 @@ export function ShelfBlockPanel({ rect, shelves, orientation, setOrientation, do
         <div className="segmented mini-seg" role="group" aria-label="Shelf direction">
           {(['vertical', 'horizontal'] as const).map((o) => (
             <button key={o} className={orientation === o ? 'active' : ''} aria-pressed={orientation === o} onClick={() => setOrientation(o)}>
-              {o === 'vertical' ? '↕ Up/down' : '↔ Across'}
+              <Icon name={o === 'vertical' ? 'arrow-up-down' : 'arrow-left-right'} /> {o === 'vertical' ? 'Up/down' : 'Across'}
             </button>
           ))}
         </div>
@@ -103,7 +104,7 @@ export function ShelfBlockPanel({ rect, shelves, orientation, setOrientation, do
         <label className="lane-field">
           <span>Walkway</span>
           <span className="stepper">
-            <button onClick={() => setLane(Math.max(1, lane - 1))} aria-label="Narrower walkway">−</button>
+            <button onClick={() => setLane(Math.max(1, lane - 1))} aria-label="Narrower walkway"><Icon name="minus" /></button>
             <input type="number" min={1} max={8} value={lane} aria-label="Walkway width in squares"
               onChange={(e) => setLane(Math.max(1, Math.min(8, Number(e.target.value) || 1)))} />
             <button onClick={() => setLane(Math.min(8, lane + 1))} aria-label="Wider walkway">+</button>

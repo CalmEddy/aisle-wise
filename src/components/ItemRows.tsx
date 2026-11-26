@@ -158,14 +158,14 @@ export function QtyStepper({ item, onPatch }: { item: ListItem; onPatch: (patch:
           onPatch({ qty: qty - 1 > 1 ? qty - 1 : undefined });
         }}
         aria-label={`One fewer ${item.name}`}
-      >−</button>
+      ><Icon name="minus" /></button>
       <span className="qty-stepper-value" aria-live="polite">{qty}</span>
       <button
         type="button"
         className="icon"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onPatch({ qty: qty + 1 }); }}
         aria-label={`One more ${item.name}`}
-      >＋</button>
+      ><Icon name="plus" /></button>
     </div>
   );
 }

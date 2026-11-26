@@ -18,6 +18,7 @@ import { groupVisits, planGroupedRoute } from '../core/route';
 import type { Clue, Dept, ListItem, Orientation, Place, Placement, Point, Product, Rect, Shelf, ShelfReach, Stop, StoreLayout, Temp, Wall } from '../core/types';
 import { resolveListSort, type Display, type SectionLook } from '../display';
 import { DisplayToggles, ListSortToggle } from './DisplayToggles';
+import { EmptyArt } from './EmptyArt';
 import { Icon } from './Icon';
 import { BrushPanel, BuildToolbar, StoreSettings, TOOLS, type BuildTool, type StoreApi } from './BuildTools';
 import { DEFAULT_BRUSH, brushArea, brushSegments, segmentRect, type Brush } from '../core/brush';
@@ -616,9 +617,9 @@ export function ShoppingView(props: Props) {
   const aisleHere = building ? layout.aisles?.find((a) => contains(a, position)) : undefined;
   const walkwayHere = building && !aisleHere ? walkwayAt(layout, position) : undefined;
   const aisleAction = aisleHere
-    ? { text: `🏷 “${aisleHere.label}”`, run: () => { setEditingId(undefined); setEditingAisleId(aisleHere.id); } }
+    ? { text: `Aisle “${aisleHere.label}”`, run: () => { setEditingId(undefined); setEditingAisleId(aisleHere.id); } }
     : walkwayHere
-      ? { text: '🏷 Label aisle', run: () => {
+      ? { text: 'Label aisle', run: () => {
           const r = props.build.aisles.add(walkwayHere, nextAisleLabel(layout));
           setEditingId(undefined);
           setEditingAisleId(r.id);
@@ -1561,10 +1562,16 @@ export function ShoppingView(props: Props) {
         )}
         {items.length === 0 && (
           <div className="empty">
+            <EmptyArt name="shopping-cart" />
             <p>Your list is empty.</p>
             <p className="muted">
               Type below to add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => document.querySelector<HTMLInputElement>('input[aria-label="Item to add"]')?.focus()}
+            >Add your first item</button>
             <button className="link" onClick={onEditLayout}>Set up your store map</button>
           </div>
         )}
@@ -1697,7 +1704,7 @@ export function ShoppingView(props: Props) {
                 </label>
                 <span className="row-actions">
                   <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
-                  <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
+                  <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}><Icon name="x" /></button>
                 </span>
               </div>
             ))}
@@ -1720,7 +1727,7 @@ export function ShoppingView(props: Props) {
               <div className="row unavailable" key={item.id}>
                 <span className="name">{item.name}</span>
                 <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
-                <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
+                <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}><Icon name="x" /></button>
               </div>
             ))}
           </details>
@@ -1815,6 +1822,7 @@ export function ShoppingView(props: Props) {
 
       {!building && role === 'stores' && (
         <div className="stores-setup">
+          <EmptyArt name="map" />
           <p className="muted small">Edit the map for <b>{layout.name}</b>. Pick which store you’re shopping from the Shop tab.</p>
           <div className="stores-setup-actions">
             <button type="button" className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
@@ -1838,9 +1846,9 @@ export function ShoppingView(props: Props) {
               <section className="card setup-card" aria-label="Set up the map">
                 <p>
                   {setupKind === 'entrance'
-                    ? <><span aria-hidden="true">🚪 </span>Tap where the door is on the map</>
+                    ? <><Icon name="door-open" /> Tap where the door is on the map</>
                     : blankStep === 'entrance'
-                      ? <><span aria-hidden="true">🚪 </span>Tap where you came in</>
+                      ? <><Icon name="door-open" /> Tap where you came in</>
                       : blankStep === 'shelf'
                         ? <><span aria-hidden="true">▮ </span>Tap the ghost shelf to place your first aisle</>
                         : <><span aria-hidden="true">▦ </span>Tap to place an open area (produce, endcap…)</>}
@@ -2077,7 +2085,7 @@ export function ShoppingView(props: Props) {
                 <button className="btn" onClick={() => setRenumberMode(undefined)}>Cancel</button>
                 <span style={{ flex: 1 }} />
                 <button className="btn" onClick={() => setRenumberMode({ ...renumberMode, flip: !renumberMode.flip })}>
-                  {runsUp(layout, renumberMode.ids) ? '⇄' : '⇅'} Flip
+                  <Icon name={runsUp(layout, renumberMode.ids) ? 'arrow-left-right' : 'arrow-up-down'} /> Flip
                 </button>
                 <button className="btn primary" onClick={() => {
                   const snapshot = props.build.aisles.renumberFrom(renumberMode.ids, renumberMode.start || '1', renumberMode.flip);

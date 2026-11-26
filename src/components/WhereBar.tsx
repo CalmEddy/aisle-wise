@@ -4,6 +4,7 @@ import { topOf } from '../core/taxonomy';
 import { aisleNumber, DEPTS, describeClue, guessDept } from '../core/clues';
 import type { Clue, Temp, Wall } from '../core/types';
 import { formatLabel, looksLikeShelfCode, nextShelves, parseLabel, type LabelStyle } from '../core/labels';
+import { Icon } from './Icon';
 
 /** Cold or not, as a first guess from the category. */
 export function guessTemp(categoryId?: string): Temp | undefined {
@@ -88,7 +89,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
   const [standing, setStanding] = useState(false);
   const dept = guessDept(categoryId);
   const d = dept && DEPTS.find((x) => x.id === dept);
-  const cold = temp === 'frozen' ? '❄ ' : temp === 'chilled' ? '🧊 ' : '';
+  const cold = temp === 'frozen' ? 'Freezer · ' : temp === 'chilled' ? 'Fridge · ' : '';
   const withTemp = temp ? { temp } : {};
   const aisleClue = (aisle: string): Clue => ({ kind: 'aisle', aisle, ...withTemp });
   const shelfClue = (code: string): Clue | undefined => {
@@ -136,7 +137,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
           {([undefined, 'chilled', 'frozen'] as const).map((t) => (
             <button key={String(t)} className={`chip mini${temp === t ? ' active' : ''}`} aria-pressed={temp === t}
               aria-label={t === undefined ? 'On a shelf' : t === 'chilled' ? 'In a fridge' : 'In a freezer'} onClick={() => setTemp(t)}>
-              {t === undefined ? 'Shelf' : t === 'chilled' ? '🧊' : '❄'}
+              {t === undefined ? 'Shelf' : <Icon name={t === 'chilled' ? 'refrigerator' : 'snowflake'} />}
             </button>
           ))}
         </span>
@@ -153,7 +154,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
         <div className="where-bar-choices">
           {spotChips.map((x, i) => (
             <button key={`m-${x.key}`} className={`btn map-spot${i === 0 ? ' primary' : ''}`} title="Where the map has this kind of thing"
-              onClick={() => (x.clue ? onSave(x.clue) : x.spot && onSavePlace?.(x.spot))}>📍 {x.label}</button>
+              onClick={() => (x.clue ? onSave(x.clue) : x.spot && onSavePlace?.(x.spot))}><Icon name="map-pin" /> {x.label}</button>
           ))}
           {quick.map((q) => (
             <button key={q.key} className={`btn${q.primary ? ' primary' : ''}`} onClick={() => onSave(q.clue)}>{q.label}</button>
@@ -163,7 +164,7 @@ export function WhereBar({ itemName, categoryId, recentAisles, lastClue, trail =
             const here = shelfTrail[shelfTrail.length - 1]?.section;
             setTyping(labels && here ? formatLabel(labels, here) : '');
           }}>{labels ? '# Shelf…' : '# Aisle…'}</button>
-          {here && here.length > 0 && onHere && <button className="btn" onClick={() => setStanding(true)}>🧍 Where I’m standing</button>}
+          {here && here.length > 0 && onHere && <button className="btn" onClick={() => setStanding(true)}><Icon name="person-standing" /> Where I’m standing</button>}
           <button className="btn" onClick={onOther}>Other…</button>
           {onAskAtCheckout && <button className="link where-bar-checkout" onClick={onAskAtCheckout}>Ask me at checkout</button>}
         </div>

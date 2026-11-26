@@ -1644,7 +1644,7 @@ export default function App() {
                       setDisplay((d) => ({ ...d, buildMode: true }));
                     }}
                     aria-label="Edit map"
-                    title="Edit the store map in Setup"
+                    title="Edit the store map"
                   >
                     <Icon name="map" />
                     <span>Edit store map</span>

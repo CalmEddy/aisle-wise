@@ -55,9 +55,9 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
         <p className="muted small">{where}</p>
         <div className="amount-row">
           <div className="qty-stepper" role="group" aria-label="How many">
-            <button className="icon" onClick={() => onAmount({ qty: qty - 1 > 1 ? qty - 1 : undefined })} disabled={qty <= 1} aria-label="One fewer">−</button>
+            <button className="icon" onClick={() => onAmount({ qty: qty - 1 > 1 ? qty - 1 : undefined })} disabled={qty <= 1} aria-label="One fewer"><Icon name="minus" /></button>
             <span className="qty-stepper-value" aria-live="polite">{qty}</span>
-            <button className="icon" onClick={() => onAmount({ qty: qty + 1 })} aria-label="One more">＋</button>
+            <button className="icon" onClick={() => onAmount({ qty: qty + 1 })} aria-label="One more"><Icon name="plus" /></button>
           </div>
           <label className="unit-field">
             <span className="muted small">Unit</span>

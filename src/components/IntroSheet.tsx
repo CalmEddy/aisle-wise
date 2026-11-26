@@ -2,6 +2,8 @@
  * The first-run welcome (and what ⓘ shows later): how the app works in three
  * steps, with a way straight into a store or the demo.
  */
+import { Icon } from './Icon';
+
 export function IntroSheet({ onStart, onAtStore, onClose }: {
   /** Start a list (closes the intro). */
   onStart: () => void;
@@ -15,9 +17,9 @@ export function IntroSheet({ onStart, onAtStore, onClose }: {
         <h2>Shop in one walk</h2>
         <p className="muted">Aisle Wise sorts your list into the order you’ll pass things in <b>your</b> store.</p>
         <ol className="intro-steps">
-          <li><span className="intro-icon" aria-hidden="true">＋</span><div><b>Add what you need.</b> Type it (“2 milk” works), speak it, or tap things you usually buy.</div></li>
-          <li><span className="intro-icon" aria-hidden="true">🏬</span><div><b>Add your store</b> (not the demo). A typical map is a starting guess; answers redraw it as you shop.</div></li>
-          <li><span className="intro-icon" aria-hidden="true">✓</span><div><b>Tick things off as you go.</b> When the app isn’t sure where something was, it asks once; otherwise it saves a guess you can Change. Next trip, the list is in walking order.</div></li>
+          <li><span className="intro-icon" aria-hidden="true"><Icon name="plus" /></span><div><b>Add what you need.</b> Type it (“2 milk” works), speak it, or tap things you usually buy.</div></li>
+          <li><span className="intro-icon" aria-hidden="true"><Icon name="store" /></span><div><b>Add your store</b> (not the demo). A typical map is a starting guess; answers redraw it as you shop.</div></li>
+          <li><span className="intro-icon" aria-hidden="true"><Icon name="check" /></span><div><b>Tick things off as you go.</b> When the app isn’t sure where something was, it asks once; otherwise it saves a guess you can Change. Next trip, the list is in walking order.</div></li>
         </ol>
         <p className="muted small intro-tips">Tips: swipe a row right for “got it”, left for “not here”. Tap the sort control for nearest / category / A–Z. Tap the list name to choose what you’re shopping. Make lists on the Lists tab. Edit the store map on the Stores tab.</p>
         <div className="intro-actions">

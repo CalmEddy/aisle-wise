@@ -5,6 +5,7 @@ import { extendCandidates, planBuild, type BuildChoice, type BuildTarget, type D
 import type { Catalog } from '../core/catalog';
 import { resolveSpot } from '../core/locate';
 import type { Point, Shelf, StoreLayout } from '../core/types';
+import { ARROW_ICON, Icon } from './Icon';
 
 /** The build-mode banner: what just changed, with follow-up buttons. */
 export type BuildNote =
@@ -45,8 +46,8 @@ export function BuildPanel({ layout, position, target, setTarget, build, preview
   onNote: (n: BuildNote) => void;
 }) {
   const options = preview.action === 'create' || preview.action === 'createArea' ? extendCandidates(layout, position) : [];
-  const arrow = (dir: Direction, label: string, glyph: string) => (
-    <button className={`btn arrow ${dir}`} onClick={() => build.stepTo(dir)} aria-label={label}>{glyph}</button>
+  const arrow = (dir: Direction, label: string) => (
+    <button className={`btn arrow ${dir}`} onClick={() => build.stepTo(dir)} aria-label={label}><Icon name={ARROW_ICON[dir]} size="1.3rem" /></button>
   );
   return (
     <section className="card build-panel">
@@ -74,17 +75,19 @@ export function BuildPanel({ layout, position, target, setTarget, build, preview
       </p>
       <div className="build-row">
         <div className="arrows" role="group" aria-label="Move one square">
-          {arrow('up', 'Move up', '↑')}
-          {arrow('left', 'Move left', '←')}
-          {arrow('right', 'Move right', '→')}
-          {arrow('down', 'Move down', '↓')}
+          {arrow('up', 'Move up')}
+          {arrow('left', 'Move left')}
+          {arrow('right', 'Move right')}
+          {arrow('down', 'Move down')}
         </div>
         <div className="build-tools">
           {nextOptions.map(({ side, shelves }) => {
             const what = shelves.length > 1 ? 'Next pair' : 'Next shelf';
             return (
               <button key={side} className="btn primary" onClick={() => onNext(shelves)}>
-                {shelves[0].orientation === 'vertical' ? (side < 0 ? `← ${what}` : `${what} →`) : (side < 0 ? `↑ ${what}` : `↓ ${what}`)}
+                {shelves[0].orientation === 'vertical'
+                  ? (side < 0 ? <><Icon name="arrow-left" /> {what}</> : <>{what} <Icon name="arrow-right" /></>)
+                  : (side < 0 ? <><Icon name="arrow-up" /> {what}</> : <><Icon name="arrow-down" /> {what}</>)}
               </button>
             );
           })}
@@ -129,13 +132,13 @@ export function BuildBanner({ note, skipped, onFill, layout, catalog, build, onU
       <div className="toast" role="status">
         <span className="toast-text">{note.text}</span>
         {note.snapshot && <button className="toast-btn" onClick={() => onUndo(note.snapshot!)}>Undo</button>}
-        <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+        <button className="icon" onClick={onClose} aria-label="Dismiss"><Icon name="x" /></button>
       </div>
     );
   }
 
   if (note.kind === 'choose') {
-    const arrow = { up: '↑', down: '↓', left: '←', right: '→' } as const;
+    const arrow = (d: Direction) => <Icon name={ARROW_ICON[d]} />;
     const choose = (c: BuildChoice) => onNote(build.placeChosen(note.productId, note.at, c, note.snapshot));
     return (
       <div className="toast question" role="alertdialog" aria-label={`Where is ${note.itemName}?`}>
@@ -143,7 +146,7 @@ export function BuildBanner({ note, skipped, onFill, layout, catalog, build, onU
         <div className="toast-choices">
           {note.options.map((o) => (
             <button key={o.shelfId} className="btn primary" onClick={() => choose({ extend: o.shelfId })}>
-              {arrow[o.direction]} Extend {o.label || 'shelf'} <span className="muted-on-dark">({o.gap} away)</span>
+              {arrow(o.direction)} Extend {o.label || 'shelf'} <span className="muted-on-dark">({o.gap} away)</span>
             </button>
           ))}
           <button className="btn" onClick={() => choose('shelf')}>+ New shelf</button>
@@ -159,7 +162,7 @@ export function BuildBanner({ note, skipped, onFill, layout, catalog, build, onU
   }
 
   if (note.kind === 'chooseSide') {
-    const arrow = { left: '←', right: '→', up: '↑', down: '↓' } as const;
+    const arrow = (d: 'left' | 'right' | 'up' | 'down') => <Icon name={ARROW_ICON[d]} />;
     const choose = (shelfId: string) => onNote(build.placeChosen(note.productId, note.at, { onShelf: shelfId }, note.snapshot));
     return (
       <div className="toast question" role="alertdialog" aria-label={`Which side is ${note.itemName} on?`}>
@@ -167,7 +170,7 @@ export function BuildBanner({ note, skipped, onFill, layout, catalog, build, onU
         <div className="side-choices">
           {note.options.map((o) => (
             <button key={o.shelfId} className="btn primary big-side" onClick={() => choose(o.shelfId)}>
-              {o.side === 'left' || o.side === 'up' ? <>{arrow[o.side]} {o.label || 'This shelf'}</> : <>{o.label || 'This shelf'} {arrow[o.side]}</>}
+              {o.side === 'left' || o.side === 'up' ? <>{arrow(o.side)} {o.label || 'This shelf'}</> : <>{o.label || 'This shelf'} {arrow(o.side)}</>}
             </button>
           ))}
         </div>
@@ -254,12 +257,12 @@ export function BuildBanner({ note, skipped, onFill, layout, catalog, build, onU
                 if (place.orientation !== o && !build.turnShelfHere(place.id, note.kind === 'built' ? note.pairId : undefined)) {
                   onNote({ kind: 'message', text: 'It won’t fit that way here.' });
                 }
-              }}>{o === 'vertical' ? '↕' : '↔'}</button>
+              }} aria-label={o === 'vertical' ? 'Up and down' : 'Side to side'}><Icon name={o === 'vertical' ? 'arrow-up-down' : 'arrow-left-right'} /></button>
             ))}
           </div>
         )}
         {place && !renaming && <button className="btn" onClick={() => setRenaming(true)}>Rename</button>}
-        <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+        <button className="icon" onClick={onClose} aria-label="Dismiss"><Icon name="x" /></button>
       </div>
     </div>
   );

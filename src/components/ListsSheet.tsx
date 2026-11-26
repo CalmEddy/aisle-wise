@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MAIN_LIST, type ShoppingList } from '../core/types';
 import type { ClearMode } from '../core/lists';
+import { Icon } from './Icon';
 
 /** What the Shop tab / Setup → Lists can do with the household's lists. */
 export interface ListsApi {
@@ -58,14 +59,14 @@ export function ListBar({ name, toBuy, otherPending, overlays = [], onOpen }: {
       onClick={onOpen}
       aria-label={`List: ${name}${toBuy ? `, ${toBuy} to buy` : ''}${overlays.length ? `, also shopping ${overlays.map((o) => o.name).join(' and ')}` : ''}${otherPending && !overlays.length ? `, ${otherPending} other list${otherPending === 1 ? '' : 's'} with items` : ''}. Change list`}
     >
-      <span aria-hidden="true">📝</span>
+      <Icon name="notebook-pen" />
       <span className="list-bar-name">{name}{overlayBit}</span>
       {toBuy > 0 && <span className="list-bar-count" aria-hidden="true">{toBuy}</span>}
       {overlays.length > 0 && overlayToBuy > 0 && (
         <span className="list-bar-others" aria-hidden="true">+{overlayToBuy}</span>
       )}
       {otherPending > 0 && !overlays.length && <span className="list-bar-others" aria-hidden="true">+{otherPending}</span>}
-      <span aria-hidden="true" className="list-bar-more">▾</span>
+      <Icon name="chevron-down" className="chev" />
       <span className="sr-only">{extra}</span>
     </button>
   );
@@ -174,7 +175,7 @@ export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onClea
                   <button className="icon" onClick={() => { setMenuFor(openMenu ? undefined : l.id); setConfirmDelete(undefined); }} aria-label={`More for ${l.name}`} aria-expanded={openMenu}>⋯</button>
                   {openMenu && (
                     <div className="list-row-menu" role="group" aria-label={`Actions for ${l.name}`}>
-                      <button className="pick" onClick={() => { onAddItems(l.id); }}>＋ Add items</button>
+                      <button className="pick" onClick={() => { onAddItems(l.id); }}><Icon name="plus" /> Add items</button>
                       <button className="pick" onClick={() => { setRenaming(l.id); setName(l.name); setMenuFor(undefined); }}>Rename</button>
                       <button className="pick" onClick={() => {
                         const r = lists.duplicate(l.id);
@@ -209,7 +210,7 @@ export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onClea
                   {createdId === l.id && (
                     <div className="list-created" role="status">
                       <span className="muted small">List created.</span>
-                      <button className="btn primary" onClick={() => onAddItems(l.id)}>＋ Add items</button>
+                      <button className="btn primary" onClick={() => onAddItems(l.id)}><Icon name="plus" /> Add items</button>
                     </div>
                   )}
                 </li>
@@ -263,7 +264,7 @@ export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onClea
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet lists-sheet" role="dialog" aria-label="Choose list" onClick={(e) => e.stopPropagation()}>
         <h2>Choose list</h2>
-        <p className="muted small">Select the list for this trip. Include more lists via 📋 List options in the header.</p>
+        <p className="muted small">Select the list for this trip. Include more lists from the List options button (sliders) in the header.</p>
 
         <section className="lists-section">
           <h3>Lists</h3>

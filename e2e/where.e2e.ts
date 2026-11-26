@@ -42,7 +42,7 @@ test('Describe…: Aisle, Wall and Open answers, with fridge/freezer', async ({ 
   await panel.getByRole('tab', { name: 'Open' }).click();
   await panel.getByRole('button', { name: 'Case' }).click();
   await panel.getByRole('button', { name: 'Near the door' }).click();
-  await panel.getByRole('button', { name: '❄ Freezer' }).click();
+  await panel.getByRole('button', { name: 'Freezer', exact: true }).click();
   await panel.getByRole('button', { name: /^Save · Freezer, case near the door/ }).click();
   expect(await clues(page)).toMatchObject({
     Milk: { kind: 'aisle', aisle: '12', side: 'R', temp: 'chilled' },
@@ -643,7 +643,7 @@ test('“Where I’m standing” keeps the pin and moves the item to where you a
   await page.locator('.toast').getByRole('button', { name: 'Change' }).click();
   const sheet = placeSheet(page, 'Milk');
   await expect(sheet).toBeVisible();
-  await sheet.getByRole('button', { name: '🧍 Where I’m standing' }).click();
+  await sheet.getByRole('button', { name: 'Where I’m standing' }).click();
   await sheet.locator('[aria-label="Where I’m standing"] .btn').first().click();
   const milk = (await saved<{ name: string; locations?: Record<string, string> }[]>(page, 'products')).find((p) => p.name === 'Milk')!;
   expect(milk.locations?.demo).toBeTruthy();
@@ -668,7 +668,7 @@ test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carr
   await tapMap(page, 8, 15);
   await tick(page, 'Pickles');
   const sheet = placeSheet(page, 'Pickles');
-  await sheet.getByRole('button', { name: '🧍 Where I’m standing' }).click();
+  await sheet.getByRole('button', { name: 'Where I’m standing' }).click();
   await sheet.getByRole('button', { name: 'Aisle 3 carries on here · 3R' }).click();
   const places = async () => (await saved<any[]>(page, 'layouts'))[0].places;
   await expect.poll(async () => (await places()).map((p: any) => `${p.label}@${p.x},${p.y}+${p.length}`)).toEqual(['3L@5,2+10', '3R@8,2+10', '3L@5,14+3', '3R@8,14+3']);

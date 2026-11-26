@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { HouseholdApi } from '../sync/useHousehold';
+import { Icon } from './Icon';
 
 const STATUS_TEXT = {
   off: 'Not shared',
@@ -20,7 +21,7 @@ export function HouseholdButton({ api, onClick }: { api: HouseholdApi; onClick: 
       aria-label={live ? `Household ${api.household!.name}: ${STATUS_TEXT[api.status]}` : 'Share with household'}
     >
       <span className="dot" aria-hidden="true" />
-      <span aria-hidden="true">👥</span>
+      <Icon name="users" />
     </button>
   );
 }

@@ -15,7 +15,7 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
   await page.locator('.list-bar').click();
   await page.getByLabel('New list name').fill('Party');
   await page.getByRole('button', { name: '+ New' }).click();
-  await page.locator('.list-created').getByRole('button', { name: '＋ Add items' }).click();
+  await page.locator('.list-created').getByRole('button', { name: 'Add items' }).click();
   await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.list-bar-name')).toHaveText('Party');
   await expect(page.locator('.also-list')).toContainText('Add to “Party”');

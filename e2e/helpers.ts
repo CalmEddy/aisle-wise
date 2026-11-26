@@ -78,7 +78,7 @@ export async function enterBuildMode(page: Page) {
 export async function newStore(page: Page, name: string, opts?: { autoBuild?: boolean }) {
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill(name);
-  await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('button', { name: 'Here', exact: true }).click();
   await page.getByRole('button', { name: 'More layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
@@ -155,8 +155,8 @@ export async function describeAisle(page: Page, aisle: string, opts: { side?: 'L
   await openDescribe(page);
   const panel = page.locator('.where-panel');
   await panel.getByRole('tab', { name: 'Aisle' }).click();
-  if (opts.temp === 'frozen') await panel.getByRole('button', { name: '❄ Freezer' }).click();
-  else if (opts.temp === 'chilled') await panel.getByRole('button', { name: '🧊 Fridge' }).click();
+  if (opts.temp === 'frozen') await panel.getByRole('button', { name: 'Freezer', exact: true }).click();
+  else if (opts.temp === 'chilled') await panel.getByRole('button', { name: 'Fridge', exact: true }).click();
   else if (opts.temp === 'shelf') await panel.getByRole('button', { name: 'Shelf', exact: true }).click();
   await panel.getByLabel('Aisle number').fill(aisle);
   if (opts.side === 'R') await panel.getByRole('button', { name: 'Right →' }).click();
@@ -181,8 +181,8 @@ export async function describeWall(page: Page, wall: 'Left' | 'Back' | 'Right' |
   const wallLabel = wall === 'Left' ? '← Left' : wall === 'Back' ? '↑ Back' : wall === 'Right' ? 'Right →' : '↓ Front';
   await panel.getByRole('button', { name: wallLabel }).click();
   if (part) await panel.getByRole('button', { name: part, exact: true }).click();
-  if (temp === 'frozen') await panel.getByRole('button', { name: '❄ Freezer' }).click();
-  if (temp === 'chilled') await panel.getByRole('button', { name: '🧊 Fridge' }).click();
+  if (temp === 'frozen') await panel.getByRole('button', { name: 'Freezer', exact: true }).click();
+  if (temp === 'chilled') await panel.getByRole('button', { name: 'Fridge', exact: true }).click();
   await panel.getByRole('button', { name: /^Save/ }).click();
 }
 
