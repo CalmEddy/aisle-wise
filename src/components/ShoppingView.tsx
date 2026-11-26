@@ -803,19 +803,17 @@ export function ShoppingView(props: Props) {
     const snapshot = setAvailable(item, available);
     setToast({
       snapshot, added: [], mode: 'list',
-      note: available ? `${item.name} is back on your route` : `${item.name} marked not available at ${layout.name}`,
+      note: available ? `${item.name} is back on your route` : `${item.name} marked not sold at ${layout.name}`,
     });
   }
 
   // The add window (opened with + on the toggle strip). When set to a list id
   // other than the one being shopped, items go onto that list instead.
-  const [addingFor, setAddingFor] = useState<string>();
-  const adding = addingFor !== undefined;
 
   // The banner fades after a while, unless it's asking a question or a window is open over it
   // (place picker, lists, add items): then its Undo is still there when you come back.
   const asking = toast?.added.some((a) => a.conflict);
-  const covered = !!picking || props.listsOpen || adding;
+  const covered = !!picking || props.listsOpen;
   useEffect(() => {
     if (!toast || covered || asking) return;
     const t = setTimeout(() => setToast(null), 7000);
@@ -940,7 +938,7 @@ export function ShoppingView(props: Props) {
     }
     for (const item of unplaced) {
       const id = productFor(item, catalog)?.categoryId;
-      rows.push({ item, sub: withCat('No location yet', item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
+      rows.push({ item, sub: withCat('No place yet', item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
     }
     rows.sort((a, b) => {
       // Group toggle (or sort-by-category): keep categories together in walking order.
@@ -991,7 +989,7 @@ export function ShoppingView(props: Props) {
 
   /** Adds from the add window. Things put in the cart may ask where they are, so those show a toast. */
   function addNames(names: string[], mode: 'list' | 'cart'): QuickAddResult | undefined {
-    const targetList = addingFor ?? props.lists.current;
+    const targetList = props.lists.current;
     if (building && mode === 'cart' && targetList === props.lists.current) {
       // Build mode: into the cart where you're standing (one at a time: the map builds around it).
       const outcome = props.build.pickUpHere(names[names.length - 1]);
@@ -1346,7 +1344,7 @@ export function ShoppingView(props: Props) {
   };
   function clearOneWhere(item: ListItem) {
     const snapshot = props.where.clearWhere([item]);
-    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });
+    setToast({ snapshot, added: [], mode: 'list', note: `Forgot where ${item.name} is at ${layout.name}.` });
   }
 
   /** Takes items off the list, with Undo. */
@@ -1443,8 +1441,6 @@ export function ShoppingView(props: Props) {
   // While placing an item, always show the whole map so taps hit shelves clearly on a phone.
   // Wide side-by-side uses the full map in the map column (strip is phone-only when map is shown).
   const mapStrip = !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
-  /** Sheet only when adding onto a list other than the one being shopped (from the lists picker). */
-  const addingOther = addingFor !== undefined && addingFor !== props.lists.current;
 
   const toolInfo = TOOLS.find((t) => t.id === tool)!;
   const toolTitle = editing ? (editing.label || (editing.kind === 'shelf' ? 'Shelf' : 'Area'))
@@ -1713,7 +1709,7 @@ export function ShoppingView(props: Props) {
         {notSold.length > 0 && (
           <details className="card unavailable-section">
             <summary className="off-head">
-              <span>Not available at {layout.name} ({notSold.length})</span>
+              <span>Not sold at {layout.name} ({notSold.length})</span>
               {notSold.length > 1 && (
                 <button
                   type="button"
@@ -1726,7 +1722,7 @@ export function ShoppingView(props: Props) {
             {notSold.map((item) => (
               <div className="row unavailable" key={item.id}>
                 <span className="name">{item.name}</span>
-                <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
+                <button className="btn" onClick={() => markAvailable(item, true)}>Sold here</button>
                 <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}><Icon name="x" /></button>
               </div>
             ))}
@@ -1780,11 +1776,9 @@ export function ShoppingView(props: Props) {
     <>
       {props.listsOpen && role === 'shop' && (
         <ListsSheet
-          mode="trip"
           lists={props.lists}
           onClose={props.onListsClose}
           onCombined={(note, snapshot) => setToast({ snapshot, added: [], mode: 'list', note })}
-          onAddItems={(id) => { props.onListsClose(); setAddingFor(id); }}
         />
       )}
       {whereFor && (
@@ -1805,21 +1799,6 @@ export function ShoppingView(props: Props) {
           onStopAsking={() => { props.where.setAsk(false); setWhereFor(null); setReviewing(false); }}
         />
       )}
-      {addingOther && (
-        <AddItemsSheet
-          listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? 'Shopping list'}
-          catalog={catalog}
-          onList={addingFor ? props.onListIds(addingFor) : onList}
-          inCart={new Set(items.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
-          hereLabel={undefined}
-          whereText={(p) => whereText(p, layout, catalog)}
-          iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
-          onAdd={addNames}
-          onUndo={props.undo}
-          onClose={() => setAddingFor(undefined)}
-        />
-      )}
-
       {!building && role === 'stores' && (
         <div className="stores-setup">
           <EmptyArt name="map" />
@@ -2273,7 +2252,7 @@ export function ShoppingView(props: Props) {
           }}
         />
       )}
-      {placing && !whereBarFor && !whereFor && !adding && !listOpen && !menuFor && (!askAtCheckout || tripDone) && (
+      {placing && !whereBarFor && !whereFor && !listOpen && !menuFor && (!askAtCheckout || tripDone) && (
         <PlacementCard
           key={placing.ref}
           layout={layout}
@@ -2314,7 +2293,7 @@ export function ShoppingView(props: Props) {
           onClose={() => setListOpen(false)}
         />
       )}
-      {toast && !drag && !note && !whereBarFor && !(placing && !tripDone && !whereFor && !adding && !listOpen && !menuFor && !askAtCheckout) && (
+      {toast && !drag && !note && !whereBarFor && !(placing && !tripDone && !whereFor && !listOpen && !menuFor && !askAtCheckout) && (
         <ToastBar
           toast={toast}
           layout={layout}
@@ -2334,9 +2313,9 @@ export function ShoppingView(props: Props) {
           item={menuFor}
           where={(() => {
             const p = productFor(menuFor, catalog);
-            if (!p) return 'No location yet';
+            if (!p) return 'No place yet';
             const loc = locateProduct(p, layout, catalog);
-            if (loc.kind === 'not-sold') return `Not available at ${layout.name}`;
+            if (loc.kind === 'not-sold') return `Not sold at ${layout.name}`;
             return whereText(p, layout, catalog);
           })()}
           storeName={layout.name}
@@ -2426,7 +2405,7 @@ export function ShoppingView(props: Props) {
               markAvailable({ id: '', name: product.name, done: false, productId: product.id }, false);
             }
             setPicking(null);
-            }}>Not available here</button>
+            }}>Not sold here</button>
           </>}
           onCancel={() => setPicking(null)}
         />

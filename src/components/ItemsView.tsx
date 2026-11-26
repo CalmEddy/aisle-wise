@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { inWalkingOrder, orderOf } from '../core/taxonomy';
-import type { QuickAddResult, Snapshot } from '../App';
+import type { Snapshot } from '../App';
 import { formatPrice, itemMatches, parsePrice, quickAddItems, type ItemFilter } from '../core/items';
 import { normalize, type Catalog } from '../core/catalog';
 import { ICON_CHOICES, PALETTE, categoryLook } from '../core/categories';
@@ -14,9 +14,7 @@ import { autoWhereText, whereText } from './whereText';
 import { SpotPicker } from './SpotPicker';
 import { CategoryPicker } from './CategoryPicker';
 import { Icon } from './Icon';
-import { DisplayToggles, ItemsSortToggle } from './DisplayToggles';
-import { ListsSheet, type ListsApi } from './ListsSheet';
-import { AddItemsSheet } from './AddItemsSheet';
+import { ItemsViewToggle } from './DisplayToggles';
 import { InlinePrice, QtyStepper, type ItemPatch } from './ItemRows';
 import { SwipeRow } from './SwipeRow';
 import { WherePanel } from './WherePanel';
@@ -54,90 +52,17 @@ interface Props {
   undo: (s: Snapshot) => void;
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
-  listsOpen: boolean;
-  onListsClose: () => void;
-  lists: ListsApi;
-  /** Product ids still to buy on a given list (for AddItemsSheet targeting). */
-  onListIds: (listId: string) => Set<string>;
-  /** Add names onto any list without forcing a switch. */
-  quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart') => QuickAddResult;
-  /** Things bought before (Setup list-making chips). */
 }
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
 export function ItemsView(props: Props) {
   const [tab, setTab] = useState<'items' | 'categories'>('items');
-  /** Stock a (possibly non-active) list from ListsSheet without switching the trip. */
-  const [addingFor, setAddingFor] = useState<string>();
-  const [listToast, setListToast] = useState<{ text: string; snapshot: Snapshot } | null>(null);
-  const [localListsOpen, setLocalListsOpen] = useState(false);
-  const listsOpen = props.listsOpen || localListsOpen;
-
-  useEffect(() => {
-    if (!listToast) return;
-    const t = setTimeout(() => setListToast(null), 7000);
-    return () => clearTimeout(t);
-  }, [listToast]);
-
-  const lookOf = useMemo(() => {
-    const m = new Map(props.catalog.categories.map((c, i) => [c.id, categoryLook(c, i)]));
-    return (id?: string) => (id ? m.get(id) : undefined);
-  }, [props.catalog.categories]);
-
-  function closeLists() {
-    setLocalListsOpen(false);
-    props.onListsClose();
-  }
-
-  const toBuy = props.lists.counts.get(props.lists.current) ?? 0;
 
   return (
     <>
-      {listsOpen && (
-        <ListsSheet
-          mode="manage"
-          lists={props.lists}
-          onClose={closeLists}
-          onRemoved={(note, snap) => setListToast({ text: note, snapshot: snap })}
-          onCleared={(note, snap) => setListToast({ text: note, snapshot: snap })}
-          onDuplicated={(note, snap) => setListToast({ text: note, snapshot: snap })}
-          onAddItems={(id) => { closeLists(); setAddingFor(id); }}
-        />
-      )}
-      {addingFor && (
-        <AddItemsSheet
-          listName={props.lists.all.find((l) => l.id === addingFor)?.name ?? props.listName}
-          catalog={props.catalog}
-          onList={props.onListIds(addingFor)}
-          inCart={props.inCartIds}
-          whereText={(p) => whereText(p, props.layout, props.catalog)}
-          iconOf={(id) => lookOf(id)?.icon}
-          onAdd={(names, mode) => props.quickAddTo(addingFor, names, mode)}
-          onUndo={props.undo}
-          onClose={() => setAddingFor(undefined)}
-        />
-      )}
-      {listToast && (
-        <div className="toast" role="status">
-          <span className="toast-text">{listToast.text}</span>
-          <button className="toast-btn" onClick={() => { props.undo(listToast.snapshot); setListToast(null); }}>Undo</button>
-          <button className="icon" onClick={() => setListToast(null)} aria-label="Dismiss"><Icon name="x" /></button>
-        </div>
-      )}
-      <button
-        type="button"
-        className="list-bar items-list-target"
-        onClick={() => setLocalListsOpen(true)}
-        aria-label={`List: ${props.listName}${toBuy ? `, ${toBuy} to buy` : ''}. Change list`}
-      >
-        <Icon name="notebook-pen" />
-        <span className="list-bar-name">{props.listName}</span>
-        {toBuy > 0 && <span className="list-bar-count" aria-hidden="true">{toBuy}</span>}
-        <Icon name="chevron-down" className="chev" />
-      </button>
       <div className="segmented" role="tablist">
-        <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Grocery items</button>
+        <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Items</button>
         <button className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}>Categories</button>
       </div>
       {tab === 'items' ? <ProductList {...props} /> : <CategoryList {...props} />}
@@ -484,56 +409,38 @@ function ProductList({
           >
             <Icon name={voice.listening ? 'square' : 'mic'} size="1.3rem" filled={voice.listening} />
           </button>
-          <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : '+ Add'}</button>
+          <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : 'Add'}</button>
         </form>
         <div className="items-sub">
           <label className="also-list">
             <input type="checkbox" checked={alsoList} onChange={(e) => setAlsoList(e.target.checked)} />
             <span>Add to “{listName}”</span>
           </label>
-          <span className="muted small hint">
-            {voice.error
-              ? voice.error
-              : voice.listening
-                ? 'Listening… pause to fill the box, then pick or add.'
-                : q.includes(',')
-                  ? 'Enter adds each name.'
-                  : q
-                    ? (catalog.exact(q) ? 'Already in your items — open or add below.' : `Enter adds “${q}”.`)
-                    : selecting
-                      ? 'Tap items to select.'
-                      : 'Swipe an item for shortcuts.'}
-          </span>
+          {(voice.error || voice.listening || q || selecting) && (
+            <span className="muted small hint">
+              {voice.error
+                ? voice.error
+                : voice.listening
+                  ? 'Listening… pause to fill the box, then pick or add.'
+                  : q.includes(',')
+                    ? 'Enter adds each name.'
+                    : q
+                      ? (catalog.exact(q) ? 'Already in your items — open or add below.' : `Enter adds “${q}”.`)
+                      : 'Tap items to select.'}
+            </span>
+          )}
           <button className={`chip select-toggle${selecting ? ' active' : ''}`} aria-pressed={selecting} onClick={() => startSelecting(!selecting)}>
             {selecting ? 'Done' : <><Icon name="square-check-big" /> Select</>}
           </button>
         </div>
-        <ItemsSortToggle display={display} setDisplay={setDisplay} />
-        <DisplayToggles
-          display={display}
-          setDisplay={setDisplay}
-          show={['itemsGroupByCategory', 'listQty', 'listPrice']}
-          offByDefault={['listPrice']}
-        />
+        <ItemsViewToggle display={display} setDisplay={setDisplay} />
         <div className="chips filters" role="group" aria-label="Show">
-          {FILTERS.map((f) => (
+          {FILTERS.filter((f) => f.id === 'all' || f.id === filter || (counts.get(f.id) ?? 0) > 0).map((f) => (
             <button key={f.id} className={filter === f.id ? 'chip active' : 'chip'} aria-pressed={filter === f.id} onClick={() => setFilter(f.id)}>
               {f.id === 'list' ? `On “${listName}”` : f.label}{f.id !== 'all' && <span className="count"> {counts.get(f.id)}</span>}
             </button>
           ))}
         </div>
-        {groupByCategory && groups.length > 1 && (
-          <div className="chips jump" role="navigation" aria-label="Jump to category">
-            {groups.map((g) => (
-              <button key={g.id || 'none'} className="chip" onClick={() => {
-                setOpenGroups((prev) => new Set(prev).add(g.id));
-                requestAnimationFrame(() => scrollTo(document.getElementById(`grp-${g.id || 'none'}`)));
-              }}>
-                <span aria-hidden="true">{lookOf(g.id)?.icon ?? '·'}</span> {g.name}
-              </button>
-            ))}
-          </div>
-        )}
       </div>
 
       {recentProducts.length > 0 && !searching && filter === 'all' && (
@@ -1032,7 +939,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
     };
     if (answer) next.mapClues = { ...p.mapClues, [l.id]: answer };
     return next;
-  }, `${product.name}: location cleared at ${l.name}.`);
+  }, `${product.name}: place cleared at ${l.name}.`);
 
   const storeRow = (l: StoreLayout) => {
     const sold = !product.notAt?.includes(l.id);
@@ -1084,7 +991,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
                 if (v === '__unknown__') clearLocation(l);
                 else setLocation(l, v);
               }}
-              aria-label={`Location at ${l.name}`}
+              aria-label={`Place at ${l.name}`}
             >
               <option value="">Automatic: {autoText}</option>
               <option value="__unknown__">Unknown — no place yet</option>
@@ -1095,7 +1002,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
             </select>
             <button type="button" className="btn" onClick={() => setMapFor(l)}><Icon name="map-pin" /> Map</button>
             {!unknown && (
-              <button type="button" className="btn" onClick={() => clearLocation(l)} aria-label={`Clear location of ${product.name} at ${l.name}`}>
+              <button type="button" className="btn" onClick={() => clearLocation(l)} aria-label={`Clear place of ${product.name} at ${l.name}`}>
                 Clear
               </button>
             )}

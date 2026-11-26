@@ -36,7 +36,7 @@ test('after reparent, Automatic follows the new top-level category (or says no s
   await page.getByLabel('Search or add grocery items').fill('Peanut butter');
   await page.locator('.item-entry .product-row', { hasText: 'Peanut butter' }).click();
   await expect(page.locator('.item-editor')).toBeVisible();
-  const loc = page.getByLabel(/Location at/);
+  const loc = page.getByLabel(/Place at/);
   const text = await loc.locator('option[value=""]').textContent();
   expect(text ?? '').toMatch(/Condiments|Automatic:/);
   expect(text ?? '').not.toMatch(/Cereal aisle|Breakfast/i);

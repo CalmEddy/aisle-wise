@@ -24,7 +24,7 @@ export async function goTab(page: Page, tab: 'Shop' | 'Lists' | 'Items' | 'Store
   await page.getByRole('tab', { name: tab, exact: true }).click();
 }
 
-/** Turns on developer-only controls (e.g. the per-item "Clear where" button). */
+/** Turns on developer-only controls (e.g. the per-item "Forget where" button). */
 export async function enableDebug(page: Page) {
   await page.evaluate(() => localStorage.setItem('aw.debug', 'true'));
   await page.reload();
@@ -147,7 +147,7 @@ export const placeSheet = (page: Page, name?: string) =>
 
 /** Opens Describe… on the current place sheet (WherePanel). */
 export async function openDescribe(page: Page, itemName?: string) {
-  await placeSheet(page, itemName).getByRole('button', { name: 'Describe…' }).click();
+  await placeSheet(page, itemName).getByRole('button', { name: 'Aisle / department…' }).click();
 }
 
 /** Answer via Describe… → Aisle tab (number + optional side/temp). */

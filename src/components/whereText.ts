@@ -34,7 +34,7 @@ export function autoWhereText(loc: Location, catalog: Catalog): string {
   if (loc.kind === 'spot') return loc.spot.label;
   if (loc.kind === 'clue') return describeClue(loc.clue);
   if (loc.kind === 'guess') return noShelfText(loc.categoryId, catalog);
-  if (loc.kind === 'not-sold') return 'Not available here';
+  if (loc.kind === 'not-sold') return 'Not sold here';
   return 'nowhere yet – pick a place';
 }
 
@@ -42,7 +42,7 @@ export function autoWhereText(loc: Location, catalog: Catalog): string {
 export function whereText(product: Product, layout: StoreLayout, catalog: Catalog): string {
   const loc = locateProduct(product, layout, catalog);
   if (loc.kind === 'spot') return loc.spot.label;
-  if (loc.kind === 'not-sold') return 'Not available here';
+  if (loc.kind === 'not-sold') return 'Not sold here';
   if (loc.kind === 'clue') return describeClue(loc.clue);
   if (loc.kind === 'guess') {
     // Efficient: name the missing top shelf (Automatic / editor expand on the rest).

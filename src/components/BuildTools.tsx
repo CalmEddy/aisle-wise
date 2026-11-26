@@ -370,7 +370,7 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
           {arrow('down')}
         </div>
         <div className="brush-tools">
-          <button className="btn" disabled={!canBack} onClick={onBack}><Icon name="undo-2" /> Back up</button>
+          <button className="btn" disabled={!canBack} onClick={onBack}><Icon name="undo-2" /> Undo step</button>
           <span className="muted small">Move 1 square, no painting:</span>
           <div className="nudges">
             {(['left', 'up', 'down', 'right'] as const).map((d) => (

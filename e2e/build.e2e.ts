@@ -43,7 +43,7 @@ test('aisle brush: paints both sides with categories and an aisle label, and bac
   expect(l.places.some((p: any) => p.categories.includes('breakfast_cereal'))).toBe(true);
   await expect(page.locator('.aisle-label text')).toHaveText(['Aisle 1']);
   const before = l.places.map((p: any) => p.length).join();
-  await page.getByRole('button', { name: 'Back up' }).click();
+  await page.getByRole('button', { name: 'Undo step' }).click();
   l = await layout(page, 'New store');
   expect(l.places.map((p: any) => p.length).join()).not.toBe(before);
   ok();

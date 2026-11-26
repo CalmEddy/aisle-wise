@@ -63,11 +63,11 @@ test('ask later, then review before you go', async ({ page }) => {
   const list = page.getByRole('dialog', { name: 'Where were these?' });
   await expect(list.locator('.place-on-map')).toHaveCount(1);
   await expect(list).toContainText('Bread');
-  await list.getByRole('button', { name: 'Describe…' }).click();
+  await list.getByRole('button', { name: 'Aisle / department…' }).click();
   await page.locator('.where-panel').getByRole('tab', { name: 'Department' }).click();
   await page.locator('.where-panel').getByRole('button', { name: /Bakery/ }).click();
   await expect(list.locator('.place-on-map')).toContainText('Jam');
-  await list.getByRole('button', { name: 'Describe…' }).click();
+  await list.getByRole('button', { name: 'Aisle / department…' }).click();
   await page.getByRole('tab', { name: 'End-cap' }).click();
   await page.getByLabel('Aisle number').fill('4');
   await page.getByRole('button', { name: 'Front end' }).click();
@@ -160,12 +160,12 @@ test('the map already has its kind: quiet-saves the spot; or all at checkout in 
   await page.locator('.trip-done-card').getByRole('button', { name: /Say where 3 things were/ }).click();
   await expect(list.locator('.place-on-map')).toHaveCount(1);
   await expect(list).toContainText('Jam');
-  await list.getByRole('button', { name: 'Describe…' }).click();
+  await list.getByRole('button', { name: 'Aisle / department…' }).click();
   await page.locator('.where-panel').getByRole('tab', { name: 'Aisle' }).click();
   await page.getByLabel('Aisle number').fill('6');
   await page.getByRole('button', { name: /^Save/ }).click();
   await expect(list.locator('.place-on-map')).toContainText('Tea');
-  await list.getByRole('button', { name: 'Describe…' }).click();
+  await list.getByRole('button', { name: 'Aisle / department…' }).click();
   await page.locator('.where-panel').getByRole('tab', { name: 'Aisle' }).click();
   await page.getByLabel('Aisle number').fill('7');
   await page.getByRole('button', { name: /^Save/ }).click();
@@ -229,7 +229,7 @@ test('a second table said like the first: "Another one" keeps them apart', async
   ok();
 });
 
-test('(testing) clear where one item is, or every item on the list, with Undo', async ({ page }) => {
+test('(testing) forget where one item is, or every item on the list, with Undo', async ({ page }) => {
   const ok = noPageErrors(page);
   await enableDebug(page);
   await addItems(page, 'Cereal, Pasta, Chips, Granola');
@@ -240,12 +240,12 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   expect(Object.keys(await clues(page)).sort()).toEqual(['Cereal', 'Pasta']);
   await page.locator('details.done summary').click();
   const answered = async () => Object.entries(await clues(page)).filter(([, c]) => c).map(([n]) => n).sort();
-  await page.getByRole('button', { name: 'Clear where Cereal is' }).click();
+  await page.getByRole('button', { name: 'Forget where Cereal is' }).click();
   await expect.poll(answered).toEqual(['Pasta']);
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect.poll(answered).toEqual(['Cereal', 'Pasta']);
-  await page.getByRole('button', { name: 'Clear where Granola is' }).click();
-  await expect(page.getByRole('button', { name: 'Clear where Granola is' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Forget where Granola is' }).click();
+  await expect(page.getByRole('button', { name: 'Forget where Granola is' })).toHaveCount(0);
   await tick(page, 'Granola');
   const granolaPlaced = page.locator('.toast').filter({ hasText: /Granola: saved at/i })
     .or(placeSheet(page, 'Granola'));
@@ -258,9 +258,9 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   const places = async () => JSON.stringify((await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places);
   const before = await places();
   await toggleListOptions(page);
-  await page.getByRole('button', { name: 'Clear all locations at this store' }).click();
-  await page.getByRole('button', { name: 'Clear all', exact: true }).click();
-  await expect(page.locator('.toast.top')).toContainText('Cleared where');
+  await page.getByRole('button', { name: 'Forget where items are at this store' }).click();
+  await page.getByRole('button', { name: 'Forget all', exact: true }).click();
+  await expect(page.locator('.toast.top')).toContainText('Forgot where');
   await expect.poll(answered).toEqual([]);
   await page.waitForTimeout(300);
   expect(await places()).toBe(before);

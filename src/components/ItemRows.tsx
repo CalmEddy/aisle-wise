@@ -162,7 +162,7 @@ export function ItemRows({ removable, items, onToggle, onRemove, onMenu, drag, d
   big?: boolean;
   /**
    * Shopping rows: checkbox, icon, editable name, qty stepper, ⋯.
-   * Swipe right to check off, left for Not here / Remove.
+   * Swipe right to check off, left for Not sold here / Remove.
    */
   simple?: boolean;
   /** Setup → Lists: edit without checking into the cart. */
@@ -188,7 +188,7 @@ export function ItemRows({ removable, items, onToggle, onRemove, onMenu, drag, d
   // The one-time swipe nudge plays on the first row only, and only if it has never played.
   const [showHint] = useState(() => !swipeHintSeen());
   const clearBtn = (item: ListItem) => debug && onClearWhere && clearable?.(item) && (
-    <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)"><Icon name="x" /></button>
+    <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Forget where ${item.name} is`} title="Forget its place here (testing)"><Icon name="x" /></button>
   );
   const whereOf = (item: ListItem) => (showLocation ? subOf?.(item) : undefined);
   const badges = (item: ListItem) => {
@@ -243,7 +243,7 @@ export function ItemRows({ removable, items, onToggle, onRemove, onMenu, drag, d
               rightLabel={noCheck ? undefined : (item.done ? <><Icon name="undo-2" /> Back on the list</> : <><Icon name="check" /> Got it</>)}
               leftActions={(close) => (
                 <>
-                  {onNotHere && !item.done && <button className="swipe-btn sold" onClick={() => { close(); onNotHere(item); }}>Not here</button>}
+                  {onNotHere && !item.done && <button className="swipe-btn sold" onClick={() => { close(); onNotHere(item); }}>Not sold here</button>}
                   <button className="swipe-btn delete" onClick={() => { close(); onRemove(item); }}>Remove</button>
                 </>
               )}

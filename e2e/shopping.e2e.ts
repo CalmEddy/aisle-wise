@@ -89,7 +89,7 @@ test('trip done: summary, things to get elsewhere, clear the cart with undo', as
   await tick(page, 'Milk');
   await tick(page, 'Bread');
   await row(page, 'Saffron').getByRole('button', { name: /More options/ }).click();
-  await page.getByRole('button', { name: /Not available at/ }).click();
+  await page.getByRole('button', { name: /Not sold at/ }).click();
   const card = page.locator('.trip-done-card');
   await expect(card).toContainText('All done');
   await expect(card).toContainText('2 items in your cart');
@@ -194,10 +194,10 @@ test('Unplaced Items: place button opens the map for double-tap exact placement'
   ok();
 });
 
-test('Not available section is collapsible with a red outline', async ({ page }) => {
+test('Not sold section is collapsible with a red outline', async ({ page }) => {
   await addItems(page, 'Milk, Saffron threads');
   await row(page, 'Saffron').getByRole('button', { name: /More options/ }).click();
-  await page.getByRole('button', { name: /Not available at/ }).click();
+  await page.getByRole('button', { name: /Not sold at/ }).click();
   const section = page.locator('details.unavailable-section');
   await expect(section).toBeVisible();
   await expect(section).not.toHaveAttribute('open', '');
@@ -219,13 +219,13 @@ test('row buttons have a 44px touch area', async ({ page }) => {
 
 test('List options: Edit map row, danger zone asks before clearing, no debug controls', async ({ page }) => {
   await addItems(page, 'apples');
-  await expect(page.getByRole('button', { name: /Clear where/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Forget where/ })).toHaveCount(0);
   await toggleListOptions(page);
   await expect(page.getByRole('button', { name: 'Edit map', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Clear all locations at this store' }).click();
-  await expect(page.getByRole('button', { name: 'Clear all', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Forget where items are at this store' }).click();
+  await expect(page.getByRole('button', { name: 'Forget all', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await expect(page.getByRole('button', { name: 'Clear all locations at this store' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Forget where items are at this store' })).toBeVisible();
 });
 
 test('a Shop row has one ⋯ button; pin and remove live in its menu', async ({ page }) => {

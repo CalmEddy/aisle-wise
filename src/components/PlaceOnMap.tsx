@@ -141,7 +141,7 @@ export function PlaceOnMap({
         {standing
           ? 'Pick what to build or save where you’re standing.'
           : !hasPlaces
-            ? 'No shelves on the map yet — tap the floor twice to place here, or use Describe…'
+            ? 'No shelves on the map yet — tap the floor twice to place here, or use Aisle / department…'
             : pending
               ? <>Selected <b>{pending.label || 'this place'}</b> — tap again to confirm.</>
               : pendingAt
@@ -195,7 +195,7 @@ export function PlaceOnMap({
               </button>
             )}
             {onDescribe && (
-              <button type="button" className="btn" onClick={onDescribe}>Describe…</button>
+              <button type="button" className="btn" onClick={onDescribe}>Aisle / department…</button>
             )}
             {onAskAtCheckout && (
               <button type="button" className="link place-on-map-checkout" onClick={onAskAtCheckout}>
