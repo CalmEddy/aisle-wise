@@ -52,4 +52,3 @@ export function whereText(product: Product, layout: StoreLayout, catalog: Catalo
   return (top && catalog.categoryById.get(top)?.name) ?? 'No location yet';
 }
 
-export const capitalize = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);

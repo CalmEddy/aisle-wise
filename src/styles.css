@@ -66,7 +66,6 @@ button { cursor: pointer; }
 .top h1 { font-size: 1.25rem; margin: 0; white-space: nowrap; }
 .top .title { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
 .title-line, .title-sub { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.title-line .household-pill { margin-top: 0; }
 .list-pick-hero {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
   background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
@@ -85,29 +84,18 @@ button { cursor: pointer; }
 }
 .list-opts-menu .toggles { flex-wrap: wrap; }
 .list-opts-menu .trip-include.in-header { margin-top: 6px; border: 0; padding: 0; background: none; border-radius: 0; }
-.store-name, .store-pick { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
+.store-pick { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
 .top p { margin: 0; font-size: 0.85rem; }
 .store-pick { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.85rem; }
 .store-pick.quiet { font-size: var(--text-min); font-weight: 500; opacity: 0.85; max-width: 85%; }
 .store-pick.setup-store { font-weight: 700; font-size: 1rem; color: var(--text); max-width: 70%; opacity: 1; }
-.setup-actions { align-items: center; }
 .progress { font-size: 1.1rem; color: var(--muted); padding-top: 6px; }
 .progress strong { color: var(--accent); font-size: 1.4rem; }
 .tabs { display: flex; background: var(--line); border-radius: 12px; padding: 3px; margin-bottom: 8px; }
 .tabs button { flex: 1; border: 0; background: none; padding: 6px; border-radius: 9px; font-weight: 600; color: var(--muted); font-size: 0.9rem; }
 .tabs button.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px #0002; }
-.setup-tabs { margin-top: -4px; }
-.setup-tabs button { font-size: 0.8rem; padding: 6px 4px; }
 
 /* Shop trip chrome */
-.trip-head { margin-bottom: 8px; }
-.trip-list-title {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  background: var(--surface); border: 1px solid var(--line);
-  border-radius: 12px; padding: 8px 12px; text-align: left; color: var(--text);
-  font: inherit; font-weight: 700; font-size: 1.05rem; min-height: 44px;
-}
-.trip-list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .trip-include { margin-top: 4px; border: 1px solid var(--line); border-radius: 10px; padding: 2px 10px 6px; background: var(--surface); }
 .trip-include summary { cursor: pointer; font-weight: 600; font-size: 0.85rem; padding: 6px 0; min-height: 40px; display: flex; align-items: center; }
 .trip-include-list { list-style: none; margin: 0; padding: 0; }
@@ -140,8 +128,6 @@ button { cursor: pointer; }
 }
 /* Phone: keep add-at-bottom close to the list without sitting between map and items. */
 .shop-list-col > main { margin-bottom: 0; }
-.add-compose.with-tools { display: flex; align-items: stretch; gap: 6px; }
-.add-compose.with-tools .add-row { flex: 1; min-width: 0; }
 .add-tools {
   display: flex; align-items: center; gap: 4px; flex: none;
   padding: 0 0 0 2px;
@@ -177,7 +163,6 @@ button { cursor: pointer; }
 .map-gridline { fill: none; stroke: var(--line); stroke-width: 0.06; }
 .place .place-bg { fill: var(--walk); }
 .place.area .place-bg { fill: var(--area); stroke: var(--line); stroke-width: 0.1; }
-.place-shelf { fill: var(--shelf); }
 .place-label { fill: var(--muted); font-weight: 600; pointer-events: none; user-select: none; }
 .place.drop-over .place-bg { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 0.35; }
 .place.selected .place-bg { stroke: var(--you); stroke-width: 0.35; stroke-dasharray: 0.8 0.5; }
@@ -205,10 +190,6 @@ button { cursor: pointer; }
 }
 .map-marker rect { fill: var(--surface); stroke: var(--muted); stroke-width: 0.15; }
 .map-marker text { font-size: 1.05px; font-weight: 700; fill: var(--muted); pointer-events: none; }
-.map-stop circle { fill: var(--surface); stroke: var(--accent); stroke-width: 0.3; }
-.map-stop text { font-size: 1.4px; font-weight: 700; fill: var(--accent); pointer-events: none; }
-.map-stop.next circle { fill: var(--accent); }
-.map-stop.next text { fill: #fff; }
 .map-you { pointer-events: none; }
 .map-you circle { fill: var(--you); transition: cx 0.4s, cy 0.4s; }
 .map-you .pulse { opacity: 0.25; animation: pulse 1.8s ease-out infinite; transform-box: fill-box; transform-origin: center; }
@@ -227,15 +208,8 @@ button { cursor: pointer; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; }
 .card h3 { margin: 0 0 4px; font-size: 1rem; }
 .card.drop-over { outline: 3px solid var(--accent); outline-offset: -1px; }
-.next-card { border: 2px solid var(--accent); background: var(--accent-soft); }
 .stop-head { display: flex; align-items: center; gap: 10px; }
 .stop-head h2, .stop-head h3 { margin: 0; font-size: 1rem; }
-.next-card h2 { font-size: 1.15rem; }
-.badge { background: var(--accent); color: #fff; font-size: 0.75rem; font-weight: 700; padding: 3px 8px; border-radius: 6px; text-transform: uppercase; }
-.num {
-  width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--accent); color: var(--accent);
-  display: grid; place-items: center; font-size: 0.8rem; font-weight: 700; flex: none;
-}
 
 .items { list-style: none; margin: 6px 0 0; padding: 0; }
 .row { display: flex; align-items: center; gap: 8px; min-height: 44px; }
@@ -438,7 +412,6 @@ button { cursor: pointer; }
 
 /* Sharing */
 .top-right { display: flex; align-items: center; gap: 10px; }
-.share-btn { padding: 6px 12px; }
 .share-url { width: 100%; font-size: 0.85rem !important; color: var(--muted) !important; }
 .share-options { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
 .share-option { align-items: flex-start; padding: 8px 0; }
@@ -449,10 +422,6 @@ button { cursor: pointer; }
 .toast.top { bottom: auto; top: calc(env(safe-area-inset-top) + 12px); }
 
 /* Household / live sharing */
-.household-pill {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 3px 10px 3px 8px;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: var(--text-min); color: var(--muted);
-}
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
 .status-synced .dot { background: var(--accent); }
 .status-saving .dot, .status-connecting .dot { background: #e0b84a; }
@@ -473,7 +442,6 @@ button { cursor: pointer; }
 /* Exact spots */
 .map.tappable { cursor: crosshair; }
 .map.zoomed { height: 46vh; max-height: 420px; }
-.map-stop .map-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 0.12; }
 .map-preview circle { fill: none; stroke: var(--you); stroke-width: 0.3; }
 .map-preview .core { fill: var(--you); stroke: none; }
 .map.zoomed .place-label { opacity: 0.35; }
@@ -483,8 +451,6 @@ button { cursor: pointer; }
 .spot { border-radius: 10px; }
 .spot + .spot { border-top: 1px dashed var(--line); margin-top: 2px; padding-top: 2px; }
 .spot.drop-over { outline: 2px solid var(--accent); outline-offset: 2px; }
-.spot-detail { font-size: var(--text-min); color: var(--muted); margin: 6px 0 -4px 36px; }
-.next-card .spot-detail { color: var(--text); opacity: 0.7; }
 .spot-picker .map { margin: 6px 0; }
 .spot-choice { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 32px; font-size: 0.9rem; }
 .spot-choice .link { padding: 0; }
@@ -509,7 +475,6 @@ button { cursor: pointer; }
 .toggle[aria-pressed='true'] { border-color: var(--accent); color: var(--text); background: var(--accent-soft); font-weight: 600; }
 .toggle-group { display: inline-flex; align-items: center; gap: 3px; flex: none; margin-left: 2px; }
 .toggle-group-name { font-size: var(--text-min); font-weight: 600; color: var(--muted); margin-right: 1px; }
-.cat-icon { font-size: 1rem; width: 1.3em; text-align: center; flex: none; }
 
 /* Editor: category chips */
 .row.stock { min-height: 40px; gap: 2px; }
@@ -538,10 +503,6 @@ button { cursor: pointer; }
 .cat-list input:not([type='color']) { padding: 8px 6px; }
 
 /* Tap a place or section in the list to move the marker there */
-button.goto { background: none; border: 0; padding: 0; text-align: left; color: inherit; cursor: pointer; }
-button.goto:hover h2, button.goto:hover h3, button.spot-detail.goto:hover { text-decoration: underline; text-underline-offset: 3px; }
-button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-min); color: var(--muted); }
-.next-card button.spot-detail.goto { color: var(--text); }
 
 /* Colours in list: a soft wash of the category colour over the whole section. */
 .card.tinted {
@@ -773,8 +734,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 }
 .list-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-bar-count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
-.list-bar-others { color: var(--accent); font-weight: 600; font-size: var(--text-min); }
-.list-bar-more { color: var(--accent); font-size: 0.8rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .lists-sheet .lists { list-style: none; padding: 0; margin: 0 0 10px; }
 .lists-sheet .lists li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--line); }
@@ -793,7 +752,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
   font-size: var(--text-min); color: var(--muted); white-space: nowrap; padding: 4px 2px;
 }
 .lists-sheet .also-shop input { margin: 0; }
-.lists-sheet .also-shop-hint { margin: 0 0 6px; }
 .lists-sheet .list-row-menu { flex: 1 0 100%; display: flex; flex-direction: column; gap: 0; padding: 0 0 8px 28px; }
 .source-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 1px; }
 .source-badge {
@@ -844,10 +802,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 .side-choices .big-side { padding: 14px 8px; font-size: 1rem; }
 
 /* Compact header: household (👥 + status dot) and ⓘ beside the title */
-.household-pill { white-space: nowrap; }
-.title-line .household-pill { padding: 2px 8px; gap: 4px; }
-.info-btn { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 999px; width: 28px; height: 26px; padding: 0; font-size: 0.9rem; flex: none; }
-.info-btn[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .toggle { padding: 4px 9px; }
 .toggles { gap: 4px; }
 .toggle { padding: 4px 7px; }
@@ -866,24 +820,8 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 
 /* The route: one continuous list; each stop starts with a thin header and a
    category-coloured strip down its left edge. The next stop stays green. */
-.route-list { padding: 0; overflow: hidden; }
-.route-list .visit { border-left: 4px solid var(--cat, transparent); padding: 4px 10px 4px 8px; }
-.route-list .visit + .visit { border-top: 1px solid var(--line); }
-.route-list .visit.tinted { background: color-mix(in srgb, var(--cat) 9%, var(--surface)); }
-.route-list .visit.next-card { border-left-color: var(--accent); background: var(--accent-soft); }
-.route-list .visit.drop-over { outline: 2px solid var(--accent); outline-offset: -2px; }
-.route-list .stop-head { min-height: 28px; gap: 8px; }
-.route-list .stop-head h2, .route-list .stop-head h3 { font-size: 0.92rem; }
-.route-list .next-card h2 { font-size: 1rem; }
-.route-list .badge { font-size: 0.65rem; padding: 2px 6px; }
-.route-list .num { width: 20px; height: 20px; font-size: 0.72rem; }
-.route-list .count-pill { font-size: var(--text-min); }
-.route-list .items { margin-top: 0; }
-.route-list .spot.tinted { margin: 2px -4px 0; }
-.route-list .spot-detail { margin: 2px 0 -6px 36px; }
 
 /* Add button on the toggle strip, and the add window */
-.toggle.add-toggle { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 800; font-size: 1.15rem; min-width: 38px; padding: 2px 10px; }
 /* A question about something just added (e.g. from the add window) shows above windows. */
 .toast.over-windows { z-index: 45; }
 .add-backdrop { background: #0004; }
@@ -901,11 +839,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 .add-icon-cat { width: 1.5em; text-align: center; flex: none; }
 .added-strip { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; padding-top: 6px; margin-top: 4px; border-top: 1px solid var(--line); flex: none; }
 .added-strip .muted { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.added-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--accent-soft); font-size: 0.85rem; }
-.added-chip .link { padding: 0 6px; font-size: 0.8rem; }
 .empty .btn.primary { margin: 6px 0; }
-.route-list { margin-top: 6px; }
-.route-list .visit.next-card { border: 0; border-left: 4px solid var(--accent); }
 .brush-side .cat-picker input { padding: 6px 8px; font-size: 14px; margin-top: 4px; }
 .brush-side .cat-options { max-height: 180px; }
 
@@ -961,17 +895,10 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 .place-label.uncategorized { opacity: 0.55; font-style: italic; }
 
 /* A stop with one item: one line (number, item, where it is underneath) */
-.route-list .visit.single { display: flex; align-items: center; gap: 4px; padding: 0 10px 0 8px; }
-.route-list .visit.single .single-num { flex: none; width: 40px; display: grid; place-items: center; }
-.route-list .visit.single .single-body { flex: 1; min-width: 0; }
-.route-list .visit.single .items { margin: 0; }
-.route-list .visit.single .badge { font-size: 0.6rem; padding: 2px 4px; }
 
 /* Shopping rows: checkbox, icon, name and ⋯ only; swipe for the rest.
    The swipe's top layer takes the background of what it sits on. */
-.card, .route-list .visit { --row-bg: var(--surface); }
-.route-list .visit.tinted { --row-bg: color-mix(in srgb, var(--cat) 9%, var(--surface)); }
-.route-list .visit.next-card { --row-bg: var(--accent-soft); }
+.card{ --row-bg: var(--surface); }
 .spot.tinted, .row.tinted { --row-bg: color-mix(in srgb, var(--cat) 13%, var(--surface)); }
 .items .row .swipe { flex: 1; min-width: 0; border-radius: 8px; }
 .items .row .swipe-top { background: var(--row-bg, var(--surface)); }
@@ -990,8 +917,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 .row-inner .inline-price,
 .row-inner .inline-price-input { font-size: 0.8rem; padding: 4px 6px; min-width: 2.75rem; }
 .pinned-dot { font-size: 0.9rem; flex: none; }
-.route-list .spot-detail { margin: 6px 0 0 6px; position: relative; z-index: 1; }
-.route-list .spot.tinted { padding-top: 2px; }
 
 /* Map strip while shopping, and the view-settings menu */
 .map.strip { max-height: 150px; height: 150px; }
@@ -1076,7 +1001,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
   main { padding-bottom: 1.5rem; }
 }
 .view-menu { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 8px; margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
-.view-menu-lead { margin: 2px 0 4px; font-weight: 600; }
 .view-menu > .muted.small { overflow-wrap: anywhere; line-height: 1.35; }
 
 /* Store picker */
@@ -1336,8 +1260,6 @@ main { padding-bottom: min(48vh, 22rem); }
   padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); max-width: calc(100% - 4px);
 }
-.map-tools-title { font-size: var(--text-min); font-weight: 600; color: var(--muted); padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.map-tools-row { display: flex; gap: 4px; flex-wrap: wrap; }
 .map-tool {
   min-width: 36px; height: 36px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line);
   background: var(--bg); color: var(--text); font-size: 1.05rem; line-height: 1;
@@ -1355,18 +1277,11 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 
 /* ---- Quick bar: fridge/freezer switch and number buttons ---- */
 .where-bar-head { flex-wrap: wrap; }
-.where-bar-temp { display: inline-flex; gap: 4px; margin-left: auto; }
 .chip.mini { padding: 3px 8px; font-size: 0.85rem; min-height: 0; }
-.where-bar-pad-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.where-bar-pad-value { flex: 1; font-size: 1.1rem; }
-.where-bar-keys { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.where-bar-keys .key { padding: 10px 0; font-size: 1.1rem; }
 
 /* ---- "Where were these?" list (at checkout) ---- */
 .where-list { max-height: 88vh; overflow-y: auto; }
-.where-list .where-bar { position: static; transform: none; width: auto; max-width: none; margin: 0 0 10px; box-shadow: none; border-color: var(--line); }
 .where-list-mode { margin-top: 8px; }
-.where-bar-checkout { font-size: 0.85rem; padding: 4px 2px; }
 
 /* ---- The map editor: full screen, map first ---- */
 .build-screen {
@@ -1375,7 +1290,6 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 }
 .build-top { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .build-top .btn { padding: 7px 12px; }
-.build-top .btn.warn { color: #b45309; border-color: #f59e0b; }
 .build-top-name { flex: 1; min-width: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .build-map { position: relative; flex: 1; min-height: 0; overflow: hidden; touch-action: none; background: var(--floor); }
 .build-map .map-wrap { position: absolute; inset: 0; }
@@ -1431,9 +1345,6 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .pic-num { font-weight: 800; fill: var(--text); }
 .pairing-option.active .pic-num:not(.under) { fill: #fff; }
 .placement-dir { margin-bottom: 6px; }
-.where-bar-sections { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.where-bar-sections .key { min-width: 40px; padding: 8px 10px; font-weight: 700; }
-.where-bar-sections .key.active { background: var(--accent); color: #fff; }
 
 /* The departments screen: the store's walls as a box. */
 .dept-walls-sheet { max-height: 92vh; overflow-y: auto; }
@@ -1467,8 +1378,6 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .holds-list li > span:first-child { flex: 1; min-width: 0; }
 .btn.small { padding: 4px 10px; font-size: 0.85rem; }
 /* New store: what it starts as. */
-.template-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-.template-preview { max-height: 40vh; overflow: hidden; }
 .template-gallery { max-height: min(92vh, 720px); overflow: auto; }
 .template-gallery-grid {
   display: grid;
@@ -1529,7 +1438,6 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .row label, .row .name { min-width: 0; }
 .row .sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .icon.clear-where { width: 32px; min-width: 32px; height: 32px; font-size: 1rem; padding: 0; }
-.route-list .visit.single .goto.single-num { flex: none; }
 
 /* ---- Phase 0/1 UI pass ---- */
 .icon-svg { display: inline-block; vertical-align: -0.2em; flex: none; }
@@ -1640,8 +1548,6 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
   .tabbar { display: none; }
   :root { --tabbar-h: 0px; --tabbar-offset: 0px; }
 }
-.top-right.setup-actions { position: relative; }
-.app-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 25; min-width: 200px; box-shadow: 0 8px 24px #0003; }
 
 /* Edit map: warnings as a badge on the Store tab; one disclosure chevron for every <details> */
 .tab-badge {

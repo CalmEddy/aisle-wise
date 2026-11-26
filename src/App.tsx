@@ -1640,14 +1640,14 @@ export default function App() {
                     display={display}
                     setDisplay={setDisplay}
                     show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
-                    offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
+                    offByDefault={['listPrice']}
                   />
                   <p className="menu-section">Map &amp; list look</p>
                   <DisplayToggles
                     display={display}
                     setDisplay={setDisplay}
                     show={['mapFull', 'listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
-                    offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice', 'mapFull']}
+                    offByDefault={['listGroupByCategory', 'listPrice', 'mapFull']}
                   />
                   <p className="menu-section">Share &amp; help</p>
                   <button type="button" className="menu-row" onClick={() => { setListOptsOpen(false); openShare({ list: true, map: false }); }}>

@@ -513,7 +513,7 @@ function ProductList({
           display={display}
           setDisplay={setDisplay}
           show={['itemsGroupByCategory', 'listQty', 'listPrice']}
-          offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
+          offByDefault={['listPrice']}
         />
         <div className="chips filters" role="group" aria-label="Show">
           {FILTERS.map((f) => (
