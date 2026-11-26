@@ -167,19 +167,21 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
         </form>
         {tools && <div className="add-tools" role="group" aria-label="List tools">{tools}</div>}
       </div>
-      <p className="muted small add-sheet-hint">
-        {voice.error
-          ? voice.error
-          : voice.listening
-            ? <>Listening… say an item, then pause.</>
-            : typed
-              ? (allowCart
-                ? <>Pick below, or Enter · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
-                : <>Pick below, or Enter to add to “{listName}”.</>)
-              : (allowCart
-                ? <>＋ List queues it · 🛒 means you’re holding it.</>
-                : <>Type or speak to add to “{listName}”. Cart is only on Shop.</>)}
-      </p>
+      {(voice.error || voice.listening || typed || !inline) && (
+        <p className="muted small add-sheet-hint">
+          {voice.error
+            ? voice.error
+            : voice.listening
+              ? <>Listening… say an item, then pause.</>
+              : typed
+                ? (allowCart
+                  ? <>Pick below, or Enter · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
+                  : <>Pick below, or Enter to add to “{listName}”.</>)
+                : (allowCart
+                  ? <>＋ List queues it · 🛒 means you’re holding it.</>
+                  : <>Type or speak to add to “{listName}”. Cart is only on Shop.</>)}
+        </p>
+      )}
 
       {typed ? (
         <ul className={`suggestions${inline ? ' in-page' : ' in-sheet'}`} aria-label="Suggestions">

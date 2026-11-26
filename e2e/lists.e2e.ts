@@ -189,12 +189,12 @@ test('things with no place and things not sold here can be removed from the list
   await fresh(page, { display: { noAskStores: ['demo'] } });
   await page.getByLabel('Item to add').fill('Zorblax, Quuxberries, Apples');
   await page.getByLabel('Item to add').press('Enter');
-  await expect(page.locator('.off-route .name')).toHaveText(['Zorblax', 'Quuxberries']);
+  await expect(page.locator('.unplaced-items .name')).toHaveText(['Zorblax', 'Quuxberries']);
   await page.getByRole('button', { name: 'Remove Zorblax' }).click();
-  await expect(page.locator('.off-route .name')).toHaveText(['Quuxberries']);
+  await expect(page.locator('.unplaced-items .name')).toHaveText(['Quuxberries']);
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
-  await page.locator('.off-route .off-head', { hasText: 'No location yet' }).getByRole('button', { name: 'Remove all' }).click();
-  await expect(page.locator('.off-route')).toHaveCount(0);
+  await page.locator('.unplaced-items .off-head').getByRole('button', { name: 'Remove all' }).click();
+  await expect(page.locator('.unplaced-items')).toHaveCount(0);
 });
 
 test('Include other lists on this trip without copying onto the active list', async ({ page }) => {

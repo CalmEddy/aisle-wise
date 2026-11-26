@@ -36,7 +36,9 @@ test('blank store builds category areas as items are checked off', async ({ page
   expect(milk.locations[layout.id]).toMatch(/^ab-dairy_eggs/);
 
   // Map shows the three areas once opened.
-  const showMap = page.getByRole('button', { name: 'Show map' });
+  await page.getByRole('button', { name: 'List options' }).click();
+  const showMap = page.getByRole('button', { name: 'Whole map' });
   if (await showMap.count()) await showMap.click();
+  await page.getByRole('button', { name: 'List options' }).click();
   await expect(page.locator('svg.map .place')).toHaveCount(3);
 });

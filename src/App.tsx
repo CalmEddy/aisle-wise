@@ -1624,7 +1624,7 @@ export default function App() {
                 </button>
               </div>
               <div className="title-sub">
-                <button className="store-pick" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
+                <button className="store-pick quiet" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
                   {layout.name} <span aria-hidden="true">▾</span>
                 </button>
               </div>
@@ -1637,6 +1637,46 @@ export default function App() {
                     show={['listCategories', 'listQty', 'listPrice', 'listLocation']}
                     offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
                   />
+                  <p className="muted small view-menu-lead">Map &amp; list look</p>
+                  <DisplayToggles
+                    display={display}
+                    setDisplay={setDisplay}
+                    show={['mapFull', 'listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
+                    offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice', 'mapFull']}
+                    extra={(
+                      <button
+                        type="button"
+                        className="toggle"
+                        onClick={() => {
+                          setListOptsOpen(false);
+                          setView('setup');
+                          setSetupTab('stores');
+                          setDisplay((d) => ({ ...d, buildMode: true }));
+                        }}
+                        aria-label="Edit map"
+                        title="Edit the store map in Setup"
+                      >🛠 Edit map</button>
+                    )}
+                  />
+                  <button
+                    type="button"
+                    className="link danger-link"
+                    onClick={() => {
+                      const these = shopItems.filter((i) => {
+                        const p = productFor(i, catalog);
+                        return !!(p?.locations?.[layout.id] || p?.clues?.[layout.id]);
+                      });
+                      if (!these.length) {
+                        setNotice(`Nothing on the list has a place at ${layout.name}.`);
+                        return;
+                      }
+                      clearWhere(these);
+                      setListOptsOpen(false);
+                      setNotice(`Cleared where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.`);
+                    }}
+                  >
+                    Clear all locations at this store
+                  </button>
                   {otherLists.length > 0 && (
                     <div className="trip-include in-header">
                       <p className="muted small view-menu-lead">More lists on this trip</p>
@@ -1672,9 +1712,11 @@ export default function App() {
               )}
             </div>
             <div className="top-right">
-              <div className="progress" aria-label="Progress">
-                <strong>{done}</strong>/{shopItems.length}
-              </div>
+              {shopItems.length > 0 && (
+                <div className="progress" aria-label="Progress">
+                  <strong>{done}</strong>/{shopItems.length}
+                </div>
+              )}
             </div>
           </>
         ) : (

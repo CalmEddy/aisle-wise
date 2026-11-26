@@ -1379,12 +1379,6 @@ export function ShoppingView(props: Props) {
     const snapshot = props.where.clearWhere([item]);
     setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });
   }
-  function clearAllWhere() {
-    const these = items.filter(hasWhereHere);
-    if (!these.length) { setToast({ snapshot: { items, products: catalog.products }, added: [], mode: 'list', note: `Nothing on the list has a place at ${layout.name}.` }); return; }
-    const snapshot = props.where.clearWhere(these);
-    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.` });
-  }
 
   /** Takes items off the list, with Undo. */
   function removeWithUndo(gone: ListItem[]) {
@@ -1480,7 +1474,6 @@ export function ShoppingView(props: Props) {
   // While placing an item, always show the whole map so taps hit shelves clearly on a phone.
   // Wide side-by-side uses the full map in the map column (strip is phone-only when map is shown).
   const mapStrip = !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
-  const [viewOpen, setViewOpen] = useState(false);
   /** Sheet only when adding onto a list other than the one being shopped (from the lists picker). */
   const addingOther = addingFor !== undefined && addingFor !== props.lists.current;
 
@@ -1514,7 +1507,8 @@ export function ShoppingView(props: Props) {
               : whereBarFor && placeMap ? (x, y, place) => {
                   const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
                   setPosition(cell);
-                  placeMap.tapPlace(place, cell);
+                  // Keep fractional coords so confirm saves the exact tap on the shelf/area.
+                  placeMap.tapPlace(place, { x, y });
                 }
                 : building ? buildTap
                   : (x, y) => {
@@ -1716,59 +1710,59 @@ export function ShoppingView(props: Props) {
           </section>
         )}
 
-        {((listSort === 'nearest' && unplaced.length > 0) || notSold.length > 0) && (
-          <section className="card off-route">
-            <h3>Not on the route</h3>
-            {listSort === 'nearest' && unplaced.length > 0 && (
-              <>
-                <h4 className="off-head">
-                  No location yet
-                  {unplaced.length > 1 && <button className="link" onClick={() => removeWithUndo(unplaced)}>Remove all</button>}
-                </h4>
-                <p className="muted small">
-                  {building
-                    ? 'Check it off where you find it and the map builds around you – or drag it onto the map, or pick a place.'
-                    : 'Drag it onto the map, or pick a place. The app remembers for this store.'}
-                </p>
-                {unplaced.map((item) => (
-                  <div className="row off-row" key={item.id}>
-                    <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
-                    <label>
-                      <input type="checkbox" checked={false} onChange={() => toggle(item)} aria-label={building ? `Got ${item.name} here` : `Got ${item.name}`} />
-                      {iconOf(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
-                      <span className="name">{item.name}</span>
-                    </label>
-                    <select value="" onChange={(e) => setLocation(item, e.target.value)} aria-label={`Location of ${item.name}`}>
-                      <option value="" disabled>Choose…</option>
-                      {layout.places.map((p) => (
-                        <option key={p.id} value={p.id}>{p.label || 'Unnamed'}</option>
-                      ))}
-                    </select>
-                    <span className="row-actions">
-                      <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
-                      <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-            {notSold.length > 0 && (
-              <>
-                <h4 className="off-head">
-                  Not available at {layout.name}
-                  {notSold.length > 1 && <button className="link" onClick={() => removeWithUndo(notSold)}>Remove all</button>}
-                </h4>
-                <p className="muted small">Get these somewhere else.</p>
-                {notSold.map((item) => (
-                  <div className="row unavailable" key={item.id}>
-                    <span className="name">{item.name}</span>
-                    <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
-                    <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
-                  </div>
-                ))}
-              </>
-            )}
+        {listSort === 'nearest' && unplaced.length > 0 && (
+          <section className="card unplaced-items" aria-label="Unplaced items">
+            <h3 className="off-head">
+              Unplaced Items
+              {unplaced.length > 1 && <button className="link" onClick={() => removeWithUndo(unplaced)}>Remove all</button>}
+            </h3>
+            {unplaced.map((item) => (
+              <div className="row off-row" key={item.id}>
+                <button
+                  type="button"
+                  className="icon place-on-map-btn"
+                  aria-label={`Place ${item.name} on the map`}
+                  title="Tap the map twice to place"
+                  onClick={() => {
+                    setWhereBarFor(item);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                >📍</button>
+                <span className="handle" aria-label={`Drag ${item.name}`} {...dragHandlers(item)}>⠿</span>
+                <label>
+                  <input type="checkbox" checked={false} onChange={() => toggle(item)} aria-label={building ? `Got ${item.name} here` : `Got ${item.name}`} />
+                  {iconOf(item) && <span className="item-icon" aria-hidden="true">{iconOf(item)}</span>}
+                  <span className="name">{item.name}</span>
+                </label>
+                <span className="row-actions">
+                  <button className="icon" onClick={() => setMenuFor(item)} aria-label={`More options for ${item.name}`}>⋯</button>
+                  <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
+                </span>
+              </div>
+            ))}
           </section>
+        )}
+        {notSold.length > 0 && (
+          <details className="card unavailable-section">
+            <summary className="off-head">
+              <span>Not available at {layout.name} ({notSold.length})</span>
+              {notSold.length > 1 && (
+                <button
+                  type="button"
+                  className="link"
+                  onClick={(e) => { e.preventDefault(); removeWithUndo(notSold); }}
+                >Remove all</button>
+              )}
+            </summary>
+            <p className="muted small">Get these somewhere else.</p>
+            {notSold.map((item) => (
+              <div className="row unavailable" key={item.id}>
+                <span className="name">{item.name}</span>
+                <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
+                <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}>×</button>
+              </div>
+            ))}
+          </details>
         )}
 
         {tripDone && (
@@ -1915,41 +1909,8 @@ export function ShoppingView(props: Props) {
                 buyAgain={buyAgain}
                 lastTripNames={props.lastTripNames}
                 onUndo={props.undo}
-                tools={(
-                  <>
-                    <ListSortToggle display={props.display} setDisplay={props.setDisplay} />
-                    <button
-                      type="button"
-                      className="toggle icon-only action"
-                      aria-pressed={mapOpen}
-                      onClick={() => props.setDisplay((d) => ({ ...d, mapFull: !d.mapFull }))}
-                      aria-label={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
-                      title={wideShop ? (props.display.mapFull ? 'Compact map' : 'Larger map') : (props.display.mapFull ? 'Hide map' : 'Show map')}
-                    >🗺</button>
-                    <button type="button" className="toggle icon-only action" aria-pressed={viewOpen} aria-expanded={viewOpen} onClick={() => setViewOpen((v) => !v)}
-                      aria-label="View settings" title="View settings">⚙</button>
-                  </>
-                )}
+                tools={<ListSortToggle display={props.display} setDisplay={props.setDisplay} />}
               />
-              {viewOpen && (
-                <div className="view-menu" role="group" aria-label="View settings">
-                  <p className="muted small view-menu-lead">Map &amp; list look</p>
-                  <DisplayToggles
-                    display={props.display}
-                    setDisplay={props.setDisplay}
-                    show={['listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
-                    offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice']}
-                    extra={(
-                      <button type="button" className="toggle" onClick={() => { setViewOpen(false); onEditLayout(); }}
-                        aria-label="Edit map" title="Edit the store map in Setup">🛠 Edit map</button>
-                    )}
-                  />
-                  <span className="muted small">☰ group by category · 🎨 colours · 🍎 icons · 🛠 Edit map (Setup → Stores)</span>
-                  <button type="button" className="link danger-link" onClick={() => { clearAllWhere(); setViewOpen(false); }}>
-                    Clear all locations at this store
-                  </button>
-                </div>
-              )}
             </div>
             {listMain}
           </div>

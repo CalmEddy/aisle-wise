@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MAIN_LIST, type ShoppingList } from '../core/types';
 import type { ClearMode } from '../core/lists';
 
@@ -98,6 +98,14 @@ export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onClea
   const others = lists.all.filter((l) => l.id !== lists.current);
   const preview = lists.preview([...picked]);
   const toBuy = (id: string) => lists.counts.get(id) ?? 0;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const done = (id: string) => lists.doneCounts.get(id) ?? 0;
   const nameTaken = (n: string, except?: string) =>
     lists.all.some((l) => l.id !== except && l.name.trim().toLowerCase() === n.trim().toLowerCase());

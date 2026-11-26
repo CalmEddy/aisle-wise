@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isAisleFloor } from '../core/aisles';
+import { exactKey, exactSpotAt } from '../core/geometry';
 import type { HereOption } from '../core/here';
 import type { Clue, Place, Point, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
@@ -12,6 +13,7 @@ export type PlaceMapController = {
   pendingId?: string;
   /** Open-floor cell selected for two-tap confirm (pulsing red). */
   pendingAt?: Point;
+  /** `at` may be fractional grid coords so the confirm saves the exact tap. */
   tapPlace: (place: Place | undefined, at: Point) => void;
 };
 
@@ -79,10 +81,12 @@ export function PlaceOnMap({
   const sameCell = (a: Point | undefined, b: Point) => !!a && a.x === b.x && a.y === b.y;
 
   const tapPlace = useCallback((place: Place | undefined, at: Point) => {
+    const cell = { x: Math.floor(at.x), y: Math.floor(at.y) };
     if (place) {
       setPendingAt(undefined);
       if (pendingIdRef.current === place.id) {
-        saveRef.current(place.id);
+        // Exact spot under the tap (fractions allowed) so the pin matches where they tapped.
+        saveRef.current(exactKey(place.id, exactSpotAt(place, at.x, at.y)));
         setPendingId(undefined);
         return;
       }
@@ -90,19 +94,19 @@ export function PlaceOnMap({
       return;
     }
     // Aisle / walkway: caller moves you there; do not treat as open floor.
-    if (isAisleFloor(layout, at)) {
+    if (isAisleFloor(layout, cell)) {
       setPendingId(undefined);
       setPendingAt(undefined);
       return;
     }
     // Open floor: first tap selects the square; second confirms and saves there.
     setPendingId(undefined);
-    if (sameCell(pendingAtRef.current, at)) {
-      saveFloorRef.current?.(at);
+    if (sameCell(pendingAtRef.current, cell)) {
+      saveFloorRef.current?.(cell);
       setPendingAt(undefined);
       return;
     }
-    setPendingAt(at);
+    setPendingAt(cell);
   }, [layout]);
 
   useEffect(() => {
@@ -164,7 +168,7 @@ export function PlaceOnMap({
                 look={look}
                 pendingId={pendingId}
                 pendingAt={pendingAt}
-                onMapTap={(x, y, place) => tapPlace(place, { x: Math.floor(x), y: Math.floor(y) })}
+                onMapTap={(x, y, place) => tapPlace(place, { x, y })}
               />
             </div>
           )}
