@@ -1828,6 +1828,7 @@ export function ShoppingView(props: Props) {
             <button type="button" className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
               aria-label="Edit map"><Icon name="map" /> Edit map</button>
             <button type="button" className="btn" onClick={() => props.onOpenStores?.()}>Change store</button>
+            <button type="button" className="btn" onClick={() => props.build.store.shareStore()}><Icon name="share-2" /> Share this store</button>
           </div>
         </div>
       )}

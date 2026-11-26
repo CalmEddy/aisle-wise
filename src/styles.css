@@ -1685,3 +1685,11 @@ details[open] > summary::before { transform: rotate(90deg); }
 .ea-dash { stroke: color-mix(in srgb, var(--accent) 40%, transparent); stroke-width: 3; stroke-linecap: round; fill: none; }
 .empty-art .ea-icon { position: absolute; left: 50%; top: 52px; transform: translate(-50%, -50%); color: var(--accent); }
 .empty .btn.primary { margin-top: 12px; }
+
+/* Household status row (Lists tab, Shop List options) */
+.household-row { margin-bottom: 8px; position: relative; }
+.household-row .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.household-row.status-synced .dot { background: var(--c-cart); }
+.household-row.status-offline .dot, .household-row.status-connecting .dot { background: var(--c-warn); }
+.household-row-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.household-row-text .small { margin: 0; }

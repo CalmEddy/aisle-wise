@@ -10,18 +10,23 @@ const STATUS_TEXT = {
   offline: 'Offline – will catch up',
 } as const;
 
-/** Small header button showing whether the household is in sync. */
-export function HouseholdButton({ api, onClick }: { api: HouseholdApi; onClick: () => void }) {
+/** A row showing whether the household is in sync; tap to open the household sheet. */
+export function HouseholdRow({ api, onClick }: { api: HouseholdApi; onClick: () => void }) {
   const live = !!api.household && api.status !== 'off';
   return (
     <button
-      className={`household-pill status-${live ? api.status : 'off'}`}
+      type="button"
+      className={`menu-row household-row status-${live ? api.status : 'off'}`}
       onClick={onClick}
-      title={live ? `${api.household!.name} · ${STATUS_TEXT[api.status]}` : 'Share with household'}
       aria-label={live ? `Household ${api.household!.name}: ${STATUS_TEXT[api.status]}` : 'Share with household'}
     >
       <span className="dot" aria-hidden="true" />
       <Icon name="users" />
+      <span className="household-row-text">
+        <b>{live ? api.household!.name : 'Share with your household'}</b>
+        <span className="muted small">{live ? STATUS_TEXT[api.status] : 'Everyone sees the same lists'}</span>
+      </span>
+      <Icon name="chevron-right" className="chev" />
     </button>
   );
 }

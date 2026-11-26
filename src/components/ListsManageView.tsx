@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Icon } from './Icon';
 import { MAIN_LIST } from '../core/types';
 import type { ListItem, StoreLayout } from '../core/types';
 import type { Catalog } from '../core/catalog';
@@ -21,7 +22,11 @@ const NEW_LIST = '__new__';
  * (qty / rename / remove) without cart check-off.
  * Selecting a list here does not change the Shop trip list.
  */
-export function ListsManageView({ lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, buyAgain, undo, snapshot, display, setDisplay }: {
+export function ListsManageView({ onShare, householdRow, lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, buyAgain, undo, snapshot, display, setDisplay }: {
+  /** Opens the share sheet for the list being edited. */
+  onShare: (listId: string) => void;
+  /** Household status row (only when household sync is configured). */
+  householdRow?: ReactNode;
   lists: ListsApi;
   catalog: Catalog;
   layout: StoreLayout;
@@ -143,6 +148,7 @@ export function ListsManageView({ lists, catalog, layout, looks, allItems, setLi
 
   return (
     <div className="lists-manage">
+      {householdRow}
       <p className="muted small lists-manage-lead">
         Build lists here. On Shop, pick which list to shop and use the cart.
       </p>
@@ -218,6 +224,7 @@ export function ListsManageView({ lists, catalog, layout, looks, allItems, setLi
               note(`Duplicated as “${r.name}”.`, r.snapshot);
             }
           }}>Duplicate</button>
+          <button type="button" className="btn" onClick={() => onShare(current.id)}><Icon name="share-2" /> Share</button>
           {(lists.doneCounts.get(current.id) ?? 0) > 0 && (
             <button type="button" className="btn" onClick={() => {
               const snap = lists.clear(current.id, 'checked');

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
-import { HouseholdButton, HouseholdSheet } from './components/HouseholdSheet';
+import { HouseholdRow, HouseholdSheet } from './components/HouseholdSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { IntroSheet } from './components/IntroSheet';
@@ -132,8 +132,6 @@ export default function App() {
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
   /** Shop header: list options (row fields + more lists on this trip). */
   const [listOptsOpen, setListOptsOpen] = useState(false);
-  /** The ⋯ menu in the header of Lists / Items / Stores (Share, How this works). */
-  const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => {
     if (savedView === 'layout') {
       setView('setup');
@@ -197,7 +195,7 @@ export default function App() {
   const [joinCode, setJoinCode] = useState<string>();
 
   // Sharing: chooser defaults (list/map), and anything that arrived in a link.
-  const [sending, setSending] = useState<{ list: boolean; map: boolean } | null>(null);
+  const [sending, setSending] = useState<{ list: boolean; map: boolean; listId?: string } | null>(null);
   const [incoming, setIncoming] = useState<Share | 'error' | null>(null);
   const [notice, setNotice] = useState('');
   const [confirmClearWhere, setConfirmClearWhere] = useState(false);
@@ -1425,7 +1423,7 @@ export default function App() {
   }
 
   /** Opens the share chooser (Shop → list; Edit map → map). */
-  function openShare(initial: { list: boolean; map: boolean }) {
+  function openShare(initial: { list: boolean; map: boolean; listId?: string }) {
     setSending(initial);
   }
 
@@ -1489,7 +1487,6 @@ export default function App() {
   const navTab: NavTab = view === 'list' ? 'shop' : setupTab;
   const goTab = (id: NavTab) => {
     setListOptsOpen(false);
-    setAppMenuOpen(false);
     if (id === 'shop') {
       setView('list');
       return;
@@ -1601,6 +1598,7 @@ export default function App() {
 
   return (
     <div className="app">
+      {(view === 'list' || setupTab === 'stores') && (
       <header className="top">
         {view === 'list' ? (
           <>
@@ -1664,10 +1662,13 @@ export default function App() {
                     show={['mapFull', 'listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
                     offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice', 'mapFull']}
                   />
-                  <p className="menu-section">App</p>
+                  <p className="menu-section">Share &amp; help</p>
                   <button type="button" className="menu-row" onClick={() => { setListOptsOpen(false); openShare({ list: true, map: false }); }}>
-                    <Icon name="share-2" /><span>Share</span>
+                    <Icon name="share-2" /><span>Share this list</span>
                   </button>
+                  {household.configured && (
+                    <HouseholdRow api={household} onClick={() => { setListOptsOpen(false); setHouseholdOpen(true); }} />
+                  )}
                   <button type="button" className="menu-row" onClick={() => { setListOptsOpen(false); setIntroOpen(true); }}>
                     <Icon name="circle-help" /><span>How this works</span>
                   </button>
@@ -1755,35 +1756,12 @@ export default function App() {
                 <button className="store-pick setup-store" onClick={openStores} aria-label={`Store: ${layout.name}. Change store`}>
                   {layout.name} <Icon name="chevron-down" className="chev" />
                 </button>
-                {household.configured && (
-                  <HouseholdButton api={household} onClick={() => setHouseholdOpen(true)} />
-                )}
               </div>
-            </div>
-            <div className="top-right setup-actions">
-              <button
-                type="button"
-                className={`list-opts-btn${appMenuOpen ? ' open' : ''}`}
-                aria-label="More"
-                aria-expanded={appMenuOpen}
-                onClick={() => setAppMenuOpen((v) => !v)}
-              >
-                <Icon name="ellipsis" />
-              </button>
-              {appMenuOpen && (
-                <div className="app-menu list-opts-menu" role="group" aria-label="More">
-                  <button type="button" className="menu-row" onClick={() => { setAppMenuOpen(false); openShare({ list: true, map: setupTab === 'stores' }); }}>
-                    <Icon name="share-2" /><span>Share</span>
-                  </button>
-                  <button type="button" className="menu-row" onClick={() => { setAppMenuOpen(false); setIntroOpen(true); }}>
-                    <Icon name="circle-help" /><span>How this works</span>
-                  </button>
-                </div>
-              )}
             </div>
           </>
         )}
       </header>
+      )}
 
       {view === 'list' && (
         <ShoppingView
@@ -1794,6 +1772,8 @@ export default function App() {
       )}
       {view === 'setup' && setupTab === 'lists' && (
         <ListsManageView
+          onShare={(id) => openShare({ list: true, map: false, listId: id })}
+          householdRow={household.configured ? <HouseholdRow api={household} onClick={() => setHouseholdOpen(true)} /> : undefined}
           lists={listsApi}
           catalog={catalog}
           layout={layout}
@@ -1901,11 +1881,11 @@ export default function App() {
       )}
       {sending && (
         <ShareSheet
-          listName={lists.find((l) => l.id === listId)?.name ?? 'Shopping list'}
-          items={items}
+          listName={lists.find((l) => l.id === (sending.listId ?? listId))?.name ?? 'Shopping list'}
+          items={sending.listId && sending.listId !== listId ? itemsOn(allItems, sending.listId) : items}
           layout={layout}
           catalog={catalog}
-          initial={sending}
+          initial={{ list: sending.list, map: sending.map }}
           onClose={() => setSending(null)}
         />
       )}
