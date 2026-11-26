@@ -4,6 +4,7 @@ import { StoreMap } from './StoreMap';
 import { guessTemp } from './WhereBar';
 import { looksLikeShelfCode, parseLabel, type LabelStyle } from '../core/labels';
 import type { AislePos, AisleSide, Clue, Dept, Fixture, OpenNear, StoreLayout, Temp, Wall, WallPart } from '../core/types';
+import { Icon } from './Icon';
 
 type Tab = 'aisle' | 'wall' | 'open' | 'dept' | 'endcap' | 'checkout';
 
@@ -121,7 +122,7 @@ export function WherePanel({ itemName, categoryId, storeName, labels, onNeedLabe
       <span className="where-label">Kept</span>
       {([undefined, 'chilled', 'frozen'] as const).map((t) => (
         <button key={String(t)} className={`chip${temp === t ? ' active' : ''}`} aria-pressed={temp === t} onClick={() => setTemp(t)}>
-          {t === undefined ? 'Shelf' : t === 'chilled' ? '🧊 Fridge' : '❄ Freezer'}
+          {t === undefined ? 'Shelf' : <><Icon name={t === 'chilled' ? 'refrigerator' : 'snowflake'} /> {t === 'chilled' ? 'Fridge' : 'Freezer'}</>}
         </button>
       ))}
     </div>

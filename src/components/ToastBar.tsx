@@ -3,6 +3,7 @@ import type { Catalog } from '../core/catalog';
 import { resolveSpot } from '../core/locate';
 import type { StoreLayout } from '../core/types';
 import { whereText } from './whereText';
+import { Icon } from './Icon';
 
 export type Toast = QuickAddResult & {
   mode: 'list' | 'cart';
@@ -29,7 +30,7 @@ export function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere,
         <span className="toast-text">{toast.note}</span>
         {toast.action && <button className="toast-btn" onClick={toast.action.run}>{toast.action.label}</button>}
         <button className="toast-btn" onClick={onUndo}>Undo</button>
-        <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+        <button className="icon" onClick={onClose} aria-label="Dismiss"><Icon name="x" /></button>
       </div>
     );
   }
@@ -73,7 +74,7 @@ export function ToastBar({ toast, layout, catalog, onUndo, onChange, onMoveHere,
       <span className="toast-text">{text}</span>
       {one && <button className="toast-btn" onClick={() => onChange(one)}>Change place</button>}
       <button className="toast-btn" onClick={onUndo}>Undo</button>
-      <button className="icon" onClick={onClose} aria-label="Dismiss">×</button>
+      <button className="icon" onClick={onClose} aria-label="Dismiss"><Icon name="x" /></button>
     </div>
   );
 }

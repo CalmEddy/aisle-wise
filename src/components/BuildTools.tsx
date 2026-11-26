@@ -8,19 +8,20 @@ import type { StoreLayout } from '../core/types';
 import { NumberField } from './PlacePanel';
 import { CategoryPicker } from './CategoryPicker';
 import type { Category, GeneratedMap, SectionShape } from '../core/types';
+import { ARROW_ICON, Icon, type IconName } from './Icon';
 
 /** What tapping or dragging on the map does in build mode. */
 export type BuildTool = 'walk' | 'select' | 'brush' | 'shelf-v' | 'shelf-h' | 'block' | 'cut' | 'area' | 'entrance' | 'checkout';
 
-export const TOOLS: { id: BuildTool; icon: string; label: string; hint: string }[] = [
-  { id: 'walk', icon: '📍', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
-  { id: 'select', icon: '⬚', label: 'Select', hint: 'Drag a box or tap to select. Drag the selection to move it. Group so things move together.' },
-  { id: 'brush', icon: '🖌', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
-  { id: 'shelf-v', icon: '▮↕', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
-  { id: 'shelf-h', icon: '▬↔', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
-  { id: 'block', icon: '▤', label: 'Shelf block', hint: 'Drag a rectangle once. Tap inside to move; drag corners to resize (along = length, across = how many shelves).' },
-  { id: 'cut', icon: '✂', label: 'Cut aisles', hint: 'Drag a box across a block of aisles to make a cross aisle through them.' },
-  { id: 'area', icon: '▦', label: 'Area', hint: 'Drag a rectangle for a region without shelves (Produce, Bakery…). Move and resize like a shelf block.' },
+export const TOOLS: { id: BuildTool; icon: string; iconName?: IconName; label: string; hint: string }[] = [
+  { id: 'walk', icon: '📍', iconName: 'map-pin', label: 'Walk', hint: 'Tap where you are, then check items off. Tap a shelf to edit or drag it.' },
+  { id: 'select', icon: '⬚', iconName: 'square-dashed', label: 'Select', hint: 'Drag a box or tap to select. Drag the selection to move it. Group so things move together.' },
+  { id: 'brush', icon: '🖌', iconName: 'paintbrush', label: 'Aisle brush', hint: 'Arrows paint your left and right side, 4 squares a step.' },
+  { id: 'shelf-v', icon: '▮↕', iconName: 'rectangle-vertical', label: 'Shelf ↕', hint: 'Tap the map to add an up-and-down shelf.' },
+  { id: 'shelf-h', icon: '▬↔', iconName: 'rectangle-horizontal', label: 'Shelf ↔', hint: 'Tap the map to add a side-to-side shelf.' },
+  { id: 'block', icon: '▤', iconName: 'layout-list', label: 'Shelf block', hint: 'Drag a rectangle once. Tap inside to move; drag corners to resize (along = length, across = how many shelves).' },
+  { id: 'cut', icon: '✂', iconName: 'scissors', label: 'Cut aisles', hint: 'Drag a box across a block of aisles to make a cross aisle through them.' },
+  { id: 'area', icon: '▦', iconName: 'layout-grid', label: 'Area', hint: 'Drag a rectangle for a region without shelves (Produce, Bakery…). Move and resize like a shelf block.' },
   { id: 'entrance', icon: 'IN', label: 'Entrance', hint: 'Tap where shoppers come in (or drag IN in Walk).' },
   { id: 'checkout', icon: '$', label: 'Checkout', hint: 'Tap where shoppers pay (or drag $ in Walk).' },
 ];
@@ -47,12 +48,12 @@ export function BuildToolbar({ tool, setTool, more, setMore, rail }: {
         {shown.map((t) => (
           <button key={t.id} className={tool === t.id ? 'chip active' : 'chip'} aria-pressed={tool === t.id}
             aria-label={t.label} title={t.label} onClick={() => setTool(t.id)}>
-            {t.icon}
+            {t.iconName ? <Icon name={t.iconName} size="1.25rem" /> : t.icon}
           </button>
         ))}
         <button className="chip more-tools" aria-expanded={more} aria-label={more ? 'Fewer tools' : 'More tools'}
           title={more ? 'Fewer tools' : 'More tools: single shelves, cut aisles, entrance, checkout'} onClick={() => setMore(!more)}>
-          {more ? '‹' : '⋯'}
+          <Icon name={more ? 'chevron-left' : 'ellipsis'} />
         </button>
       </div>
       {!rail && <p className="muted small tool-hint"><b>{current.label}:</b> {current.hint}</p>}
@@ -219,7 +220,7 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
                         {(['vertical', 'horizontal'] as const).map((o) => (
                           <button key={o} className={b.dir === o ? 'active' : ''} aria-pressed={b.dir === o}
                             onClick={() => onUndoable(`${b.name} ${o === 'vertical' ? 'up and down' : 'side to side'}.`, store.setGen({ directions: { ...store.gen!.directions, [b.ref]: o } }))}>
-                            {o === 'vertical' ? '↕' : '↔'}
+                            <Icon name={o === 'vertical' ? 'arrow-up-down' : 'arrow-left-right'} />
                           </button>
                         ))}
                       </div>
@@ -277,7 +278,6 @@ export function StoreSettings({ layout, store, problems, onNewStore, onPickPlace
 }
 
 const SIDE_LABEL: Record<SideKind, string> = { shelf: '▮ Shelf', wall: '▙ Wall', gap: '· Gap' };
-const ARROW: Record<Direction, string> = { up: '↑', down: '↓', left: '←', right: '→' };
 
 /**
  * The aisle brush: what's on each side, how wide the walkway is, and arrows
@@ -326,7 +326,7 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
     </div>
   );
   const arrow = (d: Direction) => (
-    <button className={`btn arrow ${d}${d === dir ? ' facing' : ''}`} onClick={() => onStep(d)} aria-label={`Paint and step ${BRUSH_LENGTH} ${d}`}>{ARROW[d]}</button>
+    <button className={`btn arrow ${d}${d === dir ? ' facing' : ''}`} onClick={() => onStep(d)} aria-label={`Paint and step ${BRUSH_LENGTH} ${d}`}><Icon name={ARROW_ICON[d]} size="1.3rem" /></button>
   );
   return (
     <section className="card brush-panel" aria-label="Aisle brush">
@@ -339,23 +339,23 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
             </button>
           );
         })}
-        <button className="chip" onClick={() => setBrush({ ...brush, left: brush.right, right: brush.left })} aria-label="Swap left and right">⇄ Swap</button>
+        <button className="chip" onClick={() => setBrush({ ...brush, left: brush.right, right: brush.left })} aria-label="Swap left and right"><Icon name="arrow-left-right" /> Swap</button>
       </div>
       <div className="brush-sides">
         {side('left')}
         {side('right')}
       </div>
       <div className="aisle-name-field">
-        <span>🏷</span>
+        <Icon name="tag" />
         <input value={brush.aisleLabel ?? ''} onChange={(e) => setBrush({ ...brush, aisleLabel: e.target.value })}
           placeholder="Aisle name (optional)" aria-label="Aisle name to paint along the walkway" />
         <button className="btn" onClick={() => setBrush({ ...brush, aisleLabel: nextAisle })} title="Next aisle number">{nextAisle}</button>
-        {brush.aisleLabel && <button className="icon" onClick={() => setBrush({ ...brush, aisleLabel: '' })} aria-label="Stop naming">×</button>}
+        {brush.aisleLabel && <button className="icon" onClick={() => setBrush({ ...brush, aisleLabel: '' })} aria-label="Stop naming"><Icon name="x" /></button>}
       </div>
       <label className="lane-field">
         <span>Aisle width</span>
         <span className="stepper">
-          <button onClick={() => setBrush({ ...brush, width: Math.max(MIN_AISLE, brush.width - 1) })} aria-label="Narrower aisle">−</button>
+          <button onClick={() => setBrush({ ...brush, width: Math.max(MIN_AISLE, brush.width - 1) })} aria-label="Narrower aisle"><Icon name="minus" /></button>
           <input type="number" min={MIN_AISLE} max={MAX_AISLE} value={brush.width} aria-label="Aisle width in squares"
             onChange={(e) => setBrush({ ...brush, width: Math.max(MIN_AISLE, Math.min(MAX_AISLE, Number(e.target.value) || MIN_AISLE)) })} />
           <button onClick={() => setBrush({ ...brush, width: Math.min(MAX_AISLE, brush.width + 1) })} aria-label="Wider aisle">+</button>
@@ -370,11 +370,11 @@ export function BrushPanel({ brush, setBrush, dir, onStep, onNudge, canBack, onB
           {arrow('down')}
         </div>
         <div className="brush-tools">
-          <button className="btn" disabled={!canBack} onClick={onBack}>↶ Back up</button>
+          <button className="btn" disabled={!canBack} onClick={onBack}><Icon name="undo-2" /> Back up</button>
           <span className="muted small">Move 1 square, no painting:</span>
           <div className="nudges">
             {(['left', 'up', 'down', 'right'] as const).map((d) => (
-              <button key={d} className="btn nudge" onClick={() => onNudge(d)} aria-label={`Move 1 square ${d}`}>{ARROW[d]}</button>
+              <button key={d} className="btn nudge" onClick={() => onNudge(d)} aria-label={`Move 1 square ${d}`}><Icon name={ARROW_ICON[d]} /></button>
             ))}
           </div>
         </div>

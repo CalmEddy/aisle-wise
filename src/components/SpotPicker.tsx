@@ -5,6 +5,7 @@ import { resolveSpot } from '../core/locate';
 import type { Place, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { StoreMap } from './StoreMap';
+import { Icon } from './Icon';
 
 /**
  * Choose where something is: tap a place on the store map to zoom in, then
@@ -60,7 +61,7 @@ export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, o
         />
 
         <div className="spot-choice">
-          {spot ? <span>📍 <b>{spot.label}</b></span> : <span className="muted">Nothing chosen yet</span>}
+          {spot ? <span><Icon name="map-pin" /> <b>{spot.label}</b></span> : <span className="muted">Nothing chosen yet</span>}
           {focus && <button className="link" onClick={() => setFocus(undefined)}>Whole store</button>}
         </div>
         <div className="sheet-actions">
@@ -73,7 +74,7 @@ export function SpotPicker({ title, layout, catalog, current, hereKey, onPick, o
           </button>
         </div>
 
-        {hereKey && option(hereKey, <>📍 Where I am · {label(hereKey)}</>)}
+        {hereKey && option(hereKey, <><Icon name="person-standing" /> Where I am · {label(hereKey)}</>)}
         <details className="pick-more">
           <summary>Or choose from a list</summary>
           {layout.places.map((p) => (

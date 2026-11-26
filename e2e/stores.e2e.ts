@@ -7,7 +7,7 @@ test('a new store where you stand is picked again when you come back', async ({ 
   await fresh(page);
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill('Kroger Main St');
-  await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('button', { name: 'Here', exact: true }).click();
   await page.getByRole('button', { name: 'Create typical store' }).click();
   const skipSetup = page.getByRole('button', { name: 'Skip for now' });
   if (await skipSetup.count()) await skipSetup.click();
@@ -35,7 +35,7 @@ test('store picker shows list price totals and marks the cheapest store', async 
   // Second store so comparison has somewhere else to go.
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill('Aldi');
-  await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('button', { name: 'Here', exact: true }).click();
   await page.getByRole('button', { name: 'More layouts or blank…' }).click();
   await page.getByRole('radio', { name: /Blank/ }).click();
   await page.getByRole('button', { name: 'Create store' }).click();
@@ -66,7 +66,7 @@ test('a new store starts from a default map: pick the kind, see a preview, set t
   await fresh(page);
   await page.getByRole('button', { name: /Change store/ }).click();
   await page.getByLabel('New store name').fill('Corner');
-  await page.getByRole('button', { name: '＋ Here' }).click();
+  await page.getByRole('button', { name: 'Here', exact: true }).click();
   const sheet = page.getByRole('dialog', { name: 'Start the map' });
   await expect(sheet.getByRole('radio', { name: /Typical supermarket/ })).toHaveAttribute('aria-checked', 'true');
   await sheet.getByRole('radio', { name: /Urban/ }).click();

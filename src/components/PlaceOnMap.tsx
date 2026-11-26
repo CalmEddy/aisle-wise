@@ -6,6 +6,7 @@ import type { Clue, Place, Point, StoreLayout } from '../core/types';
 import type { SectionLook } from '../display';
 import { StoreMap } from './StoreMap';
 import type { MapSpot } from './WhereBar';
+import { Icon } from './Icon';
 
 /** Lets ShoppingView drive the main store map while this dock is open. */
 export type PlaceMapController = {
@@ -185,12 +186,12 @@ export function PlaceOnMap({
                   else if (x.spot) onSavePlace(x.spot);
                 }}
               >
-                📍 {x.label}
+                <Icon name="map-pin" /> {x.label}
               </button>
             ))}
             {here && here.length > 0 && onHere && (
               <button type="button" className="btn" onClick={() => setStanding(true)}>
-                🧍 Where I’m standing
+                <Icon name="person-standing" /> Where I’m standing
               </button>
             )}
             {onDescribe && (

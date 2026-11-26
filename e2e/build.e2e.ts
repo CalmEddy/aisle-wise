@@ -43,7 +43,7 @@ test('aisle brush: paints both sides with categories and an aisle label, and bac
   expect(l.places.some((p: any) => p.categories.includes('breakfast_cereal'))).toBe(true);
   await expect(page.locator('.aisle-label text')).toHaveText(['Aisle 1']);
   const before = l.places.map((p: any) => p.length).join();
-  await page.getByRole('button', { name: '↶ Back up' }).click();
+  await page.getByRole('button', { name: 'Back up' }).click();
   l = await layout(page, 'New store');
   expect(l.places.map((p: any) => p.length).join()).not.toBe(before);
   ok();
@@ -54,7 +54,7 @@ test('a shelf can be a fridge or freezer, shown on the map', async ({ page }) =>
   await enterBuildMode(page);
   await page.locator('svg.map g.place.shelf').nth(3).click({ force: true });
   await openSheet(page);
-  await page.getByRole('button', { name: '❄ Freezer' }).click();
+  await page.getByRole('button', { name: 'Freezer', exact: true }).click();
   await expect(page.locator('svg.map g.place.shelf.frozen')).toHaveCount(1);
   expect((await layout(page)).places.filter((p: any) => p.temp === 'frozen')).toHaveLength(1);
 });

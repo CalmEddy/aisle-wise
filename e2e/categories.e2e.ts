@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { addItems, fresh, newStore, noPageErrors, row, saved } from './helpers';
 
-test('brands get a category; the list shows categories and subcategories, and 🏷 turns them off', async ({ page }) => {
+test('brands get a category; the list shows categories and subcategories, and the Category chip turns them off', async ({ page }) => {
   const ok = noPageErrors(page);
   await fresh(page);
   await newStore(page, 'Corner');

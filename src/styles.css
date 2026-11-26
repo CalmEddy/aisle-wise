@@ -88,7 +88,7 @@ button { cursor: pointer; }
 .store-name, .store-pick { font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 70%; }
 .top p { margin: 0; font-size: 0.85rem; }
 .store-pick { border: 0; background: none; padding: 0; color: var(--muted); font-size: 0.85rem; }
-.store-pick.quiet { font-size: 0.78rem; font-weight: 500; opacity: 0.85; max-width: 85%; }
+.store-pick.quiet { font-size: var(--text-min); font-weight: 500; opacity: 0.85; max-width: 85%; }
 .store-pick.setup-store { font-weight: 700; font-size: 1rem; color: var(--text); max-width: 70%; opacity: 1; }
 .setup-actions { align-items: center; }
 .progress { font-size: 1.1rem; color: var(--muted); padding-top: 6px; }
@@ -154,7 +154,7 @@ button { cursor: pointer; }
 .shop-compose .view-menu { margin-top: 8px; }
 .status-pill {
   display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
-  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: middle;
 }
 .status-pill.on-list { background: var(--accent-soft, #e7f5ee); color: var(--accent); }
 .status-pill.in-cart { background: color-mix(in srgb, var(--you, #3b82f6) 18%, transparent); color: var(--you, #2563eb); }
@@ -451,7 +451,7 @@ button { cursor: pointer; }
 /* Household / live sharing */
 .household-pill {
   display: inline-flex; align-items: center; gap: 6px; margin-top: 4px; padding: 3px 10px 3px 8px;
-  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 0.78rem; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: var(--text-min); color: var(--muted);
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; flex: none; }
 .status-synced .dot { background: var(--accent); }
@@ -483,7 +483,7 @@ button { cursor: pointer; }
 .spot { border-radius: 10px; }
 .spot + .spot { border-top: 1px dashed var(--line); margin-top: 2px; padding-top: 2px; }
 .spot.drop-over { outline: 2px solid var(--accent); outline-offset: 2px; }
-.spot-detail { font-size: 0.78rem; color: var(--muted); margin: 6px 0 -4px 36px; }
+.spot-detail { font-size: var(--text-min); color: var(--muted); margin: 6px 0 -4px 36px; }
 .next-card .spot-detail { color: var(--text); opacity: 0.7; }
 .spot-picker .map { margin: 6px 0; }
 .spot-choice { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 32px; font-size: 0.9rem; }
@@ -540,7 +540,7 @@ button { cursor: pointer; }
 /* Tap a place or section in the list to move the marker there */
 button.goto { background: none; border: 0; padding: 0; text-align: left; color: inherit; cursor: pointer; }
 button.goto:hover h2, button.goto:hover h3, button.spot-detail.goto:hover { text-decoration: underline; text-underline-offset: 3px; }
-button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; color: var(--muted); }
+button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-min); color: var(--muted); }
 .next-card button.spot-detail.goto { color: var(--text); }
 
 /* Colours in list: a soft wash of the category colour over the whole section. */
@@ -610,7 +610,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 @keyframes pin-pulse { from { transform: scale(0.5); opacity: 1; } to { transform: scale(1.9); opacity: 0; } }
 .pin { font-size: 1rem; filter: grayscale(1); opacity: 0.55; }
 .pin[aria-pressed='true'] { filter: none; opacity: 1; }
-.row .sub { display: block; font-size: 0.75rem; color: var(--muted); }
+.row .sub { display: block; font-size: var(--text-min); color: var(--muted); }
 .row.nearest .name { font-weight: 700; }
 .row.tinted { background: color-mix(in srgb, var(--cat) 13%, var(--surface)); border-radius: 8px; padding: 0 4px; margin: 3px 0; }
 .flat-list .items { margin-top: 2px; }
@@ -725,7 +725,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .subcat-sheet .field { margin-bottom: 10px; }
 .cat-list .cat-sub-item { padding-left: 18px; }
 .cat-list .cat-sub-item .row { border-top: 1px dashed color-mix(in srgb, var(--line) 70%, transparent); }
-.cat-move { font-size: 0.75rem; max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-move { font-size: var(--text-min); max-width: 7em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .items-view .group.folded { padding-top: 8px; padding-bottom: 8px; margin-bottom: 6px; }
 .items-view .group.folded h3 { margin: 0; }
 
@@ -773,7 +773,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 }
 .list-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .list-bar-count { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
-.list-bar-others { color: var(--accent); font-weight: 600; font-size: 0.75rem; }
+.list-bar-others { color: var(--accent); font-weight: 600; font-size: var(--text-min); }
 .list-bar-more { color: var(--accent); font-size: 0.8rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .lists-sheet .lists { list-style: none; padding: 0; margin: 0 0 10px; }
@@ -790,14 +790,14 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .lists-sheet .combine .check { padding: 6px 0; }
 .lists-sheet .also-shop {
   display: inline-flex; align-items: center; gap: 4px; flex: none;
-  font-size: 0.72rem; color: var(--muted); white-space: nowrap; padding: 4px 2px;
+  font-size: var(--text-min); color: var(--muted); white-space: nowrap; padding: 4px 2px;
 }
 .lists-sheet .also-shop input { margin: 0; }
 .lists-sheet .also-shop-hint { margin: 0 0 6px; }
 .lists-sheet .list-row-menu { flex: 1 0 100%; display: flex; flex-direction: column; gap: 0; padding: 0 0 8px 28px; }
 .source-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 1px; }
 .source-badge {
-  display: inline-block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.01em;
+  display: inline-block; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.01em;
   padding: 1px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent);
 }
 .lists-sheet .list-created { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 0 10px 28px; }
@@ -877,7 +877,7 @@ button.spot-detail.goto { display: block; font: inherit; font-size: 0.78rem; col
 .route-list .next-card h2 { font-size: 1rem; }
 .route-list .badge { font-size: 0.65rem; padding: 2px 6px; }
 .route-list .num { width: 20px; height: 20px; font-size: 0.72rem; }
-.route-list .count-pill { font-size: 0.75rem; }
+.route-list .count-pill { font-size: var(--text-min); }
 .route-list .items { margin-top: 0; }
 .route-list .spot.tinted { margin: 2px -4px 0; }
 .route-list .spot-detail { margin: 2px 0 -6px 36px; }
@@ -1354,7 +1354,7 @@ main { padding-bottom: min(48vh, 22rem); }
   padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); max-width: calc(100% - 4px);
 }
-.map-tools-title { font-size: 0.75rem; font-weight: 600; color: var(--muted); padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-tools-title { font-size: var(--text-min); font-weight: 600; color: var(--muted); padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .map-tools-row { display: flex; gap: 4px; flex-wrap: wrap; }
 .map-tool {
   min-width: 36px; height: 36px; padding: 0 6px; border-radius: 9px; border: 1px solid var(--line);
@@ -1676,3 +1676,12 @@ details > summary::before {
 }
 details[open] > summary::before { transform: rotate(90deg); }
 .unavailable-section > summary::before { content: ''; margin-right: 6px; color: var(--danger); }
+
+/* Empty-state pictures */
+.empty-art { position: relative; width: 120px; height: 96px; margin: 0 auto 8px; }
+.empty-art svg { display: block; }
+.ea-disc { fill: var(--accent-soft); }
+.ea-dot { fill: color-mix(in srgb, var(--accent) 40%, transparent); }
+.ea-dash { stroke: color-mix(in srgb, var(--accent) 40%, transparent); stroke-width: 3; stroke-linecap: round; fill: none; }
+.empty-art .ea-icon { position: absolute; left: 50%; top: 52px; transform: translate(-50%, -50%); color: var(--accent); }
+.empty .btn.primary { margin-top: 12px; }

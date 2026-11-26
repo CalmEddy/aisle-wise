@@ -239,3 +239,9 @@ test('a Shop row has one ⋯ button; pin and remove live in its menu', async ({ 
   await expect(menu.getByRole('button', { name: 'Show on the map' })).toBeVisible();
   await expect(menu.getByRole('button', { name: 'Remove from list' })).toBeVisible();
 });
+
+test('empty Shop: picture, and one action that focuses the add box', async ({ page }) => {
+  await expect(page.locator('.empty .empty-art')).toBeVisible();
+  await page.getByRole('button', { name: 'Add your first item' }).click();
+  await expect(page.getByLabel('Item to add')).toBeFocused();
+});

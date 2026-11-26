@@ -1,5 +1,6 @@
 import type { CutNumbers } from '../core/cut';
 import type { Rect } from '../core/types';
+import { Icon } from './Icon';
 
 /** The cut tool's options: how wide the cross aisle is, and how the aisles past it are numbered. */
 export function CutPanel({ box, shelves, aisles, nextNumber, width, setWidth, numbers, setNumbers, onCut, onCancel }: {
@@ -21,7 +22,7 @@ export function CutPanel({ box, shelves, aisles, nextNumber, width, setWidth, nu
   return (
     <section className="card block-panel cut-panel" aria-label="Cut aisles">
       <div className="block-head">
-        <b>✂ Cut aisles</b>
+        <b><Icon name="scissors" /> Cut aisles</b>
         <span className="muted small">
           {box ? `${shelves} shel${shelves === 1 ? 'f' : 'ves'}${aisles.length ? ` · ${aisles.length} aisle${aisles.length === 1 ? '' : 's'}` : ''}` : 'Drag a box across the aisles where the cross aisle goes. Drag again to move it.'}
         </span>
@@ -30,7 +31,7 @@ export function CutPanel({ box, shelves, aisles, nextNumber, width, setWidth, nu
         <label className="lane-field">
           <span>Cross aisle</span>
           <span className="stepper">
-            <button onClick={() => setWidth(Math.max(1, width - 1))} disabled={!box} aria-label="Narrower cross aisle">−</button>
+            <button onClick={() => setWidth(Math.max(1, width - 1))} disabled={!box} aria-label="Narrower cross aisle"><Icon name="minus" /></button>
             <input type="number" min={1} max={10} value={width} disabled={!box} aria-label="Cross aisle width in squares"
               onChange={(e) => setWidth(Math.max(1, Math.min(10, Number(e.target.value) || 1)))} />
             <button onClick={() => setWidth(Math.min(10, width + 1))} disabled={!box} aria-label="Wider cross aisle">+</button>

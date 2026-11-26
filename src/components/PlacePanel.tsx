@@ -3,6 +3,7 @@ import type { Area, Category, Place, Point, Shelf } from '../core/types';
 import { CategoryPicker } from './CategoryPicker';
 import { ExtendCard } from './ExtendCard';
 import type { Extension } from '../core/extend';
+import { Icon } from './Icon';
 
 /** Editing one shelf or area: label, what's stocked there, which side it's stocked from, fridge or freezer. (Turning, size, position and deleting are on the map.) */
 export function PlacePanel({ place, onChange, usedElsewhere, categories, looks, due, onExtend, onKeep }: {
@@ -57,7 +58,7 @@ export function PlacePanel({ place, onChange, usedElsewhere, categories, looks, 
                 <li key={id}>
                   <span>{looks.get(id)?.icon} {nameOf(id)} <span className="muted small">({n} item{n === 1 ? '' : 's'})</span></span>
                   <button className="btn small" onClick={() => setOwn([...own, id])} aria-label={`Keep ${nameOf(id)}`}>Keep</button>
-                  <button className="icon" onClick={() => onChange({ hides: [...hides.filter((h) => h !== id), id] })} aria-label={`Not here: ${nameOf(id)}`}>×</button>
+                  <button className="icon" onClick={() => onChange({ hides: [...hides.filter((h) => h !== id), id] })} aria-label={`Not here: ${nameOf(id)}`}><Icon name="x" /></button>
                 </li>
               ))}
             </ul>
@@ -73,8 +74,8 @@ export function PlacePanel({ place, onChange, usedElsewhere, categories, looks, 
               {([undefined, 1, -1] as const).map((back) => {
                 const v = place.orientation === 'vertical';
                 const label = back === undefined ? 'Both sides'
-                  : back === 1 ? (v ? '◧ Left only (wall on right)' : '⬒ Top only (wall below)')
-                    : (v ? '◨ Right only (wall on left)' : '⬓ Bottom only (wall above)');
+                  : back === 1 ? (v ? 'Left only (wall on right)' : 'Top only (wall below)')
+                    : (v ? 'Right only (wall on left)' : 'Bottom only (wall above)');
                 return (
                   <button key={String(back)} className={place.back === back ? 'active' : ''} onClick={() => onChange({ back } as Partial<Shelf>)}>
                     {label}
@@ -91,7 +92,7 @@ export function PlacePanel({ place, onChange, usedElsewhere, categories, looks, 
         <div className="segmented" role="group" aria-label="Kept">
           {([undefined, 'chilled', 'frozen'] as const).map((t) => (
             <button key={String(t)} className={place.temp === t ? 'active' : ''} aria-pressed={place.temp === t} onClick={() => onChange({ temp: t })}>
-              {t === undefined ? 'Room temperature' : t === 'chilled' ? '🧊 Fridge' : '❄ Freezer'}
+              {t === undefined ? 'Room temperature' : <><Icon name={t === 'chilled' ? 'refrigerator' : 'snowflake'} /> {t === 'chilled' ? 'Fridge' : 'Freezer'}</>}
             </button>
           ))}
         </div>
@@ -131,7 +132,7 @@ function CategoryList({ ids, onChange, categories, looks, usedElsewhere, addLabe
               </span>
               <button className="icon" onClick={() => moveBy(i, -1)} disabled={i === 0} aria-label={`Move ${nameOf(id)} earlier`}>↑</button>
               <button className="icon" onClick={() => moveBy(i, 1)} disabled={i === ids.length - 1} aria-label={`Move ${nameOf(id)} later`}>↓</button>
-              <button className="icon" onClick={() => onChange(ids.filter((c) => c !== id))} aria-label={`Remove ${nameOf(id)}`}>×</button>
+              <button className="icon" onClick={() => onChange(ids.filter((c) => c !== id))} aria-label={`Remove ${nameOf(id)}`}><Icon name="x" /></button>
             </li>
           );
         })}
@@ -162,7 +163,7 @@ export function NumberField({ label, value, onChange, min = 1, max = 150 }: {
     <label className="field number">
       <span>{label}</span>
       <div className="stepper">
-        <button type="button" onClick={() => onChange(clamp(value - 1, min, max))} aria-label={`Less ${label}`}>−</button>
+        <button type="button" onClick={() => onChange(clamp(value - 1, min, max))} aria-label={`Less ${label}`}><Icon name="minus" /></button>
         <input
           type="number"
           inputMode="numeric"
