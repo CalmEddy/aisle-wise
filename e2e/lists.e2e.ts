@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { fresh, saved, toggleListOptions, goSetup } from './helpers';
+import { fresh, saved, toggleListOptions, goTab } from './helpers';
 
-async function goSetupLists(page: import('@playwright/test').Page) {
-  await goSetup(page, 'Lists');
+async function goTabLists(page: import('@playwright/test').Page) {
+  await goTab(page, 'Lists');
 }
 
 async function goShop(page: import('@playwright/test').Page) {
@@ -22,7 +22,7 @@ async function selectSetupList(page: import('@playwright/test').Page, name: stri
 
 /** Create a list from the Setup → Lists pulldown (does not change the Shop trip). */
 async function createListInSetup(page: import('@playwright/test').Page, name: string) {
-  await goSetupLists(page);
+  await goTabLists(page);
   await page.getByLabel('Which list').selectOption({ value: '__new__' });
   await page.getByLabel('New list name').fill(name);
   await page.getByRole('button', { name: '+ Create' }).click();
@@ -77,7 +77,7 @@ test('several lists: make, switch, combine into one (with undo), rename, delete'
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   expect(await names()).toEqual(['Apples']);
 
-  await goSetupLists(page);
+  await goTabLists(page);
   await selectSetupList(page, 'Taco night');
   await page.getByRole('button', { name: 'More for Taco night' }).click();
   await page.getByLabel('List name', { exact: true }).fill('Taco Tuesday');
@@ -109,7 +109,7 @@ test('create in Setup does not change Shop trip; duplicate and add onto another 
   await expect(page.locator('.list-pick-hero-name')).toHaveText('Shopping list');
   expect(await names()).toEqual(['Apples']);
 
-  await goSetupLists(page);
+  await goTabLists(page);
   await selectSetupList(page, 'Party');
   await page.getByRole('button', { name: 'Duplicate' }).click();
   await expect(page.locator('.toast')).toContainText('Duplicated');
@@ -132,7 +132,7 @@ test('Setup Lists: sort cycles and search badges show List / Cart', async ({ pag
     ],
     display: { noAskStores: ['demo'] },
   });
-  await goSetupLists(page);
+  await goTabLists(page);
   await addInlineOnSetup(page, 'Eggs');
   await expect(page.locator('.lists-manage-items .name')).toContainText(['Apples', 'Eggs']);
 
@@ -159,7 +159,7 @@ test('Setup Lists: Buy again chips add to the list (not on Shop)', async ({ page
   });
   await goShop(page);
   await expect(page.locator('.buy-again')).toHaveCount(0);
-  await goSetupLists(page);
+  await goTabLists(page);
   const chips = page.locator('.buy-again .chip');
   await expect(chips.first()).toContainText('Milk');
   await expect(chips.filter({ hasText: 'Milk' }).locator('.again-cue')).toHaveText(/due|often/);
@@ -175,7 +175,7 @@ test('Grocery Items marks List and Cart badges', async ({ page }) => {
       { id: 'm', name: 'Milk', done: true, productId: 'p-milk' },
     ],
   });
-  await goSetup(page, 'Items & Categories');
+  await goTab(page, 'Items');
   await page.getByLabel('Search or add grocery items').fill('Apples');
   const apples = page.locator('.item-entry').filter({ has: page.locator('.item-name', { hasText: /^Apples$/ }) }).first();
   await expect(apples.locator('.status-pill.on-list')).toHaveText('List');

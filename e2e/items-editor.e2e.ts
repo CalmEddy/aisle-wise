@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { fresh, noPageErrors, saved, goSetup } from './helpers';
+import { fresh, noPageErrors, saved, goTab } from './helpers';
 
 async function openPeanutButter(page: import('@playwright/test').Page) {
-  await goSetup(page, 'Items & Categories');
+  await goTab(page, 'Items');
   await page.getByRole('button', { name: 'Grocery items' }).click();
   // Search jumps straight to the item without unfolding categories.
   await page.getByLabel('Search or add grocery items').fill('Peanut butter');

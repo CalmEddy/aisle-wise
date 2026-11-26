@@ -19,10 +19,9 @@ export async function toggleListOptions(page: Page) {
   await page.getByRole('button', { name: 'List options' }).click();
 }
 
-/** Opens a main section by tab name ("Setup" and its sub-tabs for now). */
-export async function goSetup(page: Page, sub?: 'Lists' | 'Items & Categories' | 'Stores') {
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  if (sub) await page.getByRole('tab', { name: sub, exact: true }).click();
+/** Opens one of the four bottom tabs. */
+export async function goTab(page: Page, tab: 'Shop' | 'Lists' | 'Items' | 'Stores') {
+  await page.getByRole('tab', { name: tab, exact: true }).click();
 }
 
 /** Turns on developer-only controls (e.g. the per-item "Clear where" button). */
@@ -58,8 +57,7 @@ export async function tick(page: Page, name: string) {
 
 /** Opens Edit map via Setup → Stores (map editing lives there). */
 export async function enterBuildMode(page: Page) {
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Stores', exact: true }).click();
+  await goTab(page, 'Stores');
   const region = page.getByRole('region', { name: 'Edit map' });
   if (await region.count()) return;
   const direct = page.getByRole('button', { name: 'Edit map', exact: true });

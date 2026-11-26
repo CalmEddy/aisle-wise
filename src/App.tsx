@@ -7,7 +7,7 @@ import { IntroSheet } from './components/IntroSheet';
 import { ListsManageView } from './components/ListsManageView';
 import { StoreSheet } from './components/StoreSheet';
 import { DisplayToggles } from './components/DisplayToggles';
-import { Icon } from './components/Icon';
+import { Icon, type IconName } from './components/Icon';
 import { storeHere } from './core/stores';
 import { Catalog, normalize } from './core/catalog';
 import { categoryLook, defaultCategories, defaultProducts } from './core/categories';
@@ -132,6 +132,8 @@ export default function App() {
   const [pos, setPos] = usePersistentState<{ layoutId: string; point: Point } | null>('aw.position.v2', null);
   /** Shop header: list options (row fields + more lists on this trip). */
   const [listOptsOpen, setListOptsOpen] = useState(false);
+  /** The ⋯ menu in the header of Lists / Items / Stores (Share, How this works). */
+  const [appMenuOpen, setAppMenuOpen] = useState(false);
   useEffect(() => {
     if (savedView === 'layout') {
       setView('setup');
@@ -1482,23 +1484,30 @@ export default function App() {
     setNotice(`${storeBit}. Added ${r.added} item${r.added === 1 ? '' : 's'} to “${listLabel}”${r.skipped ? ` (${r.skipped} already on it)` : ''}.`);
   }
 
-  const tab = (id: View, label: string) => (
-    <button role="tab" aria-selected={view === id} className={view === id ? 'active' : ''} onClick={() => { setListOptsOpen(false); setView(id); }}>
-      {label}
-    </button>
-  );
-
-  const setupSub = (id: SetupTab, label: string) => (
+  /** The four places you can be: Shop, Lists, Items, Stores (Lists/Items/Stores are the old Setup sub-tabs). */
+  type NavTab = 'shop' | SetupTab;
+  const navTab: NavTab = view === 'list' ? 'shop' : setupTab;
+  const goTab = (id: NavTab) => {
+    setListOptsOpen(false);
+    setAppMenuOpen(false);
+    if (id === 'shop') {
+      setView('list');
+      return;
+    }
+    setView('setup');
+    setSetupTab(id);
+    if (id === 'stores') setDisplay((d) => ({ ...d, buildMode: true }));
+  };
+  const navItem = (id: NavTab, label: string, icon: IconName) => (
     <button
+      key={id}
       role="tab"
-      aria-selected={setupTab === id}
-      className={setupTab === id ? 'active' : ''}
-      onClick={() => {
-        setSetupTab(id);
-        if (id === 'stores') setDisplay((d) => ({ ...d, buildMode: true }));
-      }}
+      aria-selected={navTab === id}
+      className={navTab === id ? 'active' : ''}
+      onClick={() => goTab(id)}
     >
-      {label}
+      <Icon name={icon} size="1.35rem" />
+      <span>{label}</span>
     </button>
   );
 
@@ -1655,6 +1664,13 @@ export default function App() {
                     show={['mapFull', 'listGroupByCategory', 'listColors', 'listIcons', 'mapColors', 'mapIcons']}
                     offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listGroupByCategory', 'listPrice', 'mapFull']}
                   />
+                  <p className="menu-section">App</p>
+                  <button type="button" className="menu-row" onClick={() => { setListOptsOpen(false); openShare({ list: true, map: false }); }}>
+                    <Icon name="share-2" /><span>Share</span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={() => { setListOptsOpen(false); setIntroOpen(true); }}>
+                    <Icon name="circle-help" /><span>How this works</span>
+                  </button>
                   <div className="danger-zone">
                     <p className="menu-section">Danger zone</p>
                     {confirmClearWhere ? (
@@ -1745,25 +1761,29 @@ export default function App() {
               </div>
             </div>
             <div className="top-right setup-actions">
-              <button className="btn share-btn" onClick={() => openShare({ list: true, map: setupTab === 'stores' })} aria-label="Share">Share</button>
-              <button className="info-btn" aria-label="How this works" title="How this works" onClick={() => setIntroOpen(true)}>ⓘ</button>
+              <button
+                type="button"
+                className={`list-opts-btn${appMenuOpen ? ' open' : ''}`}
+                aria-label="More"
+                aria-expanded={appMenuOpen}
+                onClick={() => setAppMenuOpen((v) => !v)}
+              >
+                <Icon name="ellipsis" />
+              </button>
+              {appMenuOpen && (
+                <div className="app-menu list-opts-menu" role="group" aria-label="More">
+                  <button type="button" className="menu-row" onClick={() => { setAppMenuOpen(false); openShare({ list: true, map: setupTab === 'stores' }); }}>
+                    <Icon name="share-2" /><span>Share</span>
+                  </button>
+                  <button type="button" className="menu-row" onClick={() => { setAppMenuOpen(false); setIntroOpen(true); }}>
+                    <Icon name="circle-help" /><span>How this works</span>
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
       </header>
-
-      <nav className="tabs" role="tablist" aria-label="Main">
-        {tab('list', 'Shop')}
-        {tab('setup', 'Setup')}
-      </nav>
-
-      {view === 'setup' && (
-        <nav className="tabs setup-tabs" role="tablist" aria-label="Setup">
-          {setupSub('lists', 'Lists')}
-          {setupSub('items', 'Items & Categories')}
-          {setupSub('stores', 'Stores')}
-        </nav>
-      )}
 
       {view === 'list' && (
         <ShoppingView
@@ -1844,6 +1864,14 @@ export default function App() {
           {...shoppingProps}
         />
       )}
+      <nav className="tabbar" role="tablist" aria-label="Main">
+        <div className="tabbar-inner">
+          {navItem('shop', 'Shop', 'shopping-cart')}
+          {navItem('lists', 'Lists', 'list-checks')}
+          {navItem('items', 'Items', 'tag')}
+          {navItem('stores', 'Stores', 'store')}
+        </div>
+      </nav>
       {introOpen && (
         <IntroSheet
           onStart={() => { closeIntro(); setView('list'); }}
