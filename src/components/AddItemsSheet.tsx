@@ -9,15 +9,12 @@ import { usePersistentState } from '../usePersistentState';
 import { Icon } from './Icon';
 import { useVoiceMic } from './useVoiceMic';
 
-/** A past purchase chip: product plus an optional frequency cue. */
-export type BuyAgainChip = { product: Product; cue?: 'due' | 'often' };
-
 /**
  * Compact add composer: type or speak (commas for several).
  * Default docks as a sheet. `inline` embeds it on the Setup → Lists screen.
  * "Got it" (in the cart) is Shop-only — pass `allowCart={false}` when editing lists.
  */
-export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose, allowCart = true, inline = false, tools }: {
+export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, hereLabel, whereText, iconOf, onAdd, onUndo, onClose, allowCart = true, inline = false, tools }: {
   listName: string;
   catalog: Catalog;
   /** Master-list items already waiting on this target list. */
@@ -32,8 +29,6 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
   iconOf: (categoryId?: string) => string | undefined;
   /** Adds names to the list or cart. Returns what happened (for Undo). */
   onAdd: (names: string[], mode: 'list' | 'cart') => QuickAddResult | undefined;
-  /** Things bought before, best first — Setup list-making only (not Shop). */
-  buyAgain?: BuyAgainChip[];
   onUndo: (snapshot: QuickAddResult['snapshot']) => void;
   onClose?: () => void;
   /** Shop can put items straight in the cart; Setup → Lists cannot. */
@@ -45,7 +40,6 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
 }) {
   const cart = inCart ?? new Set<string>();
   const anywhere = listedAnywhere ?? onList;
-  const again = buyAgain.filter((c) => !onList.has(c.product.id)).slice(0, 16);
   const [text, setText] = useState('');
   const [lastAdd, setLastAdd] = useState<{ names: string[]; mode: 'list' | 'cart'; snapshot: QuickAddResult['snapshot'] }>();
   const onAddRef = useRef(onAdd);
@@ -211,19 +205,6 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
           {suggestions.map(row)}
         </ul>
         </>
-      ) : again.length > 0 ? (
-        <section className="buy-again" aria-label="Buy again">
-          <h3 className="muted small">Buy again · tap to add</h3>
-          <div className="chips again-scroll">
-            {again.map(({ product: p, cue }) => (
-              <button key={p.id} className={`chip again${cue ? ` cue-${cue}` : ''}`} onClick={() => add([p.name], 'list')}>
-                <span aria-hidden="true">{iconOf(p.categoryId) ?? '＋'}</span> {p.name}
-                {cue === 'due' && <span className="again-cue">due</span>}
-                {cue === 'often' && <span className="again-cue">often</span>}
-              </button>
-            ))}
-          </div>
-        </section>
       ) : null}
 
       {lastAdd && (

@@ -61,7 +61,10 @@ export function unrecordPick(trips: Trip[], layoutId: string, name: string): Tri
   return trips.map((t) => (t === last ? { ...t, picks: t.picks.filter((p) => p.name !== name) } : t)).filter((t) => t.picks.length);
 }
 
-/** Something bought before, for "Buy again". */
+/**
+ * Something bought before. TODO: nothing shows this now ("Buy again" was removed from the
+ * app); decide how past purchases should be tracked and surfaced (see README, next steps).
+ */
 export interface Usual {
   productId?: string;
   name: string;

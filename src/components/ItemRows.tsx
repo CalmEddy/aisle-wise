@@ -222,10 +222,12 @@ export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
+export function ItemRows({ removable, items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
+  /** Show a Remove button on each row (Setup → Lists, where rows have no ⋯ menu or cart). */
+  removable?: boolean;
   onMenu?: (i: ListItem) => void;
   drag?: DragHandlers;
   dragging?: string;
@@ -347,6 +349,9 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                 {onPatch && !item.done && showPrice && <InlinePrice item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot"><Icon name="map-pin" filled title="Shown on the map" /></span>}
                 {clearBtn(item)}
+                {removable && (
+                  <button type="button" className="icon remove-from-list" onClick={() => onRemove(item)} aria-label={`Remove ${item.name} from list`}><Icon name="trash-2" /></button>
+                )}
                 {onMenu && (
                   <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
                 )}

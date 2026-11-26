@@ -896,8 +896,6 @@ button.spot-detail.goto { display: block; font: inherit; font-size: var(--text-m
 .add-sheet .add-row input { padding: 12px 14px; }
 .add-sheet-hint { margin: 2px 0 4px; }
 .add-sheet .suggestions.in-sheet { flex: 1; min-height: 0; overflow-y: auto; }
-.buy-again .chips.again-scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 0; }
-.buy-again .chips.again-scroll::-webkit-scrollbar { display: none; }
 .suggestions.in-sheet { position: static; box-shadow: none; border: 0; padding: 0; margin: 0; overflow-y: auto; flex: 1; }
 .suggestion.new { background: var(--accent-soft); }
 .add-icon-cat { width: 1.5em; text-align: center; flex: none; }
@@ -1291,22 +1289,6 @@ main { padding-bottom: min(48vh, 22rem); }
 .price-field { flex: 1; }
 .price-row { align-items: flex-end; }
 .price-preview { padding-bottom: 10px; }
-
-/* ---- Buy again (add window) ---- */
-.buy-again { min-height: 0; overflow-y: auto; }
-.buy-again h3 { margin: 0.15rem 0 0.25rem; font-weight: 600; }
-.buy-again .chips { margin-bottom: 0.25rem; flex-wrap: wrap; overflow: visible; }
-.buy-again .last-trip { margin: 0 0 0.35rem; }
-.chip.again { border-style: dashed; }
-.chip.again .again-cue {
-  margin-left: 0.25rem;
-  font-size: 0.7em;
-  opacity: 0.75;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.chip.again.cue-due { border-color: var(--accent, #2a6f4e); }
 
 /* ---- Trip done ---- */
 .trip-done-card { display: flex; flex-direction: column; gap: 0.5rem; border: 2px solid var(--accent); }

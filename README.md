@@ -245,6 +245,13 @@ supabase/migrations/              Database tables and access rules
 
 ## Ideas for next steps
 
+- **Track past purchases (to do)** – "Buy again" was taken out of the Lists
+  and Items screens, so there is currently no way to see what you bought
+  before. Work out how to track purchase history (what, when, how often,
+  where) and how to bring it back, for example as suggestions or a
+  restock reminder. Trips are still recorded on the phone (`aw.trips`,
+  `src/core/trips.ts`), so the raw history exists; `usuals()` there already
+  computes what's bought often and when it's due.
 - **Automatic indoor location** – GPS isn't accurate inside buildings.
   Options: Bluetooth beacons per aisle (needs a native wrapper such as
   Capacitor), scanning a QR code on each aisle sign, or a store's own API.
