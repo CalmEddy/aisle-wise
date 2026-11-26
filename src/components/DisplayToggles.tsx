@@ -18,7 +18,7 @@ const LABELS: Record<Switch, string> = {
   itemsGroupByCategory: 'Group by category',
   listQty: 'Quantity stepper',
   listPrice: 'Prices',
-  listLocation: 'Location under name',
+  listLocation: 'Place under name',
   listColors: 'Colors in list',
   listIcons: 'Icons in list',
   mapFull: 'Whole map',

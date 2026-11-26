@@ -12,8 +12,8 @@ function storeSummary(share: StoreShare) {
   const located = share.items.filter((i) => i.at).length;
   const unavailable = share.items.filter((i) => i.notAvailable).length;
   const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  return `The store layout and ${plural(located, 'item location')}`
-    + (unavailable ? `, plus ${plural(unavailable, 'item')} not available there.` : '.');
+  return `The store layout and ${plural(located, 'item place')}`
+    + (unavailable ? `, plus ${plural(unavailable, 'item')} not sold there.` : '.');
 }
 
 function shareTitle(share: Share, listName: string, storeName: string) {
@@ -108,7 +108,7 @@ export function ShareSheet({ listName, items, layout, catalog, initial, onClose 
             />
             <span>
               <span className="share-option-title">This store’s map</span>
-              <span className="muted small"> “{layout.name}” · layout and item locations</span>
+              <span className="muted small"> “{layout.name}” · layout and item places</span>
             </span>
           </label>
         </div>
@@ -254,12 +254,12 @@ function StoreImport({ share, layouts, onAddStore, onCancel }: {
       <h2>A store was shared with you</h2>
       <p><b>{share.layout.name}</b></p>
       <p className="muted small">
-        {share.layout.places.length} shelves and areas · {located} item location{located === 1 ? '' : 's'}
-        {unavailable > 0 && <> · {unavailable} item{unavailable === 1 ? '' : 's'} not available there</>}
+        {share.layout.places.length} shelves and areas · {located} item place{located === 1 ? '' : 's'}
+        {unavailable > 0 && <> · {unavailable} item{unavailable === 1 ? '' : 's'} not sold there</>}
       </p>
       {mine && (
         <p className="muted small">
-          You already have this store as “{mine.name}”. Updating replaces its layout and item locations with the shared ones.
+          You already have this store as “{mine.name}”. Updating replaces its layout and item places with the shared ones.
         </p>
       )}
       <div className="sheet-actions wrap">
@@ -302,7 +302,7 @@ function BothImport({ share, layouts, currentListName, asNew, setAsNew, newName,
       <p className="muted small">
         <b>{store.layout.name}</b>
         {' · '}
-        {store.layout.places.length} shelves and areas · {located} item location{located === 1 ? '' : 's'}
+        {store.layout.places.length} shelves and areas · {located} item place{located === 1 ? '' : 's'}
         {' · '}
         {listItems.length} list item{listItems.length === 1 ? '' : 's'}
       </p>

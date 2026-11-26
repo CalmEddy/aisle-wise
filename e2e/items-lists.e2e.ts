@@ -19,7 +19,7 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
   await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.list-bar-name')).toHaveText('Party');
   await expect(page.locator('.also-list')).toContainText('Add to “Party”');
-  await expect(page.getByRole('button', { name: 'Grocery items' })).toHaveClass(/active/);
+  await expect(page.getByRole('button', { name: 'Items', exact: true })).toHaveClass(/active/);
 
   // Search and add Milk onto the active list; toast names the list.
   await page.getByLabel('Search or add grocery items').fill('Milk');

@@ -803,7 +803,7 @@ export function ShoppingView(props: Props) {
     const snapshot = setAvailable(item, available);
     setToast({
       snapshot, added: [], mode: 'list',
-      note: available ? `${item.name} is back on your route` : `${item.name} marked not available at ${layout.name}`,
+      note: available ? `${item.name} is back on your route` : `${item.name} marked not sold at ${layout.name}`,
     });
   }
 
@@ -940,7 +940,7 @@ export function ShoppingView(props: Props) {
     }
     for (const item of unplaced) {
       const id = productFor(item, catalog)?.categoryId;
-      rows.push({ item, sub: withCat('No location yet', item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
+      rows.push({ item, sub: withCat('No place yet', item), catOrder: id ? orderOf(id) : 10_000, name: item.name });
     }
     rows.sort((a, b) => {
       // Group toggle (or sort-by-category): keep categories together in walking order.
@@ -1346,7 +1346,7 @@ export function ShoppingView(props: Props) {
   };
   function clearOneWhere(item: ListItem) {
     const snapshot = props.where.clearWhere([item]);
-    setToast({ snapshot, added: [], mode: 'list', note: `Cleared where ${item.name} is at ${layout.name}.` });
+    setToast({ snapshot, added: [], mode: 'list', note: `Forgot where ${item.name} is at ${layout.name}.` });
   }
 
   /** Takes items off the list, with Undo. */
@@ -1713,7 +1713,7 @@ export function ShoppingView(props: Props) {
         {notSold.length > 0 && (
           <details className="card unavailable-section">
             <summary className="off-head">
-              <span>Not available at {layout.name} ({notSold.length})</span>
+              <span>Not sold at {layout.name} ({notSold.length})</span>
               {notSold.length > 1 && (
                 <button
                   type="button"
@@ -1726,7 +1726,7 @@ export function ShoppingView(props: Props) {
             {notSold.map((item) => (
               <div className="row unavailable" key={item.id}>
                 <span className="name">{item.name}</span>
-                <button className="btn" onClick={() => markAvailable(item, true)}>Available here</button>
+                <button className="btn" onClick={() => markAvailable(item, true)}>Sold here</button>
                 <button className="icon" onClick={() => removeWithUndo([item])} aria-label={`Remove ${item.name}`}><Icon name="x" /></button>
               </div>
             ))}
@@ -2334,9 +2334,9 @@ export function ShoppingView(props: Props) {
           item={menuFor}
           where={(() => {
             const p = productFor(menuFor, catalog);
-            if (!p) return 'No location yet';
+            if (!p) return 'No place yet';
             const loc = locateProduct(p, layout, catalog);
-            if (loc.kind === 'not-sold') return `Not available at ${layout.name}`;
+            if (loc.kind === 'not-sold') return `Not sold at ${layout.name}`;
             return whereText(p, layout, catalog);
           })()}
           storeName={layout.name}
@@ -2426,7 +2426,7 @@ export function ShoppingView(props: Props) {
               markAvailable({ id: '', name: product.name, done: false, productId: product.id }, false);
             }
             setPicking(null);
-            }}>Not available here</button>
+            }}>Not sold here</button>
           </>}
           onCancel={() => setPicking(null)}
         />

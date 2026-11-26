@@ -116,7 +116,7 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
         <button className="pick" onClick={onPin}><Icon name="locate-fixed" />{pinned ? 'Stop showing on the map' : 'Show on the map'}</button>
         <button className="pick" onClick={onChangePlace}><Icon name="map-pin" />Change place on the map</button>
         <button className="pick" onClick={onWhere}><Icon name="tag" />Aisle / department…</button>
-        <button className="pick" onClick={onNotAvailable}><Icon name="ban" />Not available at {storeName}</button>
+        <button className="pick" onClick={onNotAvailable}><Icon name="ban" />Not sold at {storeName}</button>
         {others.length > 0 && !transfer && (
           <>
             <button className="pick" onClick={() => setTransfer('move')}><Icon name="arrow-up-right" />Move to another list…</button>

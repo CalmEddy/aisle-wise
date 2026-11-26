@@ -137,7 +137,7 @@ export function ItemsView(props: Props) {
         <Icon name="chevron-down" className="chev" />
       </button>
       <div className="segmented" role="tablist">
-        <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Grocery items</button>
+        <button className={tab === 'items' ? 'active' : ''} onClick={() => setTab('items')}>Items</button>
         <button className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}>Categories</button>
       </div>
       {tab === 'items' ? <ProductList {...props} /> : <CategoryList {...props} />}
@@ -484,7 +484,7 @@ function ProductList({
           >
             <Icon name={voice.listening ? 'square' : 'mic'} size="1.3rem" filled={voice.listening} />
           </button>
-          <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : '+ Add'}</button>
+          <button type="submit" disabled={!q}>{q && !q.includes(',') && catalog.exact(q) && !alsoList ? 'Open' : 'Add'}</button>
         </form>
         <div className="items-sub">
           <label className="also-list">
@@ -1032,7 +1032,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
     };
     if (answer) next.mapClues = { ...p.mapClues, [l.id]: answer };
     return next;
-  }, `${product.name}: location cleared at ${l.name}.`);
+  }, `${product.name}: place cleared at ${l.name}.`);
 
   const storeRow = (l: StoreLayout) => {
     const sold = !product.notAt?.includes(l.id);
@@ -1084,7 +1084,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
                 if (v === '__unknown__') clearLocation(l);
                 else setLocation(l, v);
               }}
-              aria-label={`Location at ${l.name}`}
+              aria-label={`Place at ${l.name}`}
             >
               <option value="">Automatic: {autoText}</option>
               <option value="__unknown__">Unknown — no place yet</option>
@@ -1095,7 +1095,7 @@ function ItemEditor({ product, catalog, layouts, layout, iconOf, onChange, onDel
             </select>
             <button type="button" className="btn" onClick={() => setMapFor(l)}><Icon name="map-pin" /> Map</button>
             {!unknown && (
-              <button type="button" className="btn" onClick={() => clearLocation(l)} aria-label={`Clear location of ${product.name} at ${l.name}`}>
+              <button type="button" className="btn" onClick={() => clearLocation(l)} aria-label={`Clear place of ${product.name} at ${l.name}`}>
                 Clear
               </button>
             )}

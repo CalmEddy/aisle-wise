@@ -3,7 +3,7 @@ import { fresh, noPageErrors, saved, goTab } from './helpers';
 
 async function openPeanutButter(page: import('@playwright/test').Page) {
   await goTab(page, 'Items');
-  await page.getByRole('button', { name: 'Grocery items' }).click();
+  await page.getByRole('button', { name: 'Items', exact: true }).click();
   // Search jumps straight to the item without unfolding categories.
   await page.getByLabel('Search or add grocery items').fill('Peanut butter');
   await page.locator('.item-entry .product-row', { hasText: 'Peanut butter' }).click();
@@ -54,9 +54,9 @@ test('item editor: Clear returns Automatic location to Unknown', async ({ page }
   const ok = noPageErrors(page);
   await fresh(page);
   await openPeanutButter(page);
-  const loc = page.getByLabel(/Location at/);
+  const loc = page.getByLabel(/Place at/);
   await expect(loc).toContainText(/Automatic:/);
-  await page.getByRole('button', { name: /Clear location of Peanut butter/ }).click();
+  await page.getByRole('button', { name: /Clear place of Peanut butter/ }).click();
   await expect(loc).toHaveValue('__unknown__');
   const products = await saved<{ name: string; clearedAt?: string[] }[]>(page, 'products');
   const pb = products.find((p) => p.name === 'Peanut butter')!;

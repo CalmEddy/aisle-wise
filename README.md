@@ -270,3 +270,17 @@ https://calmeddy.github.io/aisle-wise/
   sign in, then create or join a household for live sync across phones.
 
 Every push to `main` is tested, built and published to that URL.
+
+## Wording guide
+
+Use the same word for the same thing everywhere (screens, toasts, labels):
+
+- **Not sold here** – an item the store doesn't stock (not "not available", "not here").
+- **Remove** takes something off a list (the item stays in your grocery items).
+  **Delete** erases the thing itself: a list, store, category or grocery item.
+- **Place** is where an item is in the store ("No place yet", "Change place").
+  **Aisle / department…** is how you describe it in words. A shelf or area is a
+  map object, and "location" is only the phone's GPS.
+- **Add** puts something on a list. **Got it** means it's in your cart now.
+- **Edit map** opens the map editor. **Undo** reverses the last change
+  (**Undo step** in the aisle brush).

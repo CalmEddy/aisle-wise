@@ -248,7 +248,7 @@ export function applyListShare(share: ListShare, data: Data, targetListId = MAIN
 
 /**
  * Adds a shared store. `replaceId` updates that local store instead of
- * adding a new one. Item locations and "not available" settings come along.
+ * adding a new one. Item places and "not sold here" settings come along.
  */
 export function applyStoreShare(share: StoreShare, data: Data, replaceId?: string): Data & { layoutId: string } {
   const categories = [...data.categories];

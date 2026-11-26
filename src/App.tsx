@@ -1632,7 +1632,7 @@ export default function App() {
                     title="Edit the store map"
                   >
                     <Icon name="map" />
-                    <span>Edit store map</span>
+                    <span>Edit map</span>
                     <Icon name="chevron-right" className="chev" />
                   </button>
                   <p className="menu-section">Show on each row</p>
@@ -1663,7 +1663,7 @@ export default function App() {
                     <p className="menu-section">Danger zone</p>
                     {confirmClearWhere ? (
                       <div className="danger-confirm">
-                        <p className="small">Forget where everything on this list is at {layout.name}?</p>
+                        <p className="small">Forget where everything on this list is at {layout.name}? Items will ask for their place again.</p>
                         <div className="row-btns">
                           <button type="button" className="btn" onClick={() => setConfirmClearWhere(false)}>Cancel</button>
                           <button
@@ -1681,15 +1681,15 @@ export default function App() {
                               }
                               clearWhere(these);
                               setListOptsOpen(false);
-                              setNotice(`Cleared where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.`);
+                              setNotice(`Forgot where ${these.length} item${these.length === 1 ? ' is' : 's are'} at ${layout.name}.`);
                             }}
-                          >Clear all</button>
+                          >Forget all</button>
                         </div>
                       </div>
                     ) : (
                       <button type="button" className="link danger-link" onClick={() => setConfirmClearWhere(true)}>
                         <Icon name="trash-2" />
-                        Clear all locations at this store
+                        Forget where items are at this store
                       </button>
                     )}
                   </div>
