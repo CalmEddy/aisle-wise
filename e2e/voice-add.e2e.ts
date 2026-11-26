@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { fresh, noPageErrors, saved } from './helpers';
+import { fresh, noPageErrors, saved, goSetup } from './helpers';
 
 /** Install a fake SpeechRecognition before the app boots; instances land on window.__awSpeech. */
 async function mockSpeech(page: Page) {
@@ -95,8 +95,7 @@ test('Items tab mic fills search for review instead of auto-adding', async ({ pa
     activeList: 'aldi',
   });
 
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await goSetup(page, 'Items & Categories');
   await page.getByRole('button', { name: 'Add by voice' }).click();
   await fireFinal(page, 'Butter');
 

@@ -1,8 +1,5 @@
 import { expect, test } from '@playwright/test';
-import {
-  addItems, describeAisle, describeDept, describeWall, enterBuildMode, fresh, newStore,
-  noPageErrors, openDescribe, placeSheet, row, saved, tapMap, tick,
-} from './helpers';
+import { addItems, describeAisle, describeDept, describeWall, enterBuildMode, fresh, newStore, noPageErrors, openDescribe, placeSheet, row, saved, tapMap, tick, toggleListOptions, enableDebug } from './helpers';
 
 const clues = async (page: import('@playwright/test').Page) => {
   const products = await saved<{ name: string; clues?: Record<string, unknown> }[]>(page, 'products');
@@ -234,6 +231,7 @@ test('a second table said like the first: "Another one" keeps them apart', async
 
 test('(testing) clear where one item is, or every item on the list, with Undo', async ({ page }) => {
   const ok = noPageErrors(page);
+  await enableDebug(page);
   await addItems(page, 'Cereal, Pasta, Chips, Granola');
   for (const [name, n] of [['Cereal', '1'], ['Pasta', '2']] as const) {
     await tick(page, name);
@@ -259,8 +257,9 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   }
   const places = async () => JSON.stringify((await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places);
   const before = await places();
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByRole('button', { name: 'Clear all locations at this store' }).click();
+  await page.getByRole('button', { name: 'Clear all', exact: true }).click();
   await expect(page.locator('.toast.top')).toContainText('Cleared where');
   await expect.poll(answered).toEqual([]);
   await page.waitForTimeout(300);
@@ -561,9 +560,9 @@ test('things put just past a shelf’s end: the shelf is offered longer at the e
     products: [{ id: 'jam', name: 'Jam', categoryId: 'breakfast_spreads', locations: { s1: 'sh1@0.5,0.5' } }],
   });
   await addItems(page, 'Zorbo, Quibble');
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByRole('button', { name: 'Whole map' }).click();
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   const dropPast = async (name: string, gy: number) => {
     const handle = page.getByLabel(new RegExp(`^Drag ${name}`)).first();
     // Trip chrome can push rows below the fold; the drag must start on-screen.
@@ -631,9 +630,9 @@ test('“Where I’m standing” keeps the pin and moves the item to where you a
   const ok = noPageErrors(page);
   await fresh(page);
   await addItems(page, 'milk');
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByRole('button', { name: 'Whole map' }).click();
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await tapMap(page, 6, 20);
   const before = await saved<{ layoutId: string; point: { x: number; y: number } }>(page, 'position.v2');
   expect(before.point).toEqual({ x: 6, y: 20 });
@@ -663,9 +662,9 @@ test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carr
     activeLayout: 's1',
   });
   await addItems(page, 'Pickles');
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByRole('button', { name: 'Whole map' }).click();
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await tapMap(page, 8, 15);
   await tick(page, 'Pickles');
   const sheet = placeSheet(page, 'Pickles');

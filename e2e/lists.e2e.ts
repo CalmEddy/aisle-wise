@@ -1,9 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { fresh, saved } from './helpers';
+import { fresh, saved, toggleListOptions, goSetup } from './helpers';
 
 async function goSetupLists(page: import('@playwright/test').Page) {
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Lists', exact: true }).click();
+  await goSetup(page, 'Lists');
 }
 
 async function goShop(page: import('@playwright/test').Page) {
@@ -137,12 +136,11 @@ test('Setup Lists: sort cycles and search badges show List / Cart', async ({ pag
   await addInlineOnSetup(page, 'Eggs');
   await expect(page.locator('.lists-manage-items .name')).toContainText(['Apples', 'Eggs']);
 
-  const sort = page.getByRole('button', { name: /Sort by order of entry/ });
-  await expect(sort).toBeVisible();
-  await sort.click();
-  await expect(page.getByRole('button', { name: /Sort by category/ })).toBeVisible();
-  await page.getByRole('button', { name: /Sort by category/ }).click();
-  await expect(page.getByRole('button', { name: /Sort alphabetically/ })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Sort by order of entry/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Sort by category/ }).click();
+  await expect(page.getByRole('radio', { name: /Sort by category/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Sort alphabetically/ }).click();
+  await expect(page.getByRole('radio', { name: /Sort alphabetically/ })).toHaveAttribute('aria-checked', 'true');
 
   await page.getByLabel('Item to add').fill('Milk');
   const milkSug = page.locator('.add-inline .suggestion', { hasText: 'Milk' }).first();
@@ -177,8 +175,7 @@ test('Grocery Items marks List and Cart badges', async ({ page }) => {
       { id: 'm', name: 'Milk', done: true, productId: 'p-milk' },
     ],
   });
-  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
-  await page.getByRole('tab', { name: 'Items & Categories', exact: true }).click();
+  await goSetup(page, 'Items & Categories');
   await page.getByLabel('Search or add grocery items').fill('Apples');
   const apples = page.locator('.item-entry').filter({ has: page.locator('.item-name', { hasText: /^Apples$/ }) }).first();
   await expect(apples.locator('.status-pill.on-list')).toHaveText('List');
@@ -236,7 +233,7 @@ test('Include other lists on this trip without copying onto the active list', as
   expect(await toBuyNames()).toEqual(['Apples', 'Bread']);
   expect((await mainItems()).length).toBe(2);
 
-  await page.getByRole('button', { name: 'List options' }).click();
+  await toggleListOptions(page);
   await page.getByLabel('Include Weekly staples on this trip').check();
 
   await expect(page.locator('.list-pick-hero-name')).toHaveText('Shopping list');

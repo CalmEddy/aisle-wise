@@ -509,12 +509,12 @@ function ProductList({
             {selecting ? 'Done' : '☑ Select'}
           </button>
         </div>
+        <ItemsSortToggle display={display} setDisplay={setDisplay} />
         <DisplayToggles
           display={display}
           setDisplay={setDisplay}
           show={['itemsGroupByCategory', 'listQty', 'listPrice']}
           offByDefault={['buildMode', 'buildArea', 'buildDouble', 'listPrice']}
-          lead={<ItemsSortToggle display={display} setDisplay={setDisplay} />}
         />
         <div className="chips filters" role="group" aria-label="Show">
           {FILTERS.map((f) => (

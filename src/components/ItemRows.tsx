@@ -1,6 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ItemUnit, ListItem, Stop } from '../core/types';
 import { formatPrice, parsePrice, qtyUnitPriceText } from '../core/items';
+import { isDebug } from '../debug';
+import { swipeHintSeen } from '../swipeHint';
+import { Icon } from './Icon';
 import { SwipeRow } from './SwipeRow';
 import { capitalize } from './whereText';
 
@@ -264,8 +267,11 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   /** Remembered / best-elsewhere price cue (shown after the list-line price). */
   priceOf?: (item: ListItem) => string | undefined;
 }) {
-  const clearBtn = (item: ListItem) => onClearWhere && clearable?.(item) && (
-    <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)">⊘</button>
+  const debug = isDebug();
+  // The one-time swipe nudge plays on the first row only, and only if it has never played.
+  const [showHint] = useState(() => !swipeHintSeen());
+  const clearBtn = (item: ListItem) => debug && onClearWhere && clearable?.(item) && (
+    <button className="icon clear-where" onClick={() => onClearWhere(item)} aria-label={`Clear where ${item.name} is`} title="Clear its location here (testing)"><Icon name="x" /></button>
   );
   const whereOf = (item: ListItem) => (showLocation ? subOf?.(item) : undefined);
   const badges = (item: ListItem) => {
@@ -315,11 +321,12 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
         >
           {simple ? (
             <SwipeRow
+              hint={index === 0 && !item.done && !noCheck && showHint}
               onSwipeRight={noCheck ? undefined : () => onToggle(item)}
-              rightLabel={noCheck ? undefined : (item.done ? <>↩ Back on the list</> : <>✓ Got it</>)}
+              rightLabel={noCheck ? undefined : (item.done ? <><Icon name="undo-2" /> Back on the list</> : <><Icon name="check" /> Got it</>)}
               leftActions={(close) => (
                 <>
-                  {onNotHere && !item.done && <button className="swipe-btn sold" onClick={() => { close(); onNotHere(item); }}>🚫 Not here</button>}
+                  {onNotHere && !item.done && <button className="swipe-btn sold" onClick={() => { close(); onNotHere(item); }}>Not here</button>}
                   <button className="swipe-btn delete" onClick={() => { close(); onRemove(item); }}>Remove</button>
                 </>
               )}
@@ -339,7 +346,7 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                 </label>
                 {onPatch && !item.done && showQty && <QtyStepper item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {onPatch && !item.done && showPrice && <InlinePrice item={item} onPatch={(patch) => onPatch(item, patch)} />}
-                {pinned?.has(item.id) && <span className="pinned-dot" title="Shown on the map" aria-label="Shown on the map">📍</span>}
+                {pinned?.has(item.id) && <span className="pinned-dot"><Icon name="map-pin" filled title="Shown on the map" /></span>}
                 {clearBtn(item)}
                 {!item.done && (
                   <button
@@ -357,7 +364,7 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
             </SwipeRow>
           ) : (<>
           {drag && (
-            <span className="handle" aria-label={`Drag ${item.name} to a new location`} {...drag(item)}>⠿</span>
+            <span className="handle" aria-label={`Drag ${item.name} to a new location`} {...drag(item)}><Icon name="grip-vertical" /></span>
           )}
           <label>
             <input type="checkbox" checked={item.done} onChange={() => onToggle(item)} />
@@ -381,7 +388,7 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
               aria-pressed={!!pinned?.has(item.id)}
               aria-label={pinned?.has(item.id) ? `Stop showing ${item.name} on the map` : `Show ${item.name} on the map`}
               title="Show on map"
-            >📍</button>
+            ><Icon name="map-pin" filled={!!pinned?.has(item.id)} /></button>
           )}
           {clearBtn(item)}
           {onMenu && (
