@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addItems, fresh, noPageErrors, row, saved, tick, toastText } from './helpers';
+import { addItems, fresh, noPageErrors, row, saved, tick } from './helpers';
 
 // Shopping the demo store: adding, the route, checking off, trip done. "Where was it?" is off here.
 test.beforeEach(async ({ page }) => {
@@ -116,40 +116,25 @@ test('cart items have the ⋯ menu for place, aisle and price', async ({ page })
   expect(items.find((i) => i.name === 'Milk')).toMatchObject({ done: true, price: 2.49 });
 });
 
-test('buy again: past trips at the top of the add window, one tap adds', async ({ page }) => {
-  const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
-  await fresh(page, { trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])], display: { noAskStores: ['demo'] } });
-  const chips = page.locator('.buy-again .chip');
-  await expect(chips.first()).toContainText('Milk');
-  // Frequent / overdue buys get a short cue on the chip.
-  await expect(chips.filter({ hasText: 'Milk' }).locator('.again-cue')).toHaveText(/due|often/);
-  await chips.filter({ hasText: 'Milk' }).click();
-  await expect(chips.filter({ hasText: 'Milk' })).toHaveCount(0);
-  await expect(page.locator('.added-strip')).toContainText('Milk');
-  expect(await toastText(page)).not.toContain('Error');
-});
-
-test('empty list: Shop last trip restocks with Undo', async ({ page }) => {
-  const ok = noPageErrors(page);
+test('Shop has no Buy again or Last trip; list sits under the map', async ({ page }) => {
   const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
   await fresh(page, {
-    trips: [t(1000, ['Milk', 'Bread', 'Eggs']), t(2000, ['Apples', 'Pasta'])],
+    trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])],
     items: [],
-    display: { noAskStores: ['demo'] },
+    display: { noAskStores: ['demo'], mapFull: true },
   });
+  await expect(page.locator('.buy-again')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Last trip|Shop last trip/ })).toHaveCount(0);
   await expect(page.locator('.empty')).toContainText('Your list is empty');
-  await page.getByRole('button', { name: /Shop last trip · 2 items/ }).click();
-  await expect(page.locator('.toast')).toContainText(/Added 2 from last trip/);
-  await expect(row(page, 'Apples')).toBeVisible();
-  await expect(row(page, 'Pasta')).toBeVisible();
-  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
-  await expect(page.locator('.empty')).toContainText('Your list is empty');
-  // Inline add also offers last-trip restock.
-  await page.getByRole('button', { name: /Last trip · add all \(2\)/ }).click();
-  await expect(page.locator('.added-strip')).toContainText(/Apples|Pasta/);
-  await expect(row(page, 'Apples')).toBeVisible();
-  await expect(row(page, 'Pasta')).toBeVisible();
-  ok();
+  await addItems(page, 'apples');
+  // With map open, the shopping list follows the map slot; add compose is after the list.
+  const order = await page.locator('.shop-columns > *').evaluateAll((els) => els.map((e) => e.className));
+  expect(order[0]).toContain('shop-map-slot');
+  expect(order[1]).toContain('shop-list-col');
+  const colKids = await page.locator('.shop-list-col > *').evaluateAll((els) => els.map((e) => e.tagName + '.' + e.className));
+  expect(colKids[0]).toMatch(/^MAIN\b/i);
+  expect(colKids.some((c) => c.includes('shop-compose'))).toBe(true);
+  expect(colKids.findIndex((c) => c.includes('shop-compose'))).toBeGreaterThan(colKids.findIndex((c) => /^MAIN\b/i.test(c)));
 });
 
 test('sort sits by the search box; map toggle lives in List options', async ({ page }) => {

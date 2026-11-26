@@ -21,7 +21,7 @@ const NEW_LIST = '__new__';
  * (qty / rename / remove) without cart check-off.
  * Selecting a list here does not change the Shop trip list.
  */
-export function ListsManageView({ lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, buyAgain, lastTripNames, undo, snapshot, display, setDisplay }: {
+export function ListsManageView({ lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, buyAgain, undo, snapshot, display, setDisplay }: {
   lists: ListsApi;
   catalog: Catalog;
   layout: StoreLayout;
@@ -36,7 +36,6 @@ export function ListsManageView({ lists, catalog, layout, looks, allItems, setLi
   onAnyListIds: Set<string>;
   quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart') => QuickAddResult;
   buyAgain?: BuyAgainChip[];
-  lastTripNames?: string[];
   undo: (s: Snapshot) => void;
   snapshot: () => Snapshot;
   display: Display;
@@ -271,7 +270,6 @@ export function ListsManageView({ lists, catalog, layout, looks, allItems, setLi
               return r;
             }}
             buyAgain={buyAgain}
-            lastTripNames={lastTripNames}
             onUndo={undo}
           />
 

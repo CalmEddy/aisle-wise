@@ -152,6 +152,24 @@ test('Setup Lists: sort cycles and search badges show List / Cart', async ({ pag
   await expect(appleSug.locator('.status-pill.on-list')).toHaveText('List');
 });
 
+test('Setup Lists: Buy again chips add to the list (not on Shop)', async ({ page }) => {
+  const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
+  await fresh(page, {
+    trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])],
+    items: [],
+    display: { noAskStores: ['demo'] },
+  });
+  await goShop(page);
+  await expect(page.locator('.buy-again')).toHaveCount(0);
+  await goSetupLists(page);
+  const chips = page.locator('.buy-again .chip');
+  await expect(chips.first()).toContainText('Milk');
+  await expect(chips.filter({ hasText: 'Milk' }).locator('.again-cue')).toHaveText(/due|often/);
+  await chips.filter({ hasText: 'Milk' }).click();
+  await expect(page.locator('.lists-manage-items .name')).toContainText(['Milk']);
+  await expect(page.getByRole('button', { name: /Last trip/ })).toHaveCount(0);
+});
+
 test('Grocery Items marks List and Cart badges', async ({ page }) => {
   await fresh(page, {
     items: [

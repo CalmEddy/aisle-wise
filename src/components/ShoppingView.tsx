@@ -3,7 +3,6 @@ import { cutPreview, cutsVertical, type CutNumbers } from '../core/cut';
 import { CutPanel } from './CutPanel';
 import { AreaPanel, rectBetween, ShelfBlockPanel, useAreaDraft, useBlockDrag, useShelfBlock, type BlockCorner } from './ShelfBlock';
 import { expandSelection } from '../core/groups';
-import type { Usual } from '../core/trips';
 import type { LayoutQuestion } from '../core/learn';
 import type { BuildOutcome, QuickAddResult, Snapshot } from '../App';
 import { planBuild, type BuildChoice, type Direction } from '../core/build';
@@ -27,7 +26,7 @@ import { checkLayout } from '../core/validate';
 import { SpotPicker } from './SpotPicker';
 import { PlaceOnMap, type PlaceMapController } from './PlaceOnMap';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
-import { AddItemsSheet, type BuyAgainChip } from './AddItemsSheet';
+import { AddItemsSheet } from './AddItemsSheet';
 import { WherePanel } from './WherePanel';
 import { nextAisles, type MapSpot } from './WhereBar';
 import { orderOf } from '../core/taxonomy';
@@ -78,11 +77,6 @@ interface Props {
   quickAddTo: (listId: string, names: string[], mode: 'list' | 'cart', hereKey?: string) => QuickAddResult;
   /** Product ids already waiting (unchecked) on a given list. */
   onListIds: (listId: string) => Set<string>;
-  /** Show the how-it-works hint (toggled by ⓘ in the header). */
-  /** Things bought before, most likely wanted again first. */
-  usuals: Usual[];
-  /** Names from the last completed trip at this store (one-tap restock). */
-  lastTripNames: string[];
   /** Parts of the map just added or changed (outlined). */
   mapChanges: string[];
   /** A changed part has been looked at (tapped in Edit map). */
@@ -984,33 +978,6 @@ export function ShoppingView(props: Props) {
     () => new Set(items.filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[]),
     [items, catalog],
   );
-  /** "Buy again": things bought before that are in the master list, best first. */
-  const buyAgain = useMemo(() => {
-    const out: BuyAgainChip[] = [];
-    for (const u of props.usuals) {
-      const p = (u.productId && catalog.productById.get(u.productId)) || catalog.match(u.name);
-      if (p && !out.some((c) => c.product.id === p.id)) {
-        const cue = u.due ? 'due' as const : u.count >= 3 ? 'often' as const : undefined;
-        out.push({ product: p, ...(cue && { cue }) });
-      }
-    }
-    return out;
-  }, [props.usuals, catalog]);
-  const lastTripRestock = useMemo(() => props.lastTripNames.filter((n) => {
-    const p = catalog.exact(n) ?? catalog.match(n);
-    return !p || !onList.has(p.id);
-  }), [props.lastTripNames, catalog, onList]);
-
-  function restockLastTrip() {
-    if (!lastTripRestock.length) return;
-    const result = props.quickAdd(lastTripRestock, 'list');
-    setToast({
-      ...result,
-      mode: 'list',
-      note: `Added ${lastTripRestock.length} from last trip.`,
-    });
-  }
-
   const done = items.filter((i) => i.done);
   // Everything's in the cart (apart from things this store doesn't sell).
   const tripDone = done.length > 0 && items.every((i) => i.done || notSold.includes(i));
@@ -1595,13 +1562,8 @@ export function ShoppingView(props: Props) {
           <div className="empty">
             <p>Your list is empty.</p>
             <p className="muted">
-              Type above to add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
+              Type below to add what you need. The list sorts itself into the shortest walk through the store and re-sorts as you move.
             </p>
-            {lastTripRestock.length > 0 && (
-              <button className="btn primary" onClick={restockLastTrip}>
-                Shop last trip · {lastTripRestock.length} item{lastTripRestock.length === 1 ? '' : 's'}
-              </button>
-            )}
             <button className="link" onClick={onEditLayout}>Set up your store’s layout</button>
           </div>
         )}
@@ -1847,8 +1809,6 @@ export function ShoppingView(props: Props) {
           whereText={(p) => whereText(p, layout, catalog)}
           iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
           onAdd={addNames}
-          buyAgain={buyAgain}
-          lastTripNames={props.lastTripNames}
           onUndo={props.undo}
           onClose={() => setAddingFor(undefined)}
         />
@@ -1891,6 +1851,7 @@ export function ShoppingView(props: Props) {
             )}
           </div>
           <div className="shop-list-col">
+            {listMain}
             <div className="shop-compose" aria-label="Add items">
               <AddItemsSheet
                 inline
@@ -1906,13 +1867,10 @@ export function ShoppingView(props: Props) {
                 whereText={(p) => whereText(p, layout, catalog)}
                 iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}
                 onAdd={addNames}
-                buyAgain={buyAgain}
-                lastTripNames={props.lastTripNames}
                 onUndo={props.undo}
                 tools={<ListSortToggle display={props.display} setDisplay={props.setDisplay} />}
               />
             </div>
-            {listMain}
           </div>
         </div>
       )}
