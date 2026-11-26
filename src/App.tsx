@@ -1456,7 +1456,6 @@ export default function App() {
     }
     setView('setup');
     setSetupTab(id);
-    if (id === 'stores') setDisplay((d) => ({ ...d, buildMode: true }));
   };
   const navItem = (id: NavTab, label: string, icon: IconName) => (
     <button

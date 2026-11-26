@@ -1570,3 +1570,7 @@ details[open] > summary::before { transform: rotate(90deg); }
 .household-row.status-offline .dot, .household-row.status-connecting .dot { background: var(--c-warn); }
 .household-row-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .household-row-text .small { margin: 0; }
+
+/* Stores screen: the map as a plain picture */
+.store-preview { margin-bottom: 8px; }
+.store-preview .map { pointer-events: none; }

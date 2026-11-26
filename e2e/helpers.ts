@@ -55,7 +55,7 @@ export async function tick(page: Page, name: string) {
   await row(page, name).getByRole('checkbox').click();
 }
 
-/** Opens Edit map via Setup → Stores (map editing lives there). */
+/** Opens the map editor: Stores tab → Edit map. */
 export async function enterBuildMode(page: Page) {
   await goTab(page, 'Stores');
   const region = page.getByRole('region', { name: 'Edit map' });

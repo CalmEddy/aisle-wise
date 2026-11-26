@@ -1203,7 +1203,11 @@ export function ShoppingView(props: Props) {
   const [listOpen, setListOpen] = useState(false);
   // Things the map has only guessed the place of: asked one at a time, relative to what's on the map.
   // In the editor, only blocks are asked about (made with "New block").
-  const pending = useMemo(() => pendingPlacements(layout, catalog.products).filter((sub) => !building || isBlock(sub)), [layout, catalog.products, building]);
+  // Questions about where things go belong to shopping and map editing, not the Stores overview.
+  const pending = useMemo(
+    () => (role === 'stores' && !building ? [] : pendingPlacements(layout, catalog.products).filter((sub) => !building || isBlock(sub))),
+    [layout, catalog.products, building, role],
+  );
   const [placeLater, setPlaceLater] = useState<string[]>([]);
   /** A block the shopper asked to place (Store settings → Place…). */
   const [placeAsked, setPlaceAsked] = useState<string>();
@@ -1440,7 +1444,9 @@ export function ShoppingView(props: Props) {
   // While shopping the map is a strip showing you and your next stop (🗺 for the whole map); building shows it all.
   // While placing an item, always show the whole map so taps hit shelves clearly on a phone.
   // Wide side-by-side uses the full map in the map column (strip is phone-only when map is shown).
-  const mapStrip = !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
+  const mapStrip = role === 'shop' && !building && !wideShop && !props.display.mapFull && !whereBarFor && !setupKind;
+  /** The Stores screen shows the whole map as a plain picture (no you-are-here, items or taps). */
+  const mapPreview = role === 'stores' && !building;
 
   const toolInfo = TOOLS.find((t) => t.id === tool)!;
   const toolTitle = editing ? (editing.label || (editing.kind === 'shelf' ? 'Shelf' : 'Area'))
@@ -1452,12 +1458,12 @@ export function ShoppingView(props: Props) {
   const storeMap = (
           <StoreMap
             layout={layout}
-            you={position}
+            you={mapPreview ? undefined : position}
             view={building ? zoom.rect : undefined}
             focus={!building && mapStrip ? (changeFocus ? stripFocus(layout, changeFocus.a, changeFocus.b) : stripFocus(layout, position, route[0]?.point)) : undefined}
-            dots={mapDots}
-            pins={pins}
-            ghosts={ghosts}
+            dots={mapPreview ? undefined : mapDots}
+            pins={mapPreview ? undefined : pins}
+            ghosts={mapPreview ? undefined : ghosts}
             look={props.mapLook}
             showGrid={building}
             highlightId={here?.id}
@@ -1468,7 +1474,7 @@ export function ShoppingView(props: Props) {
             selectedAisleIds={chosenAisles}
             onAisleTap={building && tool === 'walk' ? (id) => { aisleTapped.current = id; } : undefined}
             ref={svgRef}
-            onMapTap={blocking || draftingArea || cutting || selecting ? undefined
+            onMapTap={blocking || draftingArea || cutting || selecting || mapPreview ? undefined
               : whereBarFor && placeMap ? (x, y, place) => {
                   const cell = floor.snap({ x: Math.floor(x), y: Math.floor(y) });
                   setPosition(cell);
@@ -1801,8 +1807,16 @@ export function ShoppingView(props: Props) {
       )}
       {!building && role === 'stores' && (
         <div className="stores-setup">
-          <EmptyArt name="map" />
-          <p className="muted small">Edit the map for <b>{layout.name}</b>. Pick which store you’re shopping from the Shop tab.</p>
+          {layout.places.length > 0 ? (
+            <div className="map-wrap shop-map store-preview">{storeMap}</div>
+          ) : (
+            <EmptyArt name="map" />
+          )}
+          <p className="muted small">
+            {layout.places.length > 0
+              ? <>{layout.places.length} shelves and areas. The map also learns as you shop; use Edit map to draw or fix it by hand.</>
+              : <>This map is empty. It fills in as you check items off, or draw it yourself with Edit map.</>}
+          </p>
           <div className="stores-setup-actions">
             <button type="button" className="btn primary" onClick={() => props.setDisplay((d) => ({ ...d, buildMode: true }))}
               aria-label="Edit map"><Icon name="map" /> Edit map</button>
