@@ -71,13 +71,14 @@ test('the item menu sets unit, price and note, and pins it on the map', async ({
   expect(storePrice).toMatchObject({ amount: 3.49, unit: 'box' });
 });
 
-test('list sort cycles through nearest, category and A–Z', async ({ page }) => {
+test('list sort shows nearest, category and A–Z side by side', async ({ page }) => {
   await addItems(page, 'zucchini, apples, milk');
-  const sort = page.getByRole('button', { name: /Sort / });
+  await expect(page.getByRole('radio')).toHaveCount(3);
+  await expect(page.getByRole('radio', { name: /Sort nearest first/ })).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('main .flat-list')).toContainText(/Nearest first/i);
-  await sort.click(); // category
+  await page.getByRole('radio', { name: /Sort by category/ }).click();
   await expect(page.locator('main .flat-list')).toContainText(/By category/i);
-  await sort.click(); // alpha
+  await page.getByRole('radio', { name: /Sort alphabetically/ }).click();
   await expect(page.locator('main .flat-list')).toContainText(/A–Z/);
   const names = await page.locator('main .flat-list .row .name-edit').allTextContents();
   expect(names.map((n) => n.trim())).toEqual([...names].map((n) => n.trim()).sort((a, b) => a.localeCompare(b)));
@@ -141,7 +142,7 @@ test('Shop has no Buy again or Last trip; list sits under the map', async ({ pag
 test('sort sits by the search box; map toggle lives in List options', async ({ page }) => {
   await addItems(page, 'apples, bread, milk');
   await expect(page.locator('.add-tools')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Sort / })).toBeVisible();
+  await expect(page.getByRole('radiogroup', { name: 'Sort' })).toBeVisible();
   // Phone keeps the map hidden until List options → map, or item placement.
   await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
   await toggleListOptions(page);

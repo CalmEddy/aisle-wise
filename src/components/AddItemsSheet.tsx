@@ -137,7 +137,7 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
           {onClose && <button className="btn primary" onClick={close}>Done</button>}
         </div>
       )}
-      <div className={`add-compose${tools ? ' with-tools' : ''}`}>
+      <div className="add-compose">
         <form className="add-row" onSubmit={(e) => { e.preventDefault(); addFromBox(typed, 'list'); }}>
           <input
             value={text}
@@ -159,8 +159,8 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
           </button>
           <button type="submit" disabled={!typed}>+ List</button>
         </form>
-        {tools && <div className="add-tools" role="group" aria-label="List tools">{tools}</div>}
       </div>
+      {tools && <div className="add-tools add-tools-row" role="group" aria-label="List tools">{tools}</div>}
       {(voice.error || voice.listening || typed || !inline) && (
         <p className="muted small add-sheet-hint">
           {voice.error

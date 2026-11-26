@@ -32,11 +32,10 @@ test('Items tab: list bar, create list, named add toast, sort and group toggles'
   const items = await saved<{ name: string; listId?: string }[]>(page, 'items');
   expect(items.some((i) => i.name === 'Milk' && i.listId === party!.id)).toBe(true);
 
-  // Sort cycle: category → A–Z.
-  const sort = page.getByRole('button', { name: /Sort by category/ });
-  await expect(sort).toBeVisible();
-  await sort.click();
-  await expect(page.getByRole('button', { name: /Sort alphabetically/ })).toBeVisible();
+  // Sort: every order is visible; category is current, then pick A–Z.
+  await expect(page.getByRole('radio', { name: /Sort by category/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Sort alphabetically/ }).click();
+  await expect(page.getByRole('radio', { name: /Sort alphabetically/ })).toHaveAttribute('aria-checked', 'true');
 
   // Group toggle: off → flat list (no category group heads).
   const group = page.getByRole('button', { name: 'Group by category' });

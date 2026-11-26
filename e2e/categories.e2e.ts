@@ -17,12 +17,12 @@ test('brands get a category; the list shows categories and subcategories, and �
   // "Jam" is another name for Jelly: linked to it, shown as typed.
   await expect(row(page, 'Jam')).toBeVisible();
   // Category headings appear when sorting by category (or grouping).
-  await page.getByRole('button', { name: /Sort / }).click(); // nearest → category
+  await page.getByRole('radio', { name: /Sort by category/ }).click();
   const list = page.locator('main .flat-list');
   await expect(list).toContainText(/By category/i);
   await expect(list.locator('.list-cat-head')).toHaveText(['Breakfast & Cereal', 'Household & Cleaning']);
   await expect(list.locator('.list-sub-head')).toHaveText(['Cold Cereal & Granola', 'Nut Butters, Jams & Honey', 'Laundry']);
-  await page.getByRole('button', { name: /Sort / }).click(); // category → A–Z (no section heads)
+  await page.getByRole('radio', { name: /Sort alphabetically/ }).click(); // no section heads
   await expect(page.locator('main .flat-list')).toContainText(/A–Z/);
   await expect(page.locator('main .flat-list .list-cat-head')).toHaveCount(0);
   // The picker: categories in walking order, subcategories under each.

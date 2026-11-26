@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { Display, ItemsSort, ListSort, ListsEditSort } from '../display';
 import { resolveItemsSort, resolveListSort, resolveListsEditSort } from '../display';
+import { Icon, type IconName } from './Icon';
 
 /** Display settings that are on/off switches. */
 type Switch = { [K in keyof Display]-?: NonNullable<Display[K]> extends boolean ? K : never }[keyof Display];
@@ -25,125 +26,111 @@ const LABELS: Record<Switch, string> = {
   buildMoreTools: 'More build tools',
 };
 
-/** What the compact switch shows. */
-const SHORT: Record<Switch, string> = {
-  buildMode: '🛠 Edit map',
-  groupList: '☰',
-  listCategories: '🏷',
-  listGroupByCategory: '☰',
-  itemsGroupByCategory: '☰',
-  listQty: '×',
-  listPrice: '$',
-  listLocation: '📍',
-  mapColors: '🎨',
-  mapIcons: '🍎',
-  listColors: '🎨',
-  listIcons: '🍎',
-  buildArea: 'Areas',
-  buildDouble: 'Double',
-  mapFull: '🗺',
-  buildMoreTools: '⋯',
+/** What each switch shows: an icon and a short word (the full name is its accessible name). */
+const CHIPS: Record<Switch, { icon: IconName; word: string }> = {
+  buildMode: { icon: 'map', word: 'Edit map' },
+  groupList: { icon: 'layers', word: 'Sections' },
+  listCategories: { icon: 'tag', word: 'Category' },
+  listGroupByCategory: { icon: 'layers', word: 'Group' },
+  itemsGroupByCategory: { icon: 'layers', word: 'Group' },
+  listQty: { icon: 'hash', word: 'Qty' },
+  listPrice: { icon: 'dollar-sign', word: 'Price' },
+  listLocation: { icon: 'map-pin', word: 'Place' },
+  mapColors: { icon: 'palette', word: 'Colors' },
+  mapIcons: { icon: 'smile', word: 'Icons' },
+  listColors: { icon: 'palette', word: 'Colors' },
+  listIcons: { icon: 'smile', word: 'Icons' },
+  buildArea: { icon: 'layers', word: 'Areas' },
+  buildDouble: { icon: 'layers', word: 'Double' },
+  mapFull: { icon: 'map', word: 'Whole map' },
+  buildMoreTools: { icon: 'ellipsis', word: 'More' },
 };
 
-/** Switches shown together under a heading ("List 🎨 🍎"). Field toggles (🏷 × 📍) stay individual. */
+/** Switches shown together under a heading ("List: Colors, Icons"). Field toggles (Category, Qty, Place) stay individual. */
 const GROUPS: { name: string; keys: Switch[] }[] = [
   { name: 'List', keys: ['listColors', 'listIcons'] },
   { name: 'Map', keys: ['mapColors', 'mapIcons'] },
 ];
 
-const SORTS: { id: ListSort; short: string; label: string }[] = [
-  { id: 'nearest', short: '◎', label: 'Sort nearest first' },
-  { id: 'category', short: '🏷︎', label: 'Sort by category' },
-  { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
-];
+type SortOption<T extends string> = { id: T; icon: IconName; word: string; label: string };
 
 /**
- * Cycles the shopping-list order: nearest → category → A–Z.
- * Shown on the list strip so shoppers can change sort without opening settings.
+ * All the ways to order a list, side by side, with the current one marked.
+ * (Replaces the single button that cycled through them.)
  */
+function SortSegment<T extends string>({ options, value, onPick, name = 'Sort' }: {
+  options: SortOption<T>[];
+  value: T;
+  onPick: (id: T) => void;
+  name?: string;
+}) {
+  return (
+    <div className="seg" role="radiogroup" aria-label={name}>
+      <span className="seg-name" aria-hidden="true">{name}</span>
+      {options.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          role="radio"
+          aria-checked={o.id === value}
+          aria-label={o.label}
+          title={o.label}
+          className={`seg-btn${o.id === value ? ' on' : ''}`}
+          onClick={() => onPick(o.id)}
+        >
+          <Icon name={o.icon} />
+          <span>{o.word}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const SORTS: SortOption<ListSort>[] = [
+  { id: 'nearest', icon: 'locate-fixed', word: 'Nearest', label: 'Sort nearest first' },
+  { id: 'category', icon: 'tag', word: 'Category', label: 'Sort by category' },
+  { id: 'alpha', icon: 'arrow-down-a-z', word: 'A–Z', label: 'Sort alphabetically' },
+];
+
+/** Shop list order: nearest, category or A–Z. Sits by the add box so it is easy to reach. */
 export function ListSortToggle({ display, setDisplay }: {
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
 }) {
-  const current = resolveListSort(display);
-  const i = SORTS.findIndex((s) => s.id === current);
-  const next = SORTS[(i + 1) % SORTS.length]!;
-  const shown = SORTS[i >= 0 ? i : 0]!;
-  return (
-    <button
-      type="button"
-      className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
-      aria-label={`${shown.label} (tap for ${next.label})`}
-      title={`${shown.label} · tap to change`}
-      onClick={() => setDisplay((d) => ({ ...d, listSort: next.id }))}
-    >
-      {shown.short}
-    </button>
-  );
+  return <SortSegment options={SORTS} value={resolveListSort(display)} onPick={(id) => setDisplay((d) => ({ ...d, listSort: id }))} />;
 }
 
-const ITEM_SORTS: { id: ItemsSort; short: string; label: string }[] = [
-  { id: 'category', short: '🏷︎', label: 'Sort by category' },
-  { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
+const ITEM_SORTS: SortOption<ItemsSort>[] = [
+  { id: 'category', icon: 'tag', word: 'Category', label: 'Sort by category' },
+  { id: 'alpha', icon: 'arrow-down-a-z', word: 'A–Z', label: 'Sort alphabetically' },
 ];
 
-/**
- * Cycles Grocery Items catalog order: category → A–Z.
- * Same toggle chrome as Shop; nearest is omitted (no shopper position).
- */
+/** Grocery Items catalog order: category or A–Z (nearest needs a shopper position). */
 export function ItemsSortToggle({ display, setDisplay }: {
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
 }) {
-  const current = resolveItemsSort(display);
-  const i = ITEM_SORTS.findIndex((s) => s.id === current);
-  const next = ITEM_SORTS[(i + 1) % ITEM_SORTS.length]!;
-  const shown = ITEM_SORTS[i >= 0 ? i : 0]!;
-  return (
-    <button
-      type="button"
-      className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
-      aria-label={`${shown.label} (tap for ${next.label})`}
-      title={`${shown.label} · tap to change`}
-      onClick={() => setDisplay((d) => ({ ...d, itemsSort: next.id }))}
-    >
-      {shown.short}
-    </button>
-  );
+  return <SortSegment options={ITEM_SORTS} value={resolveItemsSort(display)} onPick={(id) => setDisplay((d) => ({ ...d, itemsSort: id }))} />;
 }
 
-const LISTS_EDIT_SORTS: { id: ListsEditSort; short: string; label: string }[] = [
-  { id: 'entry', short: '#', label: 'Sort by order of entry' },
-  { id: 'category', short: '🏷︎', label: 'Sort by category' },
-  { id: 'alpha', short: 'A–Z', label: 'Sort alphabetically' },
+const LISTS_EDIT_SORTS: SortOption<ListsEditSort>[] = [
+  { id: 'entry', icon: 'list-ordered', word: 'Added', label: 'Sort by order of entry' },
+  { id: 'category', icon: 'tag', word: 'Category', label: 'Sort by category' },
+  { id: 'alpha', icon: 'arrow-down-a-z', word: 'A–Z', label: 'Sort alphabetically' },
 ];
 
-/** Cycles Setup → Lists edit order: entry → category → A–Z. */
+/** Setup → Lists edit order: order added, category or A–Z. */
 export function ListsEditSortToggle({ display, setDisplay }: {
   display: Display;
   setDisplay: (fn: (d: Display) => Display) => void;
 }) {
-  const current = resolveListsEditSort(display);
-  const i = LISTS_EDIT_SORTS.findIndex((s) => s.id === current);
-  const next = LISTS_EDIT_SORTS[(i + 1) % LISTS_EDIT_SORTS.length]!;
-  const shown = LISTS_EDIT_SORTS[i >= 0 ? i : 0]!;
-  return (
-    <button
-      type="button"
-      className={`toggle${shown.short.length <= 2 ? ' icon-only' : ''}`}
-      aria-label={`${shown.label} (tap for ${next.label})`}
-      title={`${shown.label} · tap to change`}
-      onClick={() => setDisplay((d) => ({ ...d, listsEditSort: next.id }))}
-    >
-      {shown.short}
-    </button>
-  );
+  return <SortSegment options={LISTS_EDIT_SORTS} value={resolveListsEditSort(display)} onPick={(id) => setDisplay((d) => ({ ...d, listsEditSort: id }))} />;
 }
 
 /**
- * On/off switches in one compact row: short labels (full names on hover and
- * for screen readers), with the colour/icon pairs grouped as "Map 🎨 🍎" and
- * "List 🎨 🍎". `extra` goes at the end of the row.
+ * On/off switches: an icon and a short word each (full names for screen readers
+ * and tooltips). A switch that is on shows a check. The colour/icon pairs are
+ * grouped under "Map" and "List". `extra` goes at the end.
  */
 export function DisplayToggles({ display, setDisplay, show, offByDefault = ['buildMode', 'buildArea', 'buildDouble'], lead, extra }: {
   display: Display;
@@ -160,13 +147,14 @@ export function DisplayToggles({ display, setDisplay, show, offByDefault = ['bui
     <button
       key={k}
       type="button"
-      className={`toggle${SHORT[k].length <= 2 ? ' icon-only' : ''}`}
+      className="toggle"
       aria-pressed={on(k)}
       aria-label={LABELS[k]}
       title={LABELS[k]}
       onClick={() => setDisplay((d) => ({ ...d, [k]: !(d[k] ?? !offByDefault.includes(k)) }))}
     >
-      {SHORT[k]}
+      <Icon name={on(k) ? 'check' : CHIPS[k].icon} />
+      <span>{CHIPS[k].word}</span>
     </button>
   );
   const grouped = new Set(GROUPS.flatMap((g) => g.keys));

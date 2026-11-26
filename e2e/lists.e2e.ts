@@ -136,12 +136,11 @@ test('Setup Lists: sort cycles and search badges show List / Cart', async ({ pag
   await addInlineOnSetup(page, 'Eggs');
   await expect(page.locator('.lists-manage-items .name')).toContainText(['Apples', 'Eggs']);
 
-  const sort = page.getByRole('button', { name: /Sort by order of entry/ });
-  await expect(sort).toBeVisible();
-  await sort.click();
-  await expect(page.getByRole('button', { name: /Sort by category/ })).toBeVisible();
-  await page.getByRole('button', { name: /Sort by category/ }).click();
-  await expect(page.getByRole('button', { name: /Sort alphabetically/ })).toBeVisible();
+  await expect(page.getByRole('radio', { name: /Sort by order of entry/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Sort by category/ }).click();
+  await expect(page.getByRole('radio', { name: /Sort by category/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /Sort alphabetically/ }).click();
+  await expect(page.getByRole('radio', { name: /Sort alphabetically/ })).toHaveAttribute('aria-checked', 'true');
 
   await page.getByLabel('Item to add').fill('Milk');
   const milkSug = page.locator('.add-inline .suggestion', { hasText: 'Milk' }).first();
