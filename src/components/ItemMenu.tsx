@@ -3,6 +3,7 @@ import type { ItemUnit, ListItem, ShoppingList } from '../core/types';
 import { ITEM_UNITS } from '../core/types';
 import { formatPrice, parsePrice } from '../core/items';
 import { CategoryPicker } from './CategoryPicker';
+import { Icon } from './Icon';
 
 export function ItemMenu({ item, where, storeName, categoryId, categories, looks, lists, currentList, onCategory, onChangePlace, onWhere, onNotAvailable, onRemove, onMoveTo, onCopyTo, onCancel, pinned, onPin, onAmount }: {
   item: ListItem;
@@ -112,14 +113,14 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
             label={`Category of ${item.name}`}
           />
         </div>
-        <button className="pick" onClick={onPin}>{pinned ? '◎ Stop showing on the map' : '◎ Show on the map'}</button>
-        <button className="pick" onClick={onChangePlace}>📍 Change place on the map</button>
-        <button className="pick" onClick={onWhere}>🏷 Aisle / department…</button>
-        <button className="pick" onClick={onNotAvailable}>🚫 Not available at {storeName}</button>
+        <button className="pick" onClick={onPin}><Icon name="locate-fixed" />{pinned ? 'Stop showing on the map' : 'Show on the map'}</button>
+        <button className="pick" onClick={onChangePlace}><Icon name="map-pin" />Change place on the map</button>
+        <button className="pick" onClick={onWhere}><Icon name="tag" />Aisle / department…</button>
+        <button className="pick" onClick={onNotAvailable}><Icon name="ban" />Not available at {storeName}</button>
         {others.length > 0 && !transfer && (
           <>
-            <button className="pick" onClick={() => setTransfer('move')}>↗ Move to another list…</button>
-            <button className="pick" onClick={() => setTransfer('copy')}>⧉ Copy to another list…</button>
+            <button className="pick" onClick={() => setTransfer('move')}><Icon name="arrow-up-right" />Move to another list…</button>
+            <button className="pick" onClick={() => setTransfer('copy')}><Icon name="copy" />Copy to another list…</button>
           </>
         )}
         {transfer && (
@@ -133,7 +134,7 @@ export function ItemMenu({ item, where, storeName, categoryId, categories, looks
             <button className="pick" onClick={() => setTransfer(undefined)}>Cancel</button>
           </div>
         )}
-        <button className="pick danger" onClick={onRemove}>Remove from list</button>
+        <button className="pick danger" onClick={onRemove}><Icon name="trash-2" />Remove from list</button>
         <div className="sheet-actions">
           <span style={{ flex: 1 }} />
           <button className="btn" onClick={close}>Done</button>

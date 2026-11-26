@@ -222,7 +222,7 @@ export function InlinePrice({ item, onPatch }: { item: ListItem; onPatch: (patch
   );
 }
 
-export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, onPin, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
+export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, iconOf, pinned, subOf, badgesOf, tintOf, dropOf, firstIsNearest, big, simple, noCheck, onNotHere, onClearWhere, clearable, headingOf, onPatch, showQty = true, showPrice = false, showLocation = true, priceOf }: {
   items: ListItem[];
   onToggle: (i: ListItem) => void;
   onRemove: (i: ListItem) => void;
@@ -230,9 +230,8 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
   drag?: DragHandlers;
   dragging?: string;
   iconOf?: (i: ListItem) => string | undefined;
-  /** Items pinpointed on the map, and the button that toggles it. */
+  /** Items pinpointed on the map (toggled from the ⋯ menu). */
   pinned?: Set<string>;
-  onPin?: (i: ListItem) => void;
   /** A second line under the name (where it is). */
   subOf?: (i: ListItem) => string | undefined;
   /** Small source-list badges (multi-list shop trip). */
@@ -348,15 +347,6 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
                 {onPatch && !item.done && showPrice && <InlinePrice item={item} onPatch={(patch) => onPatch(item, patch)} />}
                 {pinned?.has(item.id) && <span className="pinned-dot"><Icon name="map-pin" filled title="Shown on the map" /></span>}
                 {clearBtn(item)}
-                {!item.done && (
-                  <button
-                    type="button"
-                    className="icon remove-from-list"
-                    onClick={() => onRemove(item)}
-                    aria-label={`Remove ${item.name} from list`}
-                    title="Remove from list"
-                  >×</button>
-                )}
                 {onMenu && (
                   <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
                 )}
@@ -381,20 +371,10 @@ export function ItemRows({ items, onToggle, onRemove, onMenu, drag, dragging, ic
             </span>
           </label>
           <span className="row-actions">
-          {onPin && !item.done && (
-            <button
-              className="icon pin"
-              onClick={() => onPin(item)}
-              aria-pressed={!!pinned?.has(item.id)}
-              aria-label={pinned?.has(item.id) ? `Stop showing ${item.name} on the map` : `Show ${item.name} on the map`}
-              title="Show on map"
-            ><Icon name="map-pin" filled={!!pinned?.has(item.id)} /></button>
-          )}
           {clearBtn(item)}
           {onMenu && (
             <button className="icon" onClick={() => onMenu(item)} aria-label={`More options for ${item.name}`}>⋯</button>
           )}
-          <button className="icon" onClick={() => onRemove(item)} aria-label={`Remove ${item.name}`}>×</button>
           </span>
           </>)}
         </li>

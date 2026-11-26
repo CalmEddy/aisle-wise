@@ -74,11 +74,11 @@ test('voice mic fills the box for review; suggestions show matches already on th
   await expect(page.getByRole('list', { name: 'Suggestions' })).toContainText('Milk');
   await expect(page.getByRole('list', { name: 'Suggestions' })).toContainText('On your list');
 
-  // Review: add Eggs by speaking again, then confirm with + List.
+  // Review: add Eggs by speaking again, then confirm with Add.
   await page.getByRole('button', { name: 'Add by voice' }).click();
   await fireFinal(page, 'Eggs');
   await expect(page.getByLabel('Item to add')).toHaveValue('Eggs');
-  await page.getByRole('button', { name: '+ List' }).first().click();
+  await page.getByRole('button', { name: 'Add to list' }).first().click();
   await expect(page.locator('.added-strip')).toContainText('Eggs');
 
   const items = await saved<{ name: string }[]>(page, 'items');
@@ -127,4 +127,22 @@ test('mic stays visible when speech is unavailable and explains why', async ({ p
   await mic.click();
   await expect(page.locator('.add-sheet-hint')).toContainText('Voice isn’t available');
   ok();
+});
+
+test('add buttons are "Add" and "Got it"; the Got it hint shows once', async ({ page }) => {
+  await fresh(page);
+  await page.evaluate(() => localStorage.removeItem('aw.gotItHintSeen'));
+  await page.reload();
+  await page.getByLabel('Item to add').fill('Milk');
+  const sug = page.locator('.suggestions .suggestion', { hasText: 'Milk' }).first();
+  await expect(sug.getByRole('button', { name: 'Add to list' })).toContainText('Add');
+  await expect(sug.getByRole('button', { name: /Got it/ })).toContainText('Got it');
+  const hint = page.getByRole('note');
+  await expect(hint).toContainText('Got it means');
+  await hint.getByRole('button', { name: 'OK' }).click();
+  await expect(hint).toHaveCount(0);
+  await page.reload();
+  await page.getByLabel('Item to add').fill('Milk');
+  await expect(page.getByRole('list', { name: 'Suggestions' })).toBeVisible();
+  await expect(page.getByRole('note')).toHaveCount(0);
 });

@@ -5,6 +5,8 @@ import type { Catalog } from '../core/catalog';
 import { amountText, parseAmount, withAmount } from '../core/items';
 import { splitSpokenItems } from '../core/speech';
 import type { Product } from '../core/types';
+import { usePersistentState } from '../usePersistentState';
+import { Icon } from './Icon';
 import { useVoiceMic } from './useVoiceMic';
 
 /** A past purchase chip: product plus an optional frequency cue. */
@@ -13,7 +15,7 @@ export type BuyAgainChip = { product: Product; cue?: 'due' | 'often' };
 /**
  * Compact add composer: type or speak (commas for several).
  * Default docks as a sheet. `inline` embeds it on the Setup → Lists screen.
- * Cart (🛒) is Shop-only — pass `allowCart={false}` when editing lists.
+ * "Got it" (in the cart) is Shop-only — pass `allowCart={false}` when editing lists.
  */
 export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, hereLabel, whereText, iconOf, onAdd, buyAgain = [], onUndo, onClose, allowCart = true, inline = false, tools }: {
   listName: string;
@@ -57,6 +59,8 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
   const suggestions = useMemo(() => catalog.suggest(query, 12), [catalog, query]);
   const isNew = query.length > 0 && !catalog.exact(query);
   const guess = isNew ? guessCategory(query, catalog)?.categoryId : undefined;
+
+  const [gotItHintSeen, setGotItHintSeen] = usePersistentState('aw.gotItHintSeen', false);
 
   function add(names: string[], mode: 'list' | 'cart') {
     const clean = names.map((n) => n.trim()).filter(Boolean);
@@ -112,18 +116,20 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
           <span>
             <span className="item-name">{p.name}</span>
             {(amount.qty || amount.note) ? <span className="muted small"> · {amountText(amount)}</span> : null}
-            {onSomeList && <span className="status-pill on-list" aria-hidden="true">List</span>}
-            {held && <span className="status-pill in-cart" aria-hidden="true">Cart</span>}
+            {onSomeList && <span className="status-pill on-list" aria-hidden="true"><Icon name="list-checks" />List</span>}
+            {held && <span className="status-pill in-cart" aria-hidden="true"><Icon name="shopping-cart" />Cart</span>}
           </span>
           <span className="muted small">{statusLine(p)}</span>
         </div>
         {(!waiting || amount.qty || amount.note) && (
-          <button type="button" className="s-btn" onClick={() => addFromBox(withAmount(p.name, amount), 'list')}>
-            {waiting ? 'Update' : '+ List'}
+          <button type="button" className="s-btn" aria-label={waiting ? 'Update on list' : 'Add to list'} onClick={() => addFromBox(withAmount(p.name, amount), 'list')}>
+            {waiting ? 'Update' : <><Icon name="plus" />Add</>}
           </button>
         )}
         {allowCart && (
-          <button type="button" className="s-btn cart" onClick={() => addFromBox(withAmount(p.name, amount), 'cart')}>🛒</button>
+          <button type="button" className="s-btn cart" aria-label="Got it: put in cart" onClick={() => addFromBox(withAmount(p.name, amount), 'cart')}>
+            <Icon name="shopping-cart" />Got it
+          </button>
         )}
       </li>
     );
@@ -155,9 +161,9 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
             aria-pressed={voice.listening}
             onClick={() => voice.toggle()}
           >
-            {voice.listening ? '⏹' : '🎤'}
+            <Icon name={voice.listening ? 'square' : 'mic'} size="1.3rem" filled={voice.listening} />
           </button>
-          <button type="submit" disabled={!typed}>+ List</button>
+          <button type="submit" className="add-submit" disabled={!typed} aria-label="Add to list">Add</button>
         </form>
       </div>
       {tools && <div className="add-tools add-tools-row" role="group" aria-label="List tools">{tools}</div>}
@@ -169,15 +175,23 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
               ? <>Listening… say an item, then pause.</>
               : typed
                 ? (allowCart
-                  ? <>Pick below, or Enter · 🛒 puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
+                  ? <>Pick below, or Enter to add · <b>Got it</b> puts it in your cart{hereLabel ? <> (at {hereLabel})</> : null}.</>
                   : <>Pick below, or Enter to add to “{listName}”.</>)
                 : (allowCart
-                  ? <>＋ List queues it · 🛒 means you’re holding it.</>
+                  ? <><b>Add</b> queues it · <b>Got it</b> means you’re holding it.</>
                   : <>Type or speak to add to “{listName}”. Cart is only on Shop.</>)}
         </p>
       )}
 
       {typed ? (
+        <>
+        {allowCart && !gotItHintSeen && (
+          <div className="got-it-hint" role="note">
+            <Icon name="shopping-cart" />
+            <span><b>Got it</b> means it’s in your cart now. We save where you’re standing as its place.</span>
+            <button type="button" className="link" onClick={() => setGotItHintSeen(true)}>OK</button>
+          </div>
+        )}
         <ul className={`suggestions${inline ? ' in-page' : ' in-sheet'}`} aria-label="Suggestions">
           {isNew && (
             <li className="suggestion new">
@@ -186,14 +200,17 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
                 <span>Add “{typed}”</span>
                 <span className="muted small">New item{guess ? ` · ${catalog.categoryById.get(guess)?.name}` : ''}</span>
               </div>
-              <button type="button" className="s-btn" onClick={() => addFromBox(typed, 'list')}>+ List</button>
+              <button type="button" className="s-btn" aria-label="Add to list" onClick={() => addFromBox(typed, 'list')}><Icon name="plus" />Add</button>
               {allowCart && (
-                <button type="button" className="s-btn cart" onClick={() => addFromBox(typed, 'cart')}>🛒</button>
+                <button type="button" className="s-btn cart" aria-label="Got it: put in cart" onClick={() => addFromBox(typed, 'cart')}>
+                  <Icon name="shopping-cart" />Got it
+                </button>
               )}
             </li>
           )}
           {suggestions.map(row)}
         </ul>
+        </>
       ) : again.length > 0 ? (
         <section className="buy-again" aria-label="Buy again">
           <h3 className="muted small">Buy again · tap to add</h3>
