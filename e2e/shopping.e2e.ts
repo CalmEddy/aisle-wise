@@ -56,7 +56,7 @@ test('the item menu sets unit, price and note, and pins it on the map', async ({
   await menu.getByLabel('Unit for Milk').selectOption('box');
   await menu.getByLabel('Price for Milk').fill('3.49');
   await menu.getByLabel('Note for Milk').fill('skim');
-  await menu.getByRole('button', { name: '◎ Show on the map' }).click();
+  await menu.getByRole('button', { name: 'Show on the map' }).click();
   await expect(row(page, 'Milk')).toContainText(/box/i);
   await expect(row(page, 'Milk').getByRole('button', { name: /Line total for Milk: \$3\.49/ })).toBeVisible();
   await expect(row(page, 'Milk')).toContainText('skim');
@@ -226,4 +226,16 @@ test('List options: Edit map row, danger zone asks before clearing, no debug con
   await expect(page.getByRole('button', { name: 'Clear all', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByRole('button', { name: 'Clear all locations at this store' })).toBeVisible();
+});
+
+test('a Shop row has one ⋯ button; pin and remove live in its menu', async ({ page }) => {
+  await addItems(page, 'apples');
+  const r = row(page, 'Apples');
+  await expect(r.getByRole('button', { name: /More options for Apples/ })).toBeVisible();
+  await expect(r.getByRole('button', { name: /Remove Apples from list/ })).toHaveCount(0);
+  await expect(r.getByRole('button', { name: /on the map/ })).toHaveCount(0);
+  await r.getByRole('button', { name: /More options/ }).click();
+  const menu = page.getByRole('dialog', { name: /Options for Apples/ });
+  await expect(menu.getByRole('button', { name: 'Show on the map' })).toBeVisible();
+  await expect(menu.getByRole('button', { name: 'Remove from list' })).toBeVisible();
 });

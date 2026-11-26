@@ -1593,7 +1593,6 @@ export function ShoppingView(props: Props) {
               dragging={drag?.item.id}
               iconOf={iconOf}
               pinned={pinned}
-              onPin={togglePin}
               headingOf={showCatHeads ? catsOf : undefined}
               badgesOf={sourceBadges}
               subOf={(item) => withCat(nearestFirst.find((e) => e.item.id === item.id)?.stop.label, item)}
@@ -1626,7 +1625,6 @@ export function ShoppingView(props: Props) {
               onNotHere={(i) => markAvailable(i, false)}
               iconOf={iconOf}
               pinned={pinned}
-              onPin={togglePin}
               headingOf={showCatHeads ? catsOf : undefined}
               badgesOf={sourceBadges}
               subOf={(item) => flatSorted.find((e) => e.item.id === item.id)?.sub}

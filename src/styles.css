@@ -1629,3 +1629,7 @@ svg.map { -webkit-user-select: none; user-select: none; -webkit-touch-callout: n
 .got-it-hint > span { flex: 1; }
 .got-it-hint .icon-svg { flex: none; color: var(--c-cart); }
 .got-it-hint .link { min-height: 36px; padding: 0 8px; font-weight: 700; }
+
+/* Item menu: icon + label rows */
+.pick .icon-svg { margin-right: 10px; vertical-align: -0.2em; color: var(--muted); }
+.pick.danger .icon-svg { color: inherit; }

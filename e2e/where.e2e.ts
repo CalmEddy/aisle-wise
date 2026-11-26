@@ -696,8 +696,9 @@ test('phone hides the map until place or Show map; aisle tap is not open floor',
   // Browsing: map slot is not open on phone.
   await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
   await expect(page.getByRole('region', { name: 'Add to the map here' })).toHaveCount(0);
-  // Remove from list is visible on the row.
-  await expect(page.getByRole('button', { name: 'Remove Crackers from list' })).toBeVisible();
+  // The row has one ⋯ button; Remove from list lives in its menu (and on swipe).
+  await expect(page.getByRole('button', { name: 'Remove Crackers from list' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'More options for Crackers' })).toBeVisible();
 
   await tick(page, 'Crackers');
   const sheet = placeSheet(page, 'Crackers');
