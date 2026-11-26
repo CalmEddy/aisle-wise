@@ -259,9 +259,9 @@ test('(testing) clear where one item is, or every item on the list, with Undo', 
   }
   const places = async () => JSON.stringify((await saved<any[]>(page, 'layouts')).find((x) => x.name === 'Corner').places);
   const before = await places();
-  await page.getByRole('button', { name: 'View settings' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
   await page.getByRole('button', { name: 'Clear all locations at this store' }).click();
-  await expect(page.locator('.toast')).toContainText('Cleared where');
+  await expect(page.locator('.toast.top')).toContainText('Cleared where');
   await expect.poll(answered).toEqual([]);
   await page.waitForTimeout(300);
   expect(await places()).toBe(before);
@@ -277,10 +277,8 @@ test('put straight in the cart with no place here: clear map match auto-saves (C
   await addItems(page, 'Cereal');
   await tick(page, 'Cereal');
   await describeAisle(page, '3');
-  await page.getByRole('button', { name: 'Add items' }).first().click();
   await page.getByLabel('Item to add').fill('Oatmeal');
   await page.locator('.suggestions .suggestion', { hasText: 'Oatmeal' }).first().locator('.s-btn.cart').click();
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(page.locator('.toast')).toContainText(/Oatmeal: saved at/i);
   await expect(placeSheet(page)).toHaveCount(0);
   await expect.poll(async () => (await clues(page)).Oatmeal).toEqual({ kind: 'aisle', aisle: '3' });
@@ -360,7 +358,7 @@ test('tap a shelf on the map to place an item', async ({ page }) => {
   await tapHousehold();
   await expect(sheet).toHaveCount(0);
   const batteries = (await saved<{ name: string; locations?: Record<string, string>; categoryId?: string }[]>(page, 'products')).find((p) => p.name === 'Batteries')!;
-  expect(batteries.locations?.s1).toBe('hw');
+  expect(batteries.locations?.s1).toMatch(/^hw(@|$)/);
   const hw = (await saved<any[]>(page, 'layouts'))[0].places.find((p: any) => p.id === 'hw');
   expect(batteries.categoryId).toBeTruthy();
   expect(hw.categories).toEqual([batteries.categoryId]);
@@ -563,7 +561,9 @@ test('things put just past a shelf’s end: the shelf is offered longer at the e
     products: [{ id: 'jam', name: 'Jam', categoryId: 'breakfast_spreads', locations: { s1: 'sh1@0.5,0.5' } }],
   });
   await addItems(page, 'Zorbo, Quibble');
-  await page.getByRole('button', { name: 'Show map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
+  await page.getByRole('button', { name: 'Whole map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
   const dropPast = async (name: string, gy: number) => {
     const handle = page.getByLabel(new RegExp(`^Drag ${name}`)).first();
     // Trip chrome can push rows below the fold; the drag must start on-screen.
@@ -631,7 +631,9 @@ test('“Where I’m standing” keeps the pin and moves the item to where you a
   const ok = noPageErrors(page);
   await fresh(page);
   await addItems(page, 'milk');
-  await page.getByRole('button', { name: 'Show map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
+  await page.getByRole('button', { name: 'Whole map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
   await tapMap(page, 6, 20);
   const before = await saved<{ layoutId: string; point: { x: number; y: number } }>(page, 'position.v2');
   expect(before.point).toEqual({ x: 6, y: 20 });
@@ -661,7 +663,9 @@ test('“Where I’m standing”: below aisle 3 past the walkway, the aisle carr
     activeLayout: 's1',
   });
   await addItems(page, 'Pickles');
-  await page.getByRole('button', { name: 'Show map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
+  await page.getByRole('button', { name: 'Whole map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
   await tapMap(page, 8, 15);
   await tick(page, 'Pickles');
   const sheet = placeSheet(page, 'Pickles');

@@ -48,6 +48,7 @@ test('inline qty and rename work without opening the menu', async ({ page }) => 
 
 test('the item menu sets unit, price and note, and pins it on the map', async ({ page }) => {
   await addItems(page, 'milk');
+  await page.getByRole('button', { name: 'List options' }).click();
   await page.getByRole('button', { name: 'Prices' }).click();
   await row(page, 'Milk').getByRole('button', { name: /More options/ }).click();
   const menu = page.getByRole('dialog', { name: /Options for Milk/ });
@@ -118,7 +119,6 @@ test('cart items have the ⋯ menu for place, aisle and price', async ({ page })
 test('buy again: past trips at the top of the add window, one tap adds', async ({ page }) => {
   const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
   await fresh(page, { trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])], display: { noAskStores: ['demo'] } });
-  await page.getByRole('button', { name: 'Add items' }).first().click();
   const chips = page.locator('.buy-again .chip');
   await expect(chips.first()).toContainText('Milk');
   // Frequent / overdue buys get a short cue on the chip.
@@ -144,25 +144,77 @@ test('empty list: Shop last trip restocks with Undo', async ({ page }) => {
   await expect(row(page, 'Pasta')).toBeVisible();
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('.empty')).toContainText('Your list is empty');
-  // Add sheet also offers last-trip restock.
-  await page.getByRole('button', { name: '＋ Add items' }).click();
+  // Inline add also offers last-trip restock.
   await page.getByRole('button', { name: /Last trip · add all \(2\)/ }).click();
   await expect(page.locator('.added-strip')).toContainText(/Apples|Pasta/);
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
   await expect(row(page, 'Apples')).toBeVisible();
   await expect(row(page, 'Pasta')).toBeVisible();
   ok();
 });
 
-test('the toggle strip is usable, and the map can be shown when needed', async ({ page }) => {
+test('sort sits by the search box; map toggle lives in List options', async ({ page }) => {
   await addItems(page, 'apples, bread, milk');
-  await expect(page.locator('.toggles')).toBeVisible();
-  // Horizontal scroll is OK on a phone; the strip itself must stay one row tall.
-  expect(await page.locator('.toggles').evaluate((e) => e.clientHeight < 64)).toBe(true);
-  // Phone keeps the map hidden until Show map (or item placement).
+  await expect(page.locator('.add-tools')).toBeVisible();
+  await expect(page.getByRole('button', { name: /Sort / })).toBeVisible();
+  // Phone keeps the map hidden until List options → map, or item placement.
   await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Show map' }).click();
+  await page.getByRole('button', { name: 'List options' }).click();
+  await page.getByRole('button', { name: 'Whole map' }).click();
   await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(1);
   const shown = await page.locator('svg.map').evaluate((e) => e.getBoundingClientRect().height);
   expect(shown).toBeGreaterThan(100);
+});
+
+test('Unplaced Items: place button opens the map for double-tap exact placement', async ({ page }) => {
+  const ok = noPageErrors(page);
+  await fresh(page, {
+    display: { noAskStores: ['s1'] },
+    layouts: [{
+      id: 's1', name: 'Drawn', width: 20, height: 16, entrance: { x: 1, y: 15 }, checkout: { x: 5, y: 15 },
+      places: [
+        { kind: 'area', id: 'hw', label: 'Household', x: 12, y: 2, w: 6, h: 6, categories: [] },
+      ],
+    }],
+    activeLayout: 's1',
+  });
+  // Unknown product → no category clue → Unplaced Items.
+  await addItems(page, 'Zorblax');
+  const section = page.locator('.unplaced-items');
+  await expect(section.getByRole('heading', { name: 'Unplaced Items' })).toBeVisible();
+  await expect(section.locator('select')).toHaveCount(0);
+  await section.getByRole('button', { name: 'Place Zorblax on the map' }).click();
+  const sheet = page.getByRole('dialog', { name: /Where was Zorblax/ });
+  await expect(sheet).toBeVisible();
+  await expect(page.locator('.shop-map-slot.is-open')).toHaveCount(1);
+  const tap = () => page.locator('.map-wrap svg.map').evaluate((svg, pt) => {
+    const q = svg.createSVGPoint();
+    q.x = pt[0] + 0.25; q.y = pt[1] + 0.75;
+    const r = q.matrixTransform(svg.getScreenCTM());
+    svg.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: r.x, clientY: r.y }));
+  }, [13, 3]);
+  await tap();
+  await expect(sheet).toContainText(/Selected.*Household/i);
+  await tap();
+  await expect(sheet).toHaveCount(0);
+  await expect(section).toHaveCount(0);
+  const item = (await saved<{ name: string; locations?: Record<string, string> }[]>(page, 'products')).find((p) => p.name === 'Zorblax')!;
+  expect(item.locations?.s1).toMatch(/^hw@/);
+  // Exact tap near the area’s top-left should not land at the dead centre.
+  const spot = item.locations!.s1.split('@')[1]!;
+  const [u, v] = spot.split(',').map(Number);
+  expect(u).toBeLessThan(0.4);
+  expect(v).toBeLessThan(0.4);
+  ok();
+});
+
+test('Not available section is collapsible with a red outline', async ({ page }) => {
+  await addItems(page, 'Milk, Saffron threads');
+  await row(page, 'Saffron').getByRole('button', { name: /More options/ }).click();
+  await page.getByRole('button', { name: /Not available at/ }).click();
+  const section = page.locator('details.unavailable-section');
+  await expect(section).toBeVisible();
+  await expect(section).not.toHaveAttribute('open', '');
+  await section.locator('summary').click();
+  await expect(section).toHaveAttribute('open', '');
+  await expect(section.locator('.name')).toContainText('Saffron');
 });

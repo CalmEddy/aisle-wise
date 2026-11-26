@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MAIN_LIST, type ShoppingList } from '../core/types';
 import type { ClearMode } from '../core/lists';
 
@@ -98,6 +98,14 @@ export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onClea
   const others = lists.all.filter((l) => l.id !== lists.current);
   const preview = lists.preview([...picked]);
   const toBuy = (id: string) => lists.counts.get(id) ?? 0;
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
   const done = (id: string) => lists.doneCounts.get(id) ?? 0;
   const nameTaken = (n: string, except?: string) =>
     lists.all.some((l) => l.id !== except && l.name.trim().toLowerCase() === n.trim().toLowerCase());
@@ -255,7 +263,7 @@ export function ListsSheet({ lists, mode = 'trip', onCombined, onRemoved, onClea
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet lists-sheet" role="dialog" aria-label="Choose list" onClick={(e) => e.stopPropagation()}>
         <h2>Choose list</h2>
-        <p className="muted small">Select the list for this trip. Include more lists from the Shop screen.</p>
+        <p className="muted small">Select the list for this trip. Include more lists via 📋 List options in the header.</p>
 
         <section className="lists-section">
           <h3>Lists</h3>

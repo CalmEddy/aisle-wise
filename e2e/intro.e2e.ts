@@ -12,7 +12,8 @@ test('first visit: a short intro, straight into picking a store; not shown again
   await page.locator('.store-sheet').getByRole('button', { name: 'Close' }).click();
   await page.reload();
   await expect(intro).toHaveCount(0);
-  // ⓘ shows it again.
+  // ⓘ lives on Setup now.
+  await page.getByRole('tab', { name: 'Setup', exact: true }).click();
   await page.getByRole('button', { name: 'How this works' }).click();
   await expect(intro).toBeVisible();
   await intro.getByRole('button', { name: 'Start my list' }).click();

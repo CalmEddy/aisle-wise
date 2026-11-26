@@ -17,12 +17,16 @@ export function saved<T = any>(page: Page, key: string): Promise<T> {
   return page.evaluate((k) => JSON.parse(localStorage.getItem(`aw.${k}`) ?? 'null'), key);
 }
 
-/** Adds items through the add window ("Milk, 2 eggs"). */
+/** Adds items via the on-screen search (Shop) or add sheet (Setup / other lists). */
 export async function addItems(page: Page, text: string) {
-  await page.getByRole('button', { name: 'Add items' }).first().click();
-  await page.getByLabel('Item to add').fill(text);
-  await page.getByLabel('Item to add').press('Enter');
-  await page.locator('.add-sheet').getByRole('button', { name: 'Done' }).click();
+  const input = page.getByLabel('Item to add').first();
+  if (!(await input.isVisible())) {
+    await page.getByRole('button', { name: /Add items/ }).first().click();
+  }
+  await page.getByLabel('Item to add').first().fill(text);
+  await page.getByLabel('Item to add').first().press('Enter');
+  const done = page.locator('.add-sheet').getByRole('button', { name: 'Done' });
+  if (await done.count()) await done.click();
 }
 
 /** A list row by item name. */
