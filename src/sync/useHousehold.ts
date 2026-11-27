@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { clearShared } from '../core/lists';
 import { usePersistentState } from '../usePersistentState';
 import { SyncEngine, type SyncData, type SyncStatus } from './engine';
 import type { Member } from './members';
@@ -79,9 +80,28 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     });
   }, [session, setHousehold]);
 
-  // Run the sync engine while signed in to a household.
   const userId = session?.user.id;
   const householdId = household?.id;
+
+  // Leaving, signing out, or moving to another household: every list goes back to
+  // private and the saved sync state is dropped, so nothing here is sent to (or
+  // deleted from) the wrong household later.
+  const lastHousehold = useRef(householdId);
+  useEffect(() => {
+    const previous = lastHousehold.current;
+    lastHousehold.current = householdId;
+    if (!previous || previous === householdId) return;
+    try {
+      localStorage.removeItem(`aw.shadow.${previous}`);
+    } catch {
+      // ignore
+    }
+    const next = { ...dataRef.current, lists: clearShared(dataRef.current.lists) };
+    dataRef.current = next;
+    setRef.current(next);
+  }, [householdId]);
+
+  // Run the sync engine while signed in to a household.
   useEffect(() => {
     if (!supabase || !userId || !householdId) {
       setStatus('off');
