@@ -168,7 +168,9 @@ Invite codes are 16 characters, wrong guesses are limited to 5 an hour per
 person, and a household holds at most 20 people. Documents are limited in size
 and number so one household can't fill the database; the numbers live in
 `aw_limit()` in the hardening migration. Deleting an account hands its
-households on instead of deleting them.
+households on instead of deleting them. In the household sheet, the owner
+sees **Remove** next to each member and **Make a new invite code**; anyone can
+**Leave household** or **Delete my account…** (typing DELETE to confirm).
 
 ### Live sharing setup (one time)
 
