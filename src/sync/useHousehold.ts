@@ -116,11 +116,25 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
    * email (only if "Confirm email" is left on in Supabase).
    */
   const signUp = useCallback(async (email: string, password: string): Promise<boolean> => {
-    const { data: d, error } = await requireClient().auth.signUp({ email, password });
+    const { data: d, error } = await requireClient().auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: appAddress() },
+    });
     if (error) throw new Error(friendly(error.message));
     // Supabase hides whether an address is taken: it returns a user with no identities.
     if (d.user && d.user.identities?.length === 0) throw new Error('That email already has an account. Sign in instead.');
     return !d.session;
+  }, []);
+
+  /** Sends the confirmation email again (the first may have been lost or gone to spam). */
+  const resendConfirmation = useCallback(async (email: string) => {
+    const { error } = await requireClient().auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: appAddress() },
+    });
+    if (error) throw new Error(friendly(error.message));
   }, []);
 
   const signOut = useCallback(async () => {
@@ -170,6 +184,7 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     needsDbUpdate,
     signIn,
     signUp,
+    resendConfirmation,
     signOut,
     create,
     join,
@@ -179,6 +194,11 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
 }
 
 export type HouseholdApi = ReturnType<typeof useHousehold>;
+
+/** Where the confirmation link should land: this app, without any invite or share fragment. */
+function appAddress(): string {
+  return `${location.origin}${location.pathname}`;
+}
 
 /** Plain-language versions of Supabase's sign-in errors. */
 function friendly(message: string): string {
@@ -194,6 +214,9 @@ function friendly(message: string): string {
   if (/email not confirmed/i.test(message)) return 'This account’s email hasn’t been confirmed yet.';
   if (/already registered|already exists/i.test(message)) return 'That email already has an account. Sign in instead.';
   if (/password should be at least/i.test(message)) return 'Use a password with at least 6 characters.';
+  if (/error sending (confirmation|recovery|magic link|email)/i.test(message)) {
+    return 'The confirmation email couldn’t be sent. This is a problem with the app’s email setup (Supabase → Authentication → Emails → SMTP Settings), not with your address. Try again later.';
+  }
   if (/rate limit/i.test(message)) return 'Too many tries. Wait a minute and try again.';
   return message;
 }

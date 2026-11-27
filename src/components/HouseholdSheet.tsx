@@ -89,18 +89,28 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [notice, setNotice] = useState('');
+  // Set once an account needs confirming, so the email can be sent again.
+  const [pending, setPending] = useState('');
   const { busy, error, run } = useAction();
   const creating = mode === 'signup';
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setNotice('');
+    setPending('');
     void run(async () => {
-      if (!creating) return api.signIn(email.trim(), password);
-      const mustConfirm = await api.signUp(email.trim(), password);
-      if (mustConfirm) {
-        setNotice('Account created. Confirm it from the email Supabase sent, then sign in here.');
-        setMode('signin');
+      const address = email.trim();
+      try {
+        if (!creating) return await api.signIn(address, password);
+        const mustConfirm = await api.signUp(address, password);
+        if (mustConfirm) {
+          setNotice(`We sent a confirmation link to ${address}. Open it (check spam too), then sign in here.`);
+          setPending(address);
+          setMode('signin');
+        }
+      } catch (err) {
+        if (err instanceof Error && /hasn’t been confirmed/.test(err.message)) setPending(address);
+        throw err;
       }
     });
   }
@@ -143,6 +153,19 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
       </form>
       {notice && <p className="small">{notice}</p>}
       {error && <p className="error">{error}</p>}
+      {pending && (
+        <button
+          type="button"
+          className="btn wide"
+          disabled={busy}
+          onClick={() => void run(async () => {
+            await api.resendConfirmation(pending);
+            setNotice(`Sent again to ${pending}. It can take a minute to arrive.`);
+          })}
+        >
+          Send the confirmation email again
+        </button>
+      )}
       {!creating && (
         <p className="muted small">
           Forgot your password? Create a new account and rejoin with your household’s invite code – the shared list
