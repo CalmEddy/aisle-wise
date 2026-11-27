@@ -9,6 +9,7 @@ import {
   sortMembers,
   type Member,
 } from '../sync/members';
+import { MIN_PASSWORD } from '../sync/password';
 import type { HouseholdApi } from '../sync/useHousehold';
 import { Icon } from './Icon';
 
@@ -45,8 +46,17 @@ export function HouseholdSheet({ api, joinCode, onClose }: { api: HouseholdApi; 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet household" role="dialog" aria-label="Household" onClick={(e) => e.stopPropagation()}>
+        {api.configured && api.linkProblem && (
+          <p className="card inset problems small" role="alert">
+            {api.linkProblem}{' '}
+            <button type="button" className="link" onClick={api.dismissLinkProblem}>Dismiss</button>
+          </p>
+        )}
+        {api.configured && api.passwordChanged && !api.recovering && <p className="small" role="status">Password updated ✓</p>}
         {!api.configured ? (
           <NotConfigured />
+        ) : api.recovering ? (
+          <SetNewPassword api={api} />
         ) : !api.signedIn ? (
           <SignIn api={api} joining={!!joinCode} />
         ) : !api.household ? (
@@ -101,6 +111,7 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
   const [notice, setNotice] = useState('');
   // Set once an account needs confirming, so the email can be sent again.
   const [pending, setPending] = useState('');
+  const [forgot, setForgot] = useState(false);
   const { busy, error, run } = useAction();
   const creating = mode === 'signup';
 
@@ -125,6 +136,8 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
     });
   }
 
+  if (forgot) return <ForgotPassword api={api} initialEmail={email} onBack={() => setForgot(false)} />;
+
   return (
     <>
       <h2>{joining ? 'Join a household' : 'Share with your household'}</h2>
@@ -142,14 +155,14 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
           <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
         </label>
         <label className="field">
-          <span>Password{creating && ' (at least 6 characters)'}</span>
+          <span>Password{creating && ` (at least ${MIN_PASSWORD} characters)`}</span>
           <div className="password-row">
             <input
               type={show ? 'text' : 'password'}
               autoComplete={creating ? 'new-password' : 'current-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
+              minLength={creating ? MIN_PASSWORD : undefined}
               required
             />
             <button type="button" className="btn" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>
@@ -157,7 +170,7 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
             </button>
           </div>
         </label>
-        <button className="btn primary wide" disabled={busy || !email.includes('@') || password.length < 6}>
+        <button className="btn primary wide" disabled={busy || !email.includes('@') || (creating ? password.length < MIN_PASSWORD : password.length === 0)}>
           {busy ? 'One moment…' : creating ? 'Create account' : 'Sign in'}
         </button>
       </form>
@@ -177,11 +190,88 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
         </button>
       )}
       {!creating && (
-        <p className="muted small">
-          Forgot your password? Create a new account and rejoin with your household’s invite code – the shared list
-          lives in the household, so nothing is lost.
-        </p>
+        <button type="button" className="link" onClick={() => setForgot(true)}>Forgot your password?</button>
       )}
+    </>
+  );
+}
+
+/** Asks for an email address and sends a link for choosing a new password. */
+function ForgotPassword({ api, initialEmail, onBack }: { api: HouseholdApi; initialEmail: string; onBack: () => void }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [sentTo, setSentTo] = useState('');
+  const { busy, error, run } = useAction();
+  const send = () => run(async () => {
+    const address = email.trim();
+    await api.sendPasswordReset(address);
+    setSentTo(address);
+  });
+
+  return (
+    <>
+      <h2>Reset your password</h2>
+      {sentTo ? (
+        <>
+          <p className="small">
+            If there’s an account for <b>{sentTo}</b>, we’ve emailed it a link for choosing a new password. Open the link
+            on this phone or computer (check spam too). It works once and expires after a while.
+          </p>
+          <button type="button" className="btn wide" disabled={busy} onClick={() => void send()}>Send it again</button>
+        </>
+      ) : (
+        <form onSubmit={(e) => { e.preventDefault(); void send(); }}>
+          <p className="muted small">Enter the email you signed up with and we’ll send a link.</p>
+          <label className="field">
+            <span>Email</span>
+            <input type="email" inputMode="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+          </label>
+          <button className="btn primary wide" disabled={busy || !email.includes('@')}>
+            {busy ? 'One moment…' : 'Send reset link'}
+          </button>
+        </form>
+      )}
+      {error && <p className="error">{error}</p>}
+      <button type="button" className="link" onClick={onBack}>Back to sign in</button>
+    </>
+  );
+}
+
+/** Shown after following a reset link: choose a new password. */
+function SetNewPassword({ api }: { api: HouseholdApi }) {
+  const [password, setPassword] = useState('');
+  const [show, setShow] = useState(false);
+  const { busy, error, run } = useAction();
+
+  if (!api.signedIn) {
+    // The link is still being read (or turned out not to work, which clears this screen).
+    return <p className="muted small">Checking your reset link…</p>;
+  }
+  return (
+    <>
+      <h2>Choose a new password</h2>
+      <p className="muted small">Signed in as {api.email}. Pick a password you’ll use from now on.</p>
+      <form onSubmit={(e) => { e.preventDefault(); void run(() => api.setNewPassword(password)); }}>
+        <label className="field">
+          <span>New password (at least {MIN_PASSWORD} characters)</span>
+          <div className="password-row">
+            <input
+              type={show ? 'text' : 'password'}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              minLength={MIN_PASSWORD}
+              required
+            />
+            <button type="button" className="btn" onClick={() => setShow(!show)} aria-label={show ? 'Hide password' : 'Show password'}>
+              {show ? 'Hide' : 'Show'}
+            </button>
+          </div>
+        </label>
+        <button className="btn primary wide" disabled={busy || password.length < MIN_PASSWORD}>
+          {busy ? 'One moment…' : 'Save new password'}
+        </button>
+      </form>
+      {error && <p className="error">{error}</p>}
     </>
   );
 }

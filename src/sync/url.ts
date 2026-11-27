@@ -25,3 +25,26 @@ export function normalizeSupabaseUrl(raw: string | undefined): string | undefine
     return undefined;
   }
 }
+
+/** What the address the app was opened with says about a Supabase email link. */
+export interface AuthLink {
+  /** The person followed a password-reset link and is signed in to choose a new password. */
+  recovery: boolean;
+  /** Plain-language reason the link didn't work (expired, already used), if it didn't. */
+  problem?: string;
+}
+
+export const EXPIRED_LINK_MESSAGE =
+  'That email link has expired or was already used. If you were confirming a new account, try signing in. If you were resetting a password, ask for a new link.';
+
+/**
+ * Supabase sends people back with the result in the address after `#`:
+ * `#access_token=…&type=recovery` when a reset link worked, or
+ * `#error=access_denied&error_code=otp_expired…` when it didn't. (Some email
+ * programs open links in the background, which uses them up.)
+ */
+export function parseAuthLink(hash: string): AuthLink {
+  const params = new URLSearchParams(hash.replace(/^#/, ''));
+  if (params.get('error') || params.get('error_code')) return { recovery: false, problem: EXPIRED_LINK_MESSAGE };
+  return { recovery: params.get('type') === 'recovery' && params.has('access_token') };
+}

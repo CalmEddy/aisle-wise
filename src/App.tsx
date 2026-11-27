@@ -199,6 +199,10 @@ export default function App() {
     try { localStorage.setItem('aw.welcomed', '1'); } catch { /* private mode: it'll show again, that's fine */ }
   };
   const [joinCode, setJoinCode] = useState<string>();
+  // Arriving from a password-reset (or expired) email link opens the household sheet.
+  useEffect(() => {
+    if (household.recovering || household.linkProblem) setHouseholdOpen(true);
+  }, [household.recovering, household.linkProblem]);
 
   // Sharing: chooser defaults (list/map), and anything that arrived in a link.
   const [sending, setSending] = useState<{ list: boolean; map: boolean; listId?: string } | null>(null);
