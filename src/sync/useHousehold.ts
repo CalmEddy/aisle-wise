@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePersistentState } from '../usePersistentState';
 import { SyncEngine, type SyncData, type SyncStatus } from './engine';
+import type { Member } from './members';
 import { supabase, supabaseRemote, supabaseUrl, type Household } from './supabase';
 
 export type HouseholdStatus = SyncStatus | 'off';
@@ -177,11 +178,56 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     setHousehold(null);
   }, [household, userId, setHousehold]);
 
-  const members = useCallback(async (): Promise<string[]> => {
+  const members = useCallback(async (): Promise<Member[]> => {
     if (!supabase || !household) return [];
-    const { data: rows } = await supabase.from('household_members').select('email').eq('household_id', household.id);
-    return (rows ?? []).map((r) => r.email ?? 'Someone');
+    const toMember = (r: { user_id: string; email: string | null; role?: string }): Member => ({
+      userId: r.user_id,
+      email: r.email ?? 'Someone',
+      role: r.role === 'owner' || r.role === 'member' ? r.role : undefined,
+    });
+    const withRole = await supabase.from('household_members').select('user_id, email, role').eq('household_id', household.id);
+    if (!withRole.error) return (withRole.data ?? []).map(toMember);
+    // A database without the hardening migration has no role column.
+    const plain = await supabase.from('household_members').select('user_id, email').eq('household_id', household.id);
+    return (plain.data ?? []).map(toMember);
   }, [household]);
+
+  /** Owner only: makes a new invite code. The old code and links stop working. */
+  const rotateInviteCode = useCallback(async () => {
+    if (!household) return;
+    const { data: h, error } = await requireClient().rpc('rotate_invite_code', { p_household: household.id });
+    if (error) throw new Error(friendly(error.message));
+    if (h && (h as Household).id) setHousehold(h as Household);
+  }, [household, setHousehold]);
+
+  /** Owner only: takes someone else out of the household. */
+  const removeMember = useCallback(async (memberId: string) => {
+    if (!household) return;
+    const { error } = await requireClient().rpc('remove_member', { p_household: household.id, p_user: memberId });
+    if (error) throw new Error(friendly(error.message));
+  }, [household]);
+
+  /**
+   * Erases this account. The database hands its households on to the next
+   * member (or removes them if nobody else is in them). This phone keeps its
+   * own copy of the lists.
+   */
+  const deleteAccount = useCallback(async () => {
+    const client = requireClient();
+    const { error } = await client.rpc('delete_my_account');
+    if (error) throw new Error(friendly(error.message));
+    engine.current?.stop();
+    if (household) {
+      try {
+        localStorage.removeItem(`aw.shadow.${household.id}`);
+      } catch {
+        // ignore
+      }
+    }
+    setHousehold(null);
+    // The account is gone, so only clear this phone's sign-in (there's nothing to tell the server).
+    await client.auth.signOut({ scope: 'local' });
+  }, [household, setHousehold]);
 
   return {
     configured: !!supabase,
@@ -197,7 +243,11 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     create,
     join,
     leave,
+    userId,
     members,
+    rotateInviteCode,
+    removeMember,
+    deleteAccount,
   };
 }
 
@@ -229,6 +279,9 @@ function friendly(message: string): string {
   if (/password should be at least/i.test(message)) return 'Use a password with at least 6 characters.';
   if (/error sending (confirmation|recovery|magic link|email)/i.test(message)) {
     return 'The confirmation email couldn’t be sent. This is a problem with the app’s email setup (Supabase → Authentication → Emails → SMTP Settings), not with your address. Try again later.';
+  }
+  if (/could not find the function|function .* does not exist/i.test(message)) {
+    return 'This needs the latest database setup. Run the newest file in supabase/migrations in your Supabase SQL Editor, then try again.';
   }
   if (/rate limit/i.test(message)) return 'Too many tries. Wait a minute and try again.';
   return message;
