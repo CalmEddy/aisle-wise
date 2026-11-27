@@ -1,9 +1,15 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Doc, Kind, Remote } from './engine';
-import { normalizeSupabaseUrl } from './url';
+import { normalizeSupabaseUrl, parseAuthLink } from './url';
 
 const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
 const key = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim().replace(/^['"]|['"]$/g, '');
+
+/**
+ * Whether the app was opened from a password-reset (or failed email) link.
+ * Read before the client starts, because the client removes the details from the address.
+ */
+export const openedFromAuthLink = parseAuthLink(typeof location === 'undefined' ? '' : location.hash);
 
 /** The project address this build talks to (shown when something's misconfigured). */
 export const supabaseUrl = url;

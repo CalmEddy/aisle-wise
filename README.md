@@ -205,10 +205,15 @@ For a new Supabase project:
 For local development, put the same two values in `.env.local` as
 `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
 
-Forgotten passwords: resetting one needs email, so instead create a new
-account and rejoin with the household's invite code (the shared data lives in
-the household). You can also delete old accounts under **Authentication →
-Users**.
+Forgotten passwords: **Forgot your password?** on the sign-in form emails a
+reset link (this needs the email setup in step 2). The link brings the person
+back to the app signed in, and the household sheet opens on **Choose a new
+password**. Passwords need at least 8 characters (the app enforces it; you can
+also raise **Minimum password length** in Supabase under **Authentication →
+Sign In / Providers → Email**). Some email programs open links in the
+background, which uses them up; the app then says the link expired and the
+person can ask for a new one. You can delete old accounts under
+**Authentication → Users**.
 
 
 ## Run it

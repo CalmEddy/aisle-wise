@@ -2,7 +2,9 @@ import type { Session } from '@supabase/supabase-js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePersistentState } from '../usePersistentState';
 import { SyncEngine, type SyncData, type SyncStatus } from './engine';
-import { supabase, supabaseRemote, supabaseUrl, type Household } from './supabase';
+import { passwordProblem, MIN_PASSWORD } from './password';
+import { openedFromAuthLink, supabase, supabaseRemote, supabaseUrl, type Household } from './supabase';
+import { EXPIRED_LINK_MESSAGE } from './url';
 
 export type HouseholdStatus = SyncStatus | 'off';
 
@@ -34,6 +36,11 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
   const [status, setStatus] = useState<HouseholdStatus>('off');
   // The database setup is older than this app: list names can't sync until it's re-run.
   const [needsDbUpdate, setNeedsDbUpdate] = useState(false);
+  // Opened from a password-reset email link: the person is signed in just long enough to pick a new password.
+  const [recovering, setRecovering] = useState(openedFromAuthLink.recovery);
+  // An email link that didn't work (expired, or used up by an email scanner).
+  const [linkProblem, setLinkProblem] = useState(openedFromAuthLink.problem ?? '');
+  const [passwordChanged, setPasswordChanged] = useState(false);
   const engine = useRef<SyncEngine | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -43,8 +50,22 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
   // Track sign-in.
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getSession().then(({ data: d }) => setSession(d.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    supabase.auth.getSession().then(({ data: d }) => {
+      setSession(d.session);
+      // Don't leave a used-up or invalid token sitting in the address bar.
+      if (openedFromAuthLink.recovery || openedFromAuthLink.problem) {
+        history.replaceState(null, '', location.pathname + location.search);
+      }
+      // The reset link was read but didn't give a session: it was invalid.
+      if (!d.session && openedFromAuthLink.recovery) {
+        setRecovering(false);
+        setLinkProblem(EXPIRED_LINK_MESSAGE);
+      }
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      if (event === 'PASSWORD_RECOVERY') setRecovering(true);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
@@ -127,6 +148,24 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     return !d.session;
   }, []);
 
+  /** Emails a link for choosing a new password. Supabase doesn't say whether the address has an account. */
+  const sendPasswordReset = useCallback(async (email: string) => {
+    const { error } = await requireClient().auth.resetPasswordForEmail(email, { redirectTo: appAddress() });
+    if (error) throw new Error(friendly(error.message));
+  }, []);
+
+  /** Chooses a new password (after following a reset link). */
+  const setNewPassword = useCallback(async (password: string) => {
+    const problem = passwordProblem(password);
+    if (problem) throw new Error(problem);
+    const { error } = await requireClient().auth.updateUser({ password });
+    if (error) throw new Error(friendly(error.message));
+    setRecovering(false);
+    setPasswordChanged(true);
+  }, []);
+
+  const dismissLinkProblem = useCallback(() => setLinkProblem(''), []);
+
   /** Sends the confirmation email again (the first may have been lost or gone to spam). */
   const resendConfirmation = useCallback(async (email: string) => {
     const { error } = await requireClient().auth.resend({
@@ -140,6 +179,8 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
   const signOut = useCallback(async () => {
     engine.current?.stop();
     setHousehold(null);
+    setRecovering(false);
+    setPasswordChanged(false);
     await requireClient().auth.signOut();
   }, [setHousehold]);
 
@@ -192,6 +233,12 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
     needsDbUpdate,
     signIn,
     signUp,
+    sendPasswordReset,
+    setNewPassword,
+    recovering,
+    passwordChanged,
+    linkProblem,
+    dismissLinkProblem,
     resendConfirmation,
     signOut,
     create,
@@ -226,7 +273,12 @@ function friendly(message: string): string {
   if (/invalid login credentials/i.test(message)) return 'That email and password don’t match.';
   if (/email not confirmed/i.test(message)) return 'This account’s email hasn’t been confirmed yet.';
   if (/already registered|already exists/i.test(message)) return 'That email already has an account. Sign in instead.';
-  if (/password should be at least/i.test(message)) return 'Use a password with at least 6 characters.';
+  if (/password should be at least/i.test(message)) return `Use a password with at least ${MIN_PASSWORD} characters.`;
+  if (/different from the old password/i.test(message)) return 'Choose a password you haven’t used for this account before.';
+  if (/weak|easy to guess|pwned|known to be/i.test(message)) return 'That password is too easy to guess. Pick a longer or less common one.';
+  const wait = /only request this after (\d+) seconds?/i.exec(message)?.[1];
+  if (wait) return `Please wait ${wait} seconds before asking again.`;
+  if (/auth session missing/i.test(message)) return 'That reset link has expired. Ask for a new one from the sign-in screen.';
   if (/error sending (confirmation|recovery|magic link|email)/i.test(message)) {
     return 'The confirmation email couldn’t be sent. This is a problem with the app’s email setup (Supabase → Authentication → Emails → SMTP Settings), not with your address. Try again later.';
   }
