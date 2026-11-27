@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Icon } from './Icon';
 import { MAIN_LIST } from '../core/types';
 import type { ListItem, StoreLayout } from '../core/types';
@@ -23,11 +23,9 @@ const NEW_LIST = '__new__';
  * (qty / rename / remove) without cart check-off.
  * Selecting a list here does not change the Shop trip list.
  */
-export function ListsManageView({ onShare, householdRow, lists, catalog, layout, looks, allItems, purchases, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, undo, snapshot, display, setDisplay }: {
+export function ListsManageView({ onShare, lists, catalog, layout, looks, allItems, purchases, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, undo, snapshot, display, setDisplay }: {
   /** Opens the share sheet for the list being edited. */
   onShare: (listId: string) => void;
-  /** Household status row (only when household sync is configured). */
-  householdRow?: ReactNode;
   lists: ListsApi;
   catalog: Catalog;
   layout: StoreLayout;
@@ -51,6 +49,7 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
   const [editId, setEditId] = useState(lists.current);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [newShared, setNewShared] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameText, setRenameText] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -126,10 +125,11 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
   function createList() {
     const n = newName.trim();
     if (!n || nameTaken(n)) return;
-    const id = lists.create(n);
+    const id = lists.create(n, lists.household ? newShared : false);
     setEditId(id);
     setCreating(false);
     setNewName('');
+    setNewShared(false);
   }
 
   function patchItem(item: ListItem, patch: ItemPatch) {
@@ -150,7 +150,6 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
 
   return (
     <div className="lists-manage">
-      {householdRow}
       <p className="muted small lists-manage-lead">
         Build lists here. On Shop, pick which list to shop and use the cart.
       </p>
@@ -166,7 +165,7 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
           >
             {lists.all.map((l) => (
               <option key={l.id} value={l.id}>
-                {l.name}{(lists.counts.get(l.id) ?? 0) > 0 ? ` · ${lists.counts.get(l.id)} to buy` : ''}
+                {l.name}{l.shared ? ' · shared' : ''}{(lists.counts.get(l.id) ?? 0) > 0 ? ` · ${lists.counts.get(l.id)} to buy` : ''}
               </option>
             ))}
             <option value={NEW_LIST}>＋ New list…</option>
@@ -188,7 +187,8 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
       </div>
 
       {creating && (
-        <form className="add-row lists-create" onSubmit={(e) => { e.preventDefault(); createList(); }}>
+        <form className="lists-create-form" onSubmit={(e) => { e.preventDefault(); createList(); }}>
+        <div className="add-row lists-create">
           <input
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -198,6 +198,13 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
           />
           <button type="submit" disabled={!newName.trim() || nameTaken(newName)}>+ Create</button>
           <button type="button" className="btn" onClick={() => setCreating(false)}>Cancel</button>
+        </div>
+        {lists.household && (
+          <label className="check share-option">
+            <input type="checkbox" checked={newShared} onChange={(e) => setNewShared(e.target.checked)} />
+            <span className="muted small">Share with {lists.household}</span>
+          </label>
+        )}
         </form>
       )}
       {creating && newName.trim() && nameTaken(newName) && (
@@ -219,7 +226,7 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
       {!creating && !renaming && (
         <div className="lists-manage-actions" role="group" aria-label={`Actions for ${current.name}`}>
           <ListsEditSortToggle display={display} setDisplay={setDisplay} />
-          <button type="button" className="btn" onClick={() => onShare(current.id)}><Icon name="share-2" /> Share</button>
+          <button type="button" className="btn" onClick={() => onShare(current.id)}><Icon name={current.shared ? 'users' : 'share-2'} /> {current.shared ? 'Shared' : 'Share'}</button>
           {current.id !== MAIN_LIST && (
             <button type="button" className="btn danger" onClick={() => setConfirmDelete(true)}>Delete</button>
           )}

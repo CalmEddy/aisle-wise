@@ -1,11 +1,15 @@
+import { listOf, sharedListIds } from '../core/lists';
 import type { Purchase } from '../core/purchases';
 import type { Category, ListItem, Product, ShoppingList, StoreLayout } from '../core/types';
 
 /**
  * Keeps a phone's data in step with its household.
  *
- * Everything shared is split into small documents (one per list item,
- * grocery item and store, plus one for the category list). The engine
+ * Everything shared is split into small documents (one per list, list item,
+ * grocery item and store, plus one for the category list). Only lists marked
+ * `shared` (and their items) take part; private lists never leave the phone.
+ * Grocery items, stores, categories and purchases sync for the whole
+ * household. The engine
  * remembers the last version it saw on the server for each document (the
  * "shadow"); whatever differs from the shadow is a local change to send,
  * and anything arriving from the server updates both the data and the
@@ -63,11 +67,13 @@ export function stable(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
-export function toDocs(d: SyncData): Map<string, Doc> {
+/** The documents this phone should have on the server. Private lists and their items are left out. */
+export function toDocs(d: SyncData, shared: Set<string> = sharedListIds(d.lists)): Map<string, Doc> {
   const docs = new Map<string, Doc>();
   const add = (kind: Kind, id: string, data: unknown) => docs.set(key(kind, id), { kind, id, data, deleted: false });
-  d.items.forEach((x) => add('item', x.id, x));
-  d.lists.forEach((x) => add('list', x.id, x));
+  // Lists first, so other phones know a list is shared before its items arrive.
+  d.lists.filter((x) => shared.has(x.id)).forEach((x) => add('list', x.id, { ...x, shared: true }));
+  d.items.filter((x) => shared.has(listOf(x))).forEach((x) => add('item', x.id, x));
   d.products.forEach((x) => add('product', x.id, x));
   d.layouts.forEach((x) => add('layout', x.id, x));
   d.purchases.forEach((x) => add('purchase', x.id, x));
@@ -75,9 +81,26 @@ export function toDocs(d: SyncData): Map<string, Doc> {
   return docs;
 }
 
-/** Applies server documents to local data. */
-export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
+export interface Accepted {
+  data: SyncData;
+  /** The documents that belong on this phone (the rest are ignored, not remembered). */
+  accepted: Doc[];
+  /** A list just became shared here, so its items may not have arrived yet. */
+  adopted: boolean;
+  /** Lists the household stopped sharing: this phone keeps them as private copies. */
+  detached: string[];
+}
+
+/**
+ * Applies server documents to local data, skipping anything for a list that
+ * isn't shared on this phone (for example items left behind by a list that was
+ * later unshared).
+ */
+export function acceptDocs(d: SyncData, docs: Doc[]): Accepted {
   let { items, lists, products, categories, layouts, purchases } = d;
+  const accepted: Doc[] = [];
+  const detached: string[] = [];
+  let adopted = false;
   const put = <T extends { id: string }>(list: T[], doc: Doc): T[] => {
     const without = list.filter((x) => x.id !== doc.id);
     if (doc.deleted || !doc.data) return without.length === list.length ? list : without;
@@ -87,15 +110,66 @@ export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
     next[i] = doc.data as T;
     return next;
   };
+
+  // Lists first: they decide which items belong here.
   for (const doc of docs) {
-    if (doc.kind === 'item') items = put(items, doc);
-    else if (doc.kind === 'list') lists = put(lists, doc);
-    else if (doc.kind === 'product') products = put(products, doc);
+    if (doc.kind !== 'list') continue;
+    const local = lists.find((l) => l.id === doc.id);
+    if (doc.deleted || !doc.data) {
+      if (local && local.shared !== true) continue; // a private list of the same name isn't theirs to delete
+      accepted.push(doc);
+      if (local) {
+        lists = lists.filter((l) => l.id !== doc.id);
+        items = items.filter((i) => listOf(i) !== doc.id);
+      }
+      continue;
+    }
+    const data = doc.data as ShoppingList;
+    if (data.shared === false) {
+      // Unshared: keep our copy, but private. Nothing to do if we never had it.
+      if (!local) continue;
+      accepted.push(doc);
+      detached.push(doc.id);
+      lists = lists.map((l) => (l.id === doc.id ? { ...l, shared: false } : l));
+      continue;
+    }
+    // Lists from older versions have no flag; being on the server means shared.
+    if (!local || local.shared !== true) adopted = true;
+    accepted.push(doc);
+    lists = put(lists, { ...doc, data: { ...data, shared: true } });
+  }
+
+  const shared = sharedListIds(lists);
+  for (const doc of docs) {
+    if (doc.kind === 'list') continue;
+    if (doc.kind === 'item') {
+      const local = items.find((i) => i.id === doc.id);
+      const gone = doc.deleted || !doc.data;
+      const listId = gone ? (local ? listOf(local) : undefined) : listOf(doc.data as ListItem);
+      if (listId !== undefined && !shared.has(listId)) continue;
+      accepted.push(doc);
+      items = put(items, doc);
+      continue;
+    }
+    accepted.push(doc);
+    if (doc.kind === 'product') products = put(products, doc);
     else if (doc.kind === 'layout') layouts = put(layouts, doc);
     else if (doc.kind === 'purchase') purchases = put(purchases, doc);
     else if (doc.kind === 'categories' && doc.id === 'all' && !doc.deleted && Array.isArray(doc.data)) categories = doc.data as Category[];
   }
-  return { items, lists, products, categories, layouts, purchases };
+  return { data: { items, lists, products, categories, layouts, purchases }, accepted, adopted, detached };
+}
+
+/** Applies server documents to local data. */
+export const applyDocs = (d: SyncData, docs: Doc[]): SyncData => acceptDocs(d, docs).data;
+
+/** The list a saved item document belonged to. */
+function savedListId(json: string): string {
+  try {
+    return listOf(JSON.parse(json) as ListItem);
+  } catch {
+    return listOf({} as ListItem);
+  }
 }
 
 export class SyncEngine {
@@ -133,6 +207,7 @@ export class SyncEngine {
    */
   async start(): Promise<void> {
     this.setStatus('connecting');
+    this.adoptLegacy();
     this.unsubscribe = this.remote.subscribe((doc) => this.receive(doc), () => void this.resync());
     await this.resync();
   }
@@ -159,11 +234,66 @@ export class SyncEngine {
     return this.flushing;
   }
 
+  private live(k: string) {
+    const json = this.shadow.get(k);
+    return json !== undefined && json !== '';
+  }
+
+  /** Lists this phone shares, including ones whose flag was lost but that the server still has. */
+  private sharedIds(d: SyncData) {
+    return new Set(d.lists.filter((l) => l.shared === true || (l.shared === undefined && this.live(key('list', l.id)))).map((l) => l.id));
+  }
+
+  /** Stops tracking a list's items, without deleting them from the server. */
+  private forgetItems(listId: string) {
+    for (const [k, json] of this.shadow) {
+      if (k.startsWith('item:') && json !== '' && savedListId(json) === listId) this.shadow.set(k, '');
+    }
+  }
+
+  /**
+   * Phones that were in a household before lists could be private shared
+   * everything. Whatever they already sent counts as shared, so upgrading
+   * never turns a shared list private (which would delete it for everyone).
+   */
+  private adoptLegacy() {
+    if (!this.shadow.size) return;
+    const d = this.get();
+    const used = new Set<string>();
+    for (const [k, json] of this.shadow) if (k.startsWith('item:') && json !== '') used.add(savedListId(json));
+    let changed = false;
+    const lists = d.lists.map((l) => {
+      if (l.shared !== undefined || !(this.live(key('list', l.id)) || used.has(l.id))) return l;
+      changed = true;
+      return { ...l, shared: true };
+    });
+    if (changed) this.set({ ...d, lists });
+  }
+
+  /** Records documents that were applied here, and lets go of lists the household stopped sharing. */
+  private record(r: Accepted) {
+    for (const doc of r.accepted) this.shadow.set(key(doc.kind, doc.id), doc.deleted ? '' : stable(doc.data));
+    for (const id of r.detached) {
+      this.shadow.set(key('list', id), '');
+      this.forgetItems(id);
+    }
+  }
+
   private async doFlush() {
     if (this.stopped) return;
-    const current = toDocs(this.get());
+    const data = this.get();
+    const current = toDocs(data, this.sharedIds(data));
     const out: Doc[] = [];
     const sent = new Map<string, string>();
+    // Lists made private here: tell the household once, and keep the items on this phone only.
+    const unshared = new Set<string>();
+    for (const l of data.lists) {
+      if (l.shared !== false || !this.live(key('list', l.id))) continue;
+      unshared.add(l.id);
+      this.forgetItems(l.id);
+      out.push({ kind: 'list', id: l.id, data: { ...l, shared: false }, deleted: false, device: this.device });
+      sent.set(key('list', l.id), '');
+    }
     for (const [k, doc] of current) {
       const json = stable(doc.data);
       if (this.shadow.get(k) !== json) {
@@ -172,7 +302,7 @@ export class SyncEngine {
       }
     }
     for (const [k, json] of this.shadow) {
-      if (current.has(k) || json === '') continue;
+      if (current.has(k) || json === '' || (k.startsWith('list:') && unshared.has(k.slice(5)))) continue;
       const [kind, ...rest] = k.split(':');
       out.push({ kind: kind as Kind, id: rest.join(':'), data: null, deleted: true, device: this.device });
       sent.set(k, '');
@@ -203,8 +333,9 @@ export class SyncEngine {
       const docs = await this.remote.fetchAll();
       if (this.stopped) return;
       const fresh = docs.filter((d) => this.shadow.get(key(d.kind, d.id)) !== (d.deleted ? '' : stable(d.data)));
-      for (const d of docs) this.shadow.set(key(d.kind, d.id), d.deleted ? '' : stable(d.data));
-      if (fresh.length) this.set(applyDocs(this.get(), fresh));
+      const r = acceptDocs(this.get(), fresh);
+      this.record(r);
+      if (r.accepted.length) this.set(r.data);
       this.saveShadow();
       await this.flush();
     } catch {
@@ -217,9 +348,13 @@ export class SyncEngine {
     const k = key(doc.kind, doc.id);
     const json = doc.deleted ? '' : stable(doc.data);
     if (this.shadow.get(k) === json) return;
-    this.shadow.set(k, json);
+    const r = acceptDocs(this.get(), [doc]);
+    if (!r.accepted.length) return;
+    this.record(r);
     this.saveShadow();
-    this.set(applyDocs(this.get(), [doc]));
+    this.set(r.data);
+    // Items sent before their list was shared here were skipped; fetch them now.
+    if (r.adopted) void this.resync();
   }
 
   private saveShadow() {

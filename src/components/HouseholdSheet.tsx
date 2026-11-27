@@ -13,7 +13,7 @@ import { MIN_PASSWORD } from '../sync/password';
 import type { HouseholdApi } from '../sync/useHousehold';
 import { Icon } from './Icon';
 
-const STATUS_TEXT = {
+export const STATUS_TEXT = {
   off: 'Not shared',
   connecting: 'Connecting…',
   synced: 'Up to date',
@@ -71,6 +71,14 @@ export function HouseholdSheet({ api, joinCode, onClose }: { api: HouseholdApi; 
       </div>
     </div>
   );
+}
+
+/** Sign in, then create or join a household. Shown wherever sharing needs an account. */
+export function HouseholdAccount({ api, joinCode }: { api: HouseholdApi; joinCode?: string }) {
+  if (!api.configured) return <NotConfigured />;
+  if (api.recovering) return <SetNewPassword api={api} />;
+  if (!api.signedIn) return <SignIn api={api} joining={!!joinCode} />;
+  return <CreateOrJoin api={api} joinCode={joinCode} />;
 }
 
 function useAction() {
@@ -284,7 +292,10 @@ function CreateOrJoin({ api, joinCode }: { api: HouseholdApi; joinCode?: string 
   return (
     <>
       <h2>{joinCode ? 'Join the household' : 'Share with your household'}</h2>
-      <p className="muted small">Signed in as {api.email}. Your current list, items and stores will be added to the household.</p>
+      <p className="muted small">
+        Signed in as {api.email}. Your stores and grocery items will be added to the household.
+        Your lists stay private until you choose to share them.
+      </p>
       <form className="card inset" onSubmit={(e) => { e.preventDefault(); void run(() => api.join(code)); }}>
         <h3>Join with an invite code</h3>
         <div className="add-row">
@@ -306,6 +317,34 @@ function CreateOrJoin({ api, joinCode }: { api: HouseholdApi; joinCode?: string 
       <DeleteAccount api={api} />
     </>
   );
+}
+
+/** Shares (or copies) the link that lets someone join the household. */
+export function InviteButton({ code, className = 'btn primary wide' }: { code: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  // A new code means the old "copied" no longer applies.
+  useEffect(() => setCopied(false), [code]);
+
+  async function invite() {
+    const link = `${location.origin}${location.pathname}#join=${code}`;
+    const text = `Join our shopping list in Aisle Wise. Invite code: ${code}`;
+    if ('share' in navigator) {
+      try {
+        await navigator.share({ title: 'Join our household on Aisle Wise', text, url: link });
+        return;
+      } catch {
+        // cancelled – fall through to copy
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      // ignore
+    }
+  }
+
+  return <button type="button" className={className} onClick={invite}>{copied ? 'Link copied ✓' : 'Send invite link'}</button>;
 }
 
 /** Who is in the household; owners also get a Remove button next to everyone else. */
@@ -382,9 +421,7 @@ function InHousehold({ api }: { api: HouseholdApi }) {
   const h = api.household!;
   const [members, setMembers] = useState<Member[]>([]);
   const [refresh, setRefresh] = useState(0);
-  const [copied, setCopied] = useState(false);
   const { busy, error, run } = useAction();
-  const link = `${location.origin}${location.pathname}#join=${h.invite_code}`;
 
   const { members: loadMembers } = api;
   useEffect(() => {
@@ -394,29 +431,11 @@ function InHousehold({ api }: { api: HouseholdApi }) {
   // Owner buttons only make sense once the database knows about owners.
   const owner = rolesKnown(members) && isOwner(members, api.userId);
 
-  async function invite() {
-    const text = `Join our shopping list in Aisle Wise. Invite code: ${h.invite_code}`;
-    if ('share' in navigator) {
-      try {
-        await navigator.share({ title: 'Join our household on Aisle Wise', text, url: link });
-        return;
-      } catch {
-        // cancelled – fall through to copy
-      }
-    }
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-    } catch {
-      // ignore
-    }
-  }
-
   return (
     <>
       <h2>{h.name}</h2>
       <p className={`small status-text status-${api.status}`}><span className="dot" aria-hidden="true" /> {STATUS_TEXT[api.status]}</p>
-      <p className="muted small">Your lists, grocery items and stores are shared with everyone here and update live.</p>
+      <p className="muted small">Grocery items and stores are shared with everyone here and update live. Lists sync only when you share them.</p>
       {api.needsDbUpdate && (
         <p className="card inset problems small">
           <b>List names aren’t syncing yet.</b> Your household’s database needs the latest setup: open Supabase → SQL Editor,
@@ -429,12 +448,12 @@ function InHousehold({ api }: { api: HouseholdApi }) {
         <h3>Invite someone</h3>
         <p className="muted small">They open the link (or enter the code), sign in with their email, and they’re in.</p>
         <div className="invite-code" aria-label="Invite code">{h.invite_code}</div>
-        <button className="btn primary wide" onClick={invite}>{copied ? 'Link copied ✓' : 'Send invite link'}</button>
+        <InviteButton code={h.invite_code} />
         {owner && (
           <button
             className="link"
             disabled={busy}
-            onClick={() => confirm(NEW_CODE_WARNING) && void run(async () => { await api.rotateInviteCode(); setCopied(false); })}
+            onClick={() => confirm(NEW_CODE_WARNING) && void run(async () => { await api.rotateInviteCode(); })}
           >
             Make a new invite code
           </button>
