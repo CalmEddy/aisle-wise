@@ -63,6 +63,9 @@ test('Lists and Items have no store or More controls; Share sits with the list a
   await tabs.getByRole('tab', { name: 'Lists' }).click();
   await page.getByRole('button', { name: 'Share', exact: true }).click();
   const sheet = page.getByRole('dialog', { name: 'Share' });
+  // With live sharing set up, a one-time copy is tucked behind a link; otherwise it's shown straight away.
+  const copyLink = sheet.getByRole('button', { name: /Send a copy instead/ });
+  if (await copyLink.count()) await copyLink.click();
   await expect(sheet.getByRole('checkbox', { name: /Shopping list/ })).toBeChecked();
   await expect(sheet.getByRole('checkbox', { name: /store’s map/ })).not.toBeChecked();
   await page.keyboard.press('Escape');

@@ -1598,3 +1598,10 @@ details[open] > summary::before { transform: rotate(90deg); }
 }
 .buy-again h4 .link { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 0.85rem; }
 .suggestions.buy-list { position: static; box-shadow: none; border: 0; margin: 0; padding: 0; max-height: none; }
+
+/* Sharing a list */
+.shared-mark { margin-left: 6px; color: var(--muted); vertical-align: -0.1em; }
+.list-share-live .share-members { display: flex; align-items: center; gap: 6px; margin: 6px 0; overflow-wrap: anywhere; }
+.list-share-live .list-confirm { margin: 8px 0; }
+.list-share-live .btn.wide { margin: 6px 0; }
+.lists-create-form { display: flex; flex-direction: column; gap: 4px; }

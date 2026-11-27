@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { type ShoppingList } from '../core/types';
+import { Icon } from './Icon';
 
 /** What the Shop tab / Setup → Lists can do with the household's lists. */
 export interface ListsApi {
@@ -11,8 +12,10 @@ export interface ListsApi {
   /** Checked-off count per list (for clear affordances). */
   doneCounts: Map<string, number>;
   switchTo: (id: string) => void;
-  /** Creates a list without switching to it. Returns its id. */
-  create: (name: string) => string;
+  /** Creates a list without switching to it (shared with the household if asked). Returns its id. */
+  create: (name: string, shared?: boolean) => string;
+  /** Name of the household when this phone is in one (lists can then be shared). */
+  household?: string;
   rename: (id: string, name: string) => void;
   /** Deletes a list and its items (not the main list). Returns what Undo restores. */
   remove: (id: string) => import('../App').Snapshot | undefined;
@@ -66,7 +69,7 @@ export function ListsSheet({ lists, onCombined, onClose }: {
           aria-current={isCurrent}
         >
           <span className="radio" aria-hidden="true">{isCurrent ? '●' : '○'}</span>
-          <span className="name">{l.name}</span>
+          <span className="name">{l.name}{l.shared && <Icon name="users" className="shared-mark" title="Shared with household" />}</span>
           <span className="muted small">{isCurrent ? 'Selected' : status(l.id)}</span>
         </button>
       </li>
