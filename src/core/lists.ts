@@ -172,8 +172,10 @@ export function tripListIds(activeListId: string, shopWith: string[], lists: Sho
 }
 
 /**
- * Non-destructive multi-list shop: union of to-buy (and cart) across the trip
- * lists, one row per product. Does not copy items onto the active list.
+ * Non-destructive multi-list shop. To-buy is the union across the trip lists
+ * (one row per product). The cart is universal: everything checked off on ANY
+ * list is in it, whether or not that list is part of this trip. Does not copy
+ * items onto the active list.
  */
 export function shopTrip(
   items: ListItem[],
@@ -196,10 +198,13 @@ export function shopTrip(
   };
   for (const lid of ids) {
     for (const i of itemsOn(items, lid)) {
-      if (i.done) add(done, i, lid);
-      else add(toBuy, i, lid);
+      if (!i.done) add(toBuy, i, lid);
     }
   }
+  // Cart: trip lists first (so the active list's copy represents a row), then every other list.
+  const inTrip = new Set(ids);
+  for (const i of items) if (i.done && inTrip.has(listOf(i))) add(done, i, listOf(i));
+  for (const i of items) if (i.done && !inTrip.has(listOf(i))) add(done, i, listOf(i));
   return { toBuy, done };
 }
 
@@ -221,10 +226,9 @@ export function setTripItemDone(
   });
 }
 
-/** Clears checked-off items on every list in the trip (active + overlays). */
-export function clearTripCart(items: ListItem[], tripIds: string[]): ListItem[] {
-  const set = new Set(tripIds);
-  return items.filter((i) => !(set.has(listOf(i)) && i.done));
+/** Empties the universal cart: drops every checked-off item on every list. */
+export function clearCart(items: ListItem[]): ListItem[] {
+  return items.filter((i) => !i.done);
 }
 
 /** Drop overlay ids that no longer exist or match the active list. */

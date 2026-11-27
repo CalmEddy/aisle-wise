@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
 import {
-  clearList, clearTripCart, combineLists, copyItem, copyListName, duplicateList, itemsOn, listOf,
+  clearCart, clearList, combineLists, copyItem, copyListName, duplicateList, itemsOn, listOf,
   moveItem, moveListOrder, removeList, setTripItemDone, shopTrip, updateList,
 } from './lists';
 import type { ListItem, ShoppingList } from './types';
@@ -106,6 +106,16 @@ describe('several lists', () => {
     expect(after.find((i) => i.id === '3')?.done).toBe(true);
     expect(names(after, 'main')).toEqual(['Milk']);
     expect(names(after, 'staples')).toEqual(['Eggs', 'milk', 'Bread']);
-    expect(clearTripCart(after, ['main', 'staples']).map((i) => i.id).sort()).toEqual(['2', '5', '6']);
+    expect(clearCart(after).map((i) => i.id).sort()).toEqual(['2', '5', '6']);
+  });
+
+  it('the cart is universal: checked-off items on every list are in it, trip or not', () => {
+    const all: ListItem[] = [...items, { id: '7', name: 'Rice', done: true, listId: 'tacos' }];
+    // Shopping only main: Bread (staples) and Rice (tacos) are still in the cart.
+    const trip = shopTrip(all, 'main', [], lists, catalog);
+    expect(trip.done.map((r) => r.item.name).sort()).toEqual(['Bread', 'Rice']);
+    expect(trip.toBuy.map((r) => r.item.name)).toEqual(['Milk']);
+    // Clearing it empties every list's checked items and leaves the rest.
+    expect(clearCart(all).map((i) => i.id).sort()).toEqual(['1', '2', '3', '5', '6']);
   });
 });

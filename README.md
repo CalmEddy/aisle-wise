@@ -252,6 +252,12 @@ supabase/migrations/              Database tables and access rules
   restock reminder. Trips are still recorded on the phone (`aw.trips`,
   `src/core/trips.ts`), so the raw history exists; `usuals()` there already
   computes what's bought often and when it's due.
+  Proposed design: keep a household-synced purchase log (one row per item
+  per cleared cart: product, qty, price, store, date), and surface it as a
+  "Buy again" section in the add sheet and on the Items tab, ranked by due
+  date and frequency, with a per-item "last bought / every ~N days" line.
+- **Universal cart (done)** – the cart is one shared cart: anything checked
+  off on any list is in it, and Clear cart empties it for every list.
 - **Automatic indoor location** – GPS isn't accurate inside buildings.
   Options: Bluetooth beacons per aisle (needs a native wrapper such as
   Capacitor), scanning a QR code on each aisle sign, or a store's own API.

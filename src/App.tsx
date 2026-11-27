@@ -42,8 +42,8 @@ import {
 import type { Clue, GeoPoint, ItemUnit, Rect, SectionShape, ShelfReach } from './core/types';
 import { MAIN_LIST, type Area, type Category, type ListItem, type Place, type Point, type Product, type Shelf, type ShoppingList, type StoreLayout } from './core/types';
 import {
-  clearTripCart, cleanShopWith, combineLists, copyItem, defaultLists,
-  itemsOn, listOf, moveItem, removeList, sameThing, setTripItemDone, shopTrip, tripListIds,
+  clearCart, cleanShopWith, combineLists, copyItem, defaultLists,
+  itemsOn, listOf, moveItem, removeList, sameThing, setTripItemDone, shopTrip,
   updateList,
 } from './core/lists';
 import { boundsOf, clearFor } from './core/expand';
@@ -1237,16 +1237,15 @@ export default function App() {
       const nextVisible = fn(visible);
       const nextById = new Map(nextVisible.map((i) => [i.id, i]));
       const removed = visible.filter((v) => !nextById.has(v.id));
-      const ids = tripListIds(listId, shopWith, lists);
 
-      // Clear cart: every done row left and to-buy rows kept → drop done on the trip.
+      // Clear cart: every done row left and to-buy rows kept → empty the universal cart.
       if (
         removed.length > 0
         && removed.every((r) => r.done)
         && nextVisible.length === visible.filter((v) => !v.done).length
         && nextVisible.every((n) => visible.some((v) => v.id === n.id && !v.done))
       ) {
-        return clearTripCart(all, ids);
+        return clearCart(all);
       }
 
       let result = all.map((i) => (nextById.has(i.id) ? nextById.get(i.id)! : i));
