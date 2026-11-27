@@ -66,7 +66,7 @@ export function supabaseRemote(client: SupabaseClient, householdId: string): Rem
       };
       // Kinds added after the first database setup go separately, so an
       // older setup that doesn't accept them can't hold up everything else.
-      const newerKinds: Kind[] = ['list', 'purchase'];
+      const newerKinds: Kind[] = ['list', 'purchase', 'category'];
       await send(docs.filter((d) => !newerKinds.includes(d.kind)));
       const refused: Kind[] = [];
       for (const kind of newerKinds) {

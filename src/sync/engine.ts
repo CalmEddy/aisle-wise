@@ -5,14 +5,19 @@ import type { Category, ListItem, Product, ShoppingList, StoreLayout } from '../
  * Keeps a phone's data in step with its household.
  *
  * Everything shared is split into small documents (one per list item,
- * grocery item and store, plus one for the category list). The engine
+ * grocery item, category and store). The engine
  * remembers the last version it saw on the server for each document (the
  * "shadow"); whatever differs from the shadow is a local change to send,
  * and anything arriving from the server updates both the data and the
  * shadow. The last write to a document wins.
  */
 
-export type Kind = 'item' | 'product' | 'layout' | 'categories' | 'list' | 'purchase';
+/**
+ * 'categories' is the old single document holding every category. It is only
+ * read, once, to move a household over to one 'category' document each (so
+ * two people editing different categories no longer overwrite each other).
+ */
+export type Kind = 'item' | 'product' | 'layout' | 'category' | 'categories' | 'list' | 'purchase';
 
 export interface Doc {
   kind: Kind;
@@ -71,7 +76,7 @@ export function toDocs(d: SyncData): Map<string, Doc> {
   d.products.forEach((x) => add('product', x.id, x));
   d.layouts.forEach((x) => add('layout', x.id, x));
   d.purchases.forEach((x) => add('purchase', x.id, x));
-  add('categories', 'all', d.categories);
+  d.categories.forEach((x) => add('category', x.id, x));
   return docs;
 }
 
@@ -93,7 +98,7 @@ export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
     else if (doc.kind === 'product') products = put(products, doc);
     else if (doc.kind === 'layout') layouts = put(layouts, doc);
     else if (doc.kind === 'purchase') purchases = put(purchases, doc);
-    else if (doc.kind === 'categories' && doc.id === 'all' && !doc.deleted && Array.isArray(doc.data)) categories = doc.data as Category[];
+    else if (doc.kind === 'category') categories = put(categories, doc);
   }
   return { items, lists, products, categories, layouts, purchases };
 }
@@ -104,6 +109,8 @@ export class SyncEngine {
   private timer?: ReturnType<typeof setTimeout>;
   private flushing?: Promise<void>;
   private stopped = false;
+  /** Category documents assumed synced from the old single category document, until the server confirms. */
+  private seeded = new Set<string>();
   status: SyncStatus = 'connecting';
 
   constructor(
@@ -159,6 +166,46 @@ export class SyncEngine {
     return this.flushing;
   }
 
+  /**
+   * Phones that synced before categories became one document each remember
+   * the old single document in their shadow. Treat each of its categories as
+   * already synced, so only real edits made since are sent (not the whole
+   * list, which could overwrite newer changes on the server). `resync` then
+   * checks the server and uploads whatever it doesn't have yet.
+   */
+  private adoptLegacyShadow() {
+    const legacyKey = key('categories', 'all');
+    const legacy = this.shadow.get(legacyKey);
+    if (legacy === undefined) return;
+    this.shadow.delete(legacyKey);
+    if ([...this.shadow.keys()].some((k) => k.startsWith('category:'))) return;
+    try {
+      const list: unknown = JSON.parse(legacy || 'null');
+      if (!Array.isArray(list)) return;
+      for (const c of list as Category[]) {
+        if (!c || typeof c.id !== 'string') continue;
+        this.shadow.set(key('category', c.id), stable(c));
+        this.seeded.add(key('category', c.id));
+      }
+    } catch {
+      // Unreadable old shadow: nothing to carry over.
+    }
+  }
+
+  /**
+   * Categories in the server's old single document that don't have a document
+   * of their own yet (live or deleted). A deleted category isn't brought back,
+   * and one that already has its own document is never overwritten.
+   */
+  private legacyCategories(all: Doc[]): Doc[] {
+    const old = all.find((d) => d.kind === 'categories' && d.id === 'all' && !d.deleted && Array.isArray(d.data));
+    if (!old) return [];
+    const have = new Set(all.filter((d) => d.kind === 'category').map((d) => d.id));
+    return (old.data as Category[])
+      .filter((c) => c && typeof c.id === 'string' && !have.has(c.id))
+      .map((c) => ({ kind: 'category' as const, id: c.id, data: c, deleted: false }));
+  }
+
   private async doFlush() {
     if (this.stopped) return;
     const current = toDocs(this.get());
@@ -199,12 +246,24 @@ export class SyncEngine {
   async resync(): Promise<void> {
     const firstTime = this.shadow.size === 0;
     try {
+      this.adoptLegacyShadow();
       if (!firstTime) await this.flush();
-      const docs = await this.remote.fetchAll();
+      const all = await this.remote.fetchAll();
       if (this.stopped) return;
+      // The old single category document is never kept in the shadow (or deleted): old phones still use it.
+      const docs = all.filter((d) => d.kind !== 'categories');
+      const imported = this.legacyCategories(all);
       const fresh = docs.filter((d) => this.shadow.get(key(d.kind, d.id)) !== (d.deleted ? '' : stable(d.data)));
       for (const d of docs) this.shadow.set(key(d.kind, d.id), d.deleted ? '' : stable(d.data));
-      if (fresh.length) this.set(applyDocs(this.get(), fresh));
+      // Categories the server doesn't have as documents yet get uploaded by the flush below.
+      const onServer = new Set(docs.map((d) => key(d.kind, d.id)));
+      for (const k of this.seeded) if (!onServer.has(k)) this.shadow.delete(k);
+      for (const d of imported) this.shadow.delete(key(d.kind, d.id));
+      this.seeded.clear();
+      // The server's version of an imported category wins here, as it did before (skip ones this phone already has).
+      const have = new Map(this.get().categories.map((c) => [c.id, stable(c)]));
+      const toApply = [...fresh, ...imported.filter((d) => have.get(d.id) !== stable(d.data))];
+      if (toApply.length) this.set(applyDocs(this.get(), toApply));
       this.saveShadow();
       await this.flush();
     } catch {
@@ -214,6 +273,7 @@ export class SyncEngine {
 
   private receive(doc: Doc) {
     if (this.stopped || doc.device === this.device) return; // our own echo
+    if (doc.kind === 'categories') return; // old single category document: handled in resync
     const k = key(doc.kind, doc.id);
     const json = doc.deleted ? '' : stable(doc.data);
     if (this.shadow.get(k) === json) return;

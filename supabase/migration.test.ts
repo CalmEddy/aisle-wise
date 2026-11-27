@@ -29,9 +29,10 @@ const DEE = '00000000-0000-0000-0000-00000000000d';
 
 const BASE = readFileSync(new URL('./migrations/20261024000000_households.sql', import.meta.url), 'utf8');
 const HARDENING = readFileSync(new URL('./migrations/20261128000000_hardening.sql', import.meta.url), 'utf8');
-const MIGRATION = BASE + '\n' + HARDENING;
+const CATEGORY_DOCS = readFileSync(new URL('./migrations/20261129000000_category_docs.sql', import.meta.url), 'utf8');
+const MIGRATION = BASE + '\n' + HARDENING + '\n' + CATEGORY_DOCS;
 /** How many numbered checks supabase/check.sql reports. */
-const CHECKS = 10;
+const CHECKS = 11;
 const CHECK = readFileSync(new URL('./check.sql', import.meta.url), 'utf8');
 
 let db: PGlite;
@@ -424,5 +425,40 @@ describe('document limits', () => {
     await insert(d, h, 'b', {});
     const [other] = await asOn<{ id: string }>(d, BEN, `select * from create_household('Other')`);
     await asOn(d, BEN, `insert into docs (household_id, kind, id, data) values ($1, 'item', 'a', '{}')`, [other.id]);
+  });
+});
+
+describe('category documents', () => {
+  const insertKind = (d: PGlite, hid: string, kind: string) =>
+    asOn(d, ANA, `insert into docs (household_id, kind, id, data) values ($1, $2, 'x', '{}')`, [hid, kind]);
+
+  it('lets categories sync one by one, and still refuses made-up kinds', async () => {
+    const d = await freshDb();
+    const [h] = await asOn<{ id: string }>(d, ANA, `select * from create_household('Home')`);
+    await insertKind(d, h.id, 'category');
+    await insertKind(d, h.id, 'purchase');
+    await insertKind(d, h.id, 'categories'); // the old single document is still allowed
+    await expect(insertKind(d, h.id, 'nonsense')).rejects.toMatchObject({ code: '23514' });
+  });
+
+  it('upgrades a database that only knows the older kinds, keeping its data', async () => {
+    const old = new PGlite();
+    await old.exec(SUPABASE_STUBS);
+    await old.exec(BASE);
+    await old.exec(`insert into auth.users values ('${ANA}');`);
+    const [h] = await asOn<{ id: string }>(old, ANA, `select * from create_household('Home')`);
+    await asOn(old, ANA, `insert into docs (household_id, kind, id, data) values ($1, 'categories', 'all', '[{"id":"a"}]')`, [h.id]);
+    await expect(insertKind(old, h.id, 'category')).rejects.toMatchObject({ code: '23514' });
+    await old.exec(CATEGORY_DOCS);
+    await insertKind(old, h.id, 'category');
+    expect((await old.query('select kind from docs order by kind')).rows).toEqual([{ kind: 'categories' }, { kind: 'category' }]);
+  });
+
+  it('can be run again without changing anything', async () => {
+    const d = await freshDb();
+    await d.exec(CATEGORY_DOCS);
+    await d.exec(CATEGORY_DOCS);
+    const rows = (await d.query<{ status: string }>(CHECK)).rows;
+    expect(rows.map((r) => r.status)).toEqual(Array(CHECKS).fill('OK'));
   });
 });

@@ -11,6 +11,8 @@ class MemoryServer {
   down = false;
   /** Kinds an older database setup won't store. */
   refuse = new Set<Kind>();
+  /** Everything phones have sent, batch by batch. */
+  pushed: Doc[][] = [];
 
   remote(): Remote {
     return {
@@ -20,6 +22,7 @@ class MemoryServer {
       },
       push: async (docs) => {
         if (this.down) throw new Error('offline');
+        this.pushed.push(docs.map((d) => structuredClone(d)));
         const refused = new Set<Kind>();
         for (const d of docs) {
           if (this.refuse.has(d.kind)) {
@@ -124,7 +127,7 @@ describe('household sync', () => {
       products: [{ id: 'k', name: 'Kombucha', categoryId: 'intl', locations: { demo: 'a3' } }],
       layouts: [{ ...d.layouts[0], name: 'Renamed Market' }],
     }));
-    expect(ben.data.categories[0].name).toBe('International');
+    expect(ben.data.categories.find((c) => c.id === 'intl')?.name).toBe('International');
     expect(ben.data.products).toEqual([{ id: 'k', name: 'Kombucha', categoryId: 'intl', locations: { demo: 'a3' } }]);
     expect(ben.data.layouts[0].name).toBe('Renamed Market');
   });
@@ -223,5 +226,206 @@ describe('named lists', () => {
     await ana.edit(addItem(item('2', 'Eggs')));
     expect(server.docs.has('list:party')).toBe(true);
     expect(refusedSeen[refusedSeen.length - 1]).toEqual([]);
+  });
+});
+
+
+describe('categories (one document each)', () => {
+  const cats = defaultCategories.slice(0, 6);
+  const named = (d: SyncData, id: string) => d.categories.find((c) => c.id === id)?.name;
+  const ids = (d: SyncData) => d.categories.map((c) => c.id).sort();
+  const categoryDocs = (server: MemoryServer) => [...server.docs.values()].filter((d) => d.kind === 'category' && !d.deleted);
+  const withCats = (c: typeof cats) => ({ categories: c });
+  const rename = (id: string, name: string) => (d: SyncData) => ({ ...d, categories: d.categories.map((c) => (c.id === id ? { ...c, name } : c)) });
+
+  it('keeps edits to different categories made at the same time', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', withCats(cats));
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    server.down = true;
+    await ana.edit(rename(cats[0].id, 'Fresh'));
+    await ben.edit(rename(cats[1].id, 'Cold'));
+    server.down = false;
+    server.reconnect();
+    await ana.engine.resync();
+    await ben.engine.resync();
+    await ana.engine.resync();
+    for (const phone of [ana, ben]) {
+      expect(named(phone.data, cats[0].id)).toBe('Fresh');
+      expect(named(phone.data, cats[1].id)).toBe('Cold');
+    }
+  });
+
+  it('shares a new category, a deletion, and does not bring the deleted one back', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', withCats(cats));
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    await ana.edit((d) => ({ ...d, categories: [...d.categories, { id: 'c-new', name: 'Pet food' }] }));
+    expect(named(ben.data, 'c-new')).toBe('Pet food');
+    await ben.edit((d) => ({ ...d, categories: d.categories.filter((c) => c.id !== cats[2].id) }));
+    expect(ids(ana.data)).not.toContain(cats[2].id);
+    // A phone that comes online later hears about the deletion too.
+    const cal = new Phone(server, 'cal', withCats(cats));
+    await cal.engine.start();
+    expect(ids(cal.data)).not.toContain(cats[2].id);
+    expect(ids(cal.data)).toContain('c-new');
+  });
+
+  it('sends only the category that changed', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', withCats(cats));
+    await ana.engine.start();
+    server.pushed.length = 0;
+    await ana.edit(rename(cats[0].id, 'Fresh'));
+    expect(server.pushed.flat().map((d) => `${d.kind}:${d.id}`)).toEqual([`category:${cats[0].id}`]);
+  });
+
+  describe('moving a household over from the old single category document', () => {
+    const legacyDoc = (list: typeof cats): Doc => ({ kind: 'categories', id: 'all', data: list, deleted: false });
+    const putLegacy = (server: MemoryServer, list: typeof cats) => server.docs.set('categories:all', legacyDoc(list));
+    /** A phone as the previous version left it: its shadow holds the old single document. */
+    const oldPhone = (server: MemoryServer, name: string, list: typeof cats) =>
+      new Phone(server, name, withCats(list), { 'categories:all': stable(list) });
+
+    it('uploads each category as its own document, leaving the old document alone', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      expect(categoryDocs(server).map((d) => d.id).sort()).toEqual(ids(ana.data));
+      expect(server.docs.get('categories:all')?.deleted).toBe(false);
+      expect(server.docs.get('categories:all')?.data).toEqual(cats);
+      // The old document is forgotten locally, so it's never sent or deleted.
+      expect(Object.keys(ana.savedShadow)).not.toContain('categories:all');
+      expect(server.pushed.flat().some((d) => d.kind === 'categories')).toBe(false);
+    });
+
+    it('does nothing more on later starts', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      server.pushed.length = 0;
+      const again = new Phone(server, 'ana', withCats(cats), ana.savedShadow);
+      await again.engine.start();
+      expect(server.pushed).toEqual([]);
+    });
+
+    it('does not overwrite newer edits already on the server with a phone’s older copy', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      await ana.edit(rename(cats[0].id, 'Fresh'));
+      // Ben still has the old list in his shadow and hasn't heard about Ana's edit.
+      const ben = oldPhone(server, 'ben', cats);
+      await ben.engine.start();
+      expect(named(ben.data, cats[0].id)).toBe('Fresh');
+      expect((server.docs.get(`category:${cats[0].id}`)?.data as { name: string }).name).toBe('Fresh');
+    });
+
+    it('keeps an edit made on the phone just before the update', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const edited = cats.map((c, i) => (i === 1 ? { ...c, name: 'Mine' } : c));
+      const ben = new Phone(server, 'ben', withCats(edited), { 'categories:all': stable(cats) });
+      await ben.engine.start();
+      expect((server.docs.get(`category:${cats[1].id}`)?.data as { name: string }).name).toBe('Mine');
+      expect(named(ben.data, cats[1].id)).toBe('Mine');
+      expect(categoryDocs(server)).toHaveLength(cats.length);
+    });
+
+    it('keeps a category deleted on the phone just before the update deleted', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const fewer = cats.filter((_, i) => i !== 3);
+      const ben = new Phone(server, 'ben', withCats(fewer), { 'categories:all': stable(cats) });
+      await ben.engine.start();
+      expect(server.docs.get(`category:${cats[3].id}`)?.deleted).toBe(true);
+      expect(ids(ben.data)).not.toContain(cats[3].id);
+    });
+
+    it('does not bring back a category that was deleted after the move', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      await ana.edit((d) => ({ ...d, categories: d.categories.filter((c) => c.id !== cats[4].id) }));
+      const ben = oldPhone(server, 'ben', cats);
+      await ben.engine.start();
+      expect(ids(ben.data)).not.toContain(cats[4].id);
+    });
+
+    it('moves over a phone that has never synced, taking the household’s categories', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats.map((c, i) => (i === 0 ? { ...c, name: 'Household name' } : c)));
+      const cal = new Phone(server, 'cal', withCats(cats));
+      await cal.engine.start();
+      expect(named(cal.data, cats[0].id)).toBe('Household name');
+      expect(categoryDocs(server).map((d) => d.id).sort()).toEqual(ids(cal.data));
+    });
+
+    it('ignores the old document when a phone that hasn’t updated yet changes it', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      await ana.edit(rename(cats[0].id, 'Fresh'));
+      // A phone on the previous version saves its own (older) idea of the list.
+      const stale = cats.map((c, i) => (i === 0 ? { ...c, name: 'Stale' } : c));
+      putLegacy(server, stale);
+      for (const l of server.listeners) l.onChange(structuredClone(legacyDoc(stale)));
+      server.reconnect();
+      await ana.engine.resync();
+      expect(named(ana.data, cats[0].id)).toBe('Fresh');
+      // The next save must not delete the old document (phones on the previous version still use it).
+      await ana.edit(rename(cats[1].id, 'Cold'));
+      expect(server.docs.get('categories:all')?.deleted).toBe(false);
+      expect(Object.keys(ana.savedShadow)).not.toContain('categories:all');
+      expect(server.pushed.flat().some((d) => d.kind === 'categories')).toBe(false);
+    });
+
+    it('ignores a live change to the old document, and a following save never deletes it', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      const stale = cats.map((c, i) => (i === 0 ? { ...c, name: 'Stale' } : c));
+      putLegacy(server, stale);
+      for (const l of server.listeners) l.onChange(structuredClone(legacyDoc(stale)));
+      expect(named(ana.data, cats[0].id)).toBe(cats[0].name);
+      await ana.edit(rename(cats[1].id, 'Cold'));
+      expect(server.docs.get('categories:all')?.deleted).toBe(false);
+      expect(server.pushed.flat().some((d) => d.kind === 'categories')).toBe(false);
+      expect(Object.keys(ana.savedShadow)).not.toContain('categories:all');
+    });
+
+    it('re-uploads categories the server lost, when only the old shadow remembers them', async () => {
+      const server = new MemoryServer(); // no categories on the server at all
+      const ana = oldPhone(server, 'ana', cats);
+      await ana.engine.start();
+      expect(categoryDocs(server).map((d) => d.id).sort()).toEqual(ids(ana.data));
+    });
+
+    it('keeps categories on the phone while the database can’t store them yet, and sends them once it can', async () => {
+      const server = new MemoryServer();
+      server.refuse.add('category');
+      putLegacy(server, cats);
+      let refused: Kind[] = [];
+      const ana = oldPhone(server, 'ana', cats);
+      (ana.engine as unknown as { opts: { onRefused: (k: Kind[]) => void } }).opts.onRefused = (k) => (refused = k);
+      await ana.engine.start();
+      await ana.edit(addItem(item('1', 'Milk')));
+      expect(refused).toEqual(['category']);
+      expect(server.docs.get('item:1')).toBeTruthy();
+      expect(ids(ana.data)).toEqual(ids({ categories: cats } as SyncData));
+      server.refuse.clear();
+      await ana.edit(rename(cats[0].id, 'Fresh'));
+      expect(categoryDocs(server).map((d) => d.id).sort()).toEqual(ids(ana.data));
+    });
   });
 });
