@@ -151,16 +151,24 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
 
   const join = useCallback(async (code: string) => {
     const { data: h, error } = await requireClient().rpc('join_household', { p_code: code });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
+    // A wrong code comes back empty (the database remembers wrong guesses, which an error would undo).
+    if (!h || !(h as Household).id) throw new Error('No household has that invite code.');
     setHousehold(h as Household);
   }, [setHousehold]);
 
   const leave = useCallback(async () => {
     const client = requireClient();
     if (!household || !userId) return;
-    const { error } = await client.from('household_members').delete()
-      .eq('household_id', household.id).eq('user_id', userId);
-    if (error) throw error;
+    const { error } = await client.rpc('leave_household', { p_household: household.id });
+    // A database that hasn't had the hardening migration yet still lets members delete their own row.
+    if (error && isMissingFunction(error)) {
+      const old = await client.from('household_members').delete()
+        .eq('household_id', household.id).eq('user_id', userId);
+      if (old.error) throw new Error(old.error.message);
+    } else if (error) {
+      throw new Error(error.message);
+    }
     try {
       localStorage.removeItem(`aw.shadow.${household.id}`);
     } catch {
@@ -194,6 +202,11 @@ export function useHousehold(data: SyncData, setData: (d: SyncData) => void) {
 }
 
 export type HouseholdApi = ReturnType<typeof useHousehold>;
+
+/** The database doesn't have this function yet (its setup is older than this app). */
+function isMissingFunction(e: { code?: string }): boolean {
+  return e.code === 'PGRST202' || e.code === '42883';
+}
 
 /** Where the confirmation link should land: this app, without any invite or share fragment. */
 function appAddress(): string {

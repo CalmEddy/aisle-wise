@@ -161,7 +161,14 @@ Supabase (`docs` table), one per list item, grocery item, named list and
 store, plus one for the category list. Each phone sends what changed and
 receives other phones' changes live; the last change to a document wins
 (`src/sync/engine.ts`). Database rules only let members of a household read
-or change its data (`supabase/migrations/`).
+or change its data (`supabase/migrations/`). Each household has an **owner**
+(the creator; ownership passes to the longest-standing member if they leave).
+Only owners rename the household, remove members or change the invite code.
+Invite codes are 16 characters, wrong guesses are limited to 5 an hour per
+person, and a household holds at most 20 people. Documents are limited in size
+and number so one household can't fill the database; the numbers live in
+`aw_limit()` in the hardening migration. Deleting an account hands its
+households on instead of deleting them.
 
 ### Live sharing setup (one time)
 
@@ -174,10 +181,12 @@ deploy workflow uses them when both are present.
 For a new Supabase project:
 
 1. **Create the tables.** In your Supabase project, open **SQL Editor**,
-   paste the contents of
-   `supabase/migrations/20261024000000_households.sql`, and run it. It's
-   safe to run again. To confirm it worked, run `supabase/check.sql`: every
-   row should say OK.
+   paste the contents of each file in `supabase/migrations/`, in order
+   (`20261024…households`, then `20261127…purchases`, then
+   `20261128…hardening`), and run them. They're safe to run again, except
+   that re-running the first one puts its older, looser rules back; if you
+   do, run the hardening file again. To confirm it worked, run
+   `supabase/check.sql`: every row should say OK.
 2. **Set up email for sign-up confirmation.** In **Authentication → Sign In
    / Providers → Email**, keep **Confirm email** on. Supabase's built-in
    sender is limited to a few emails an hour and only to your team, so under
