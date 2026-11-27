@@ -1583,3 +1583,17 @@ details[open] > summary::before { transform: rotate(90deg); }
 .map-show { display: inline-flex; align-items: center; gap: 6px; min-height: var(--hit); padding: 0; }
 .map-view-toggle { margin: 4px 0; }
 @media (min-width: 640px) { .map-ctl, .map-show, .map-view-toggle { display: none; } }
+
+/* Buy again: collapsible history under the add box */
+.buy-again { margin-top: 8px; border-top: 1px solid var(--line); }
+.buy-again > summary {
+  cursor: pointer; font-weight: 600; font-size: 0.9rem; min-height: 44px;
+  display: flex; align-items: center; gap: 6px; list-style: none;
+}
+.buy-again-scroll { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
+.buy-again h4 {
+  margin: 8px 0 2px; padding: 0 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); display: flex; align-items: center; gap: 8px;
+}
+.buy-again h4 .link { margin-left: auto; text-transform: none; letter-spacing: 0; font-size: 0.85rem; }
+.suggestions.buy-list { position: static; box-shadow: none; border: 0; margin: 0; padding: 0; max-height: none; }

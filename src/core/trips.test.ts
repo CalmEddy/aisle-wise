@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TRIP_GAP, TRIPS_KEPT, lastCompletedTrip, recordPick, startTrip, unrecordPick, usuals, type Trip } from './trips';
+import { TRIP_GAP, TRIPS_KEPT, lastCompletedTrip, recordPick, startTrip, unrecordPick, type Trip } from './trips';
 
-const day = 24 * 60 * 60 * 1000;
 
 describe('trip log', () => {
   it('groups check-offs into trips per store, in order', () => {
@@ -44,46 +43,5 @@ describe('trip log', () => {
     ];
     expect(lastCompletedTrip(trips, 's')?.picks.map((p) => p.name)).toEqual(['Milk', 'Bread']);
     expect(lastCompletedTrip(trips, 'missing')).toBeUndefined();
-  });
-});
-
-describe('buy again', () => {
-  it('puts things bought often and lately first', () => {
-    const trip = (start: number, names: string[]) => ({ layoutId: 'a', start, picks: names.map((name, i) => ({ productId: name.toLowerCase(), name, at: start + i })) });
-    const trips = [
-      trip(1, ['Milk', 'Bread', 'Eggs']),
-      trip(2, ['Milk', 'Bread']),
-      trip(3, ['Milk', 'Bread']),
-      trip(4, ['Milk']),
-      trip(5, ['Milk', 'Candles']),
-      { layoutId: 'b', start: 6, picks: [{ name: 'Tea', at: 6 }] },
-    ];
-    const u = usuals(trips, 24, 6);
-    expect(u.map((x) => x.name)).toEqual(['Milk', 'Bread', 'Tea', 'Candles', 'Eggs']);
-    expect(u[0]).toMatchObject({ productId: 'milk', count: 5, last: 5 });
-    expect(usuals(trips, 2, 6)).toHaveLength(2);
-  });
-
-  it('marks cadence and ranks due items ahead of the rest', () => {
-    const trip = (start: number, names: string[]) => ({
-      layoutId: 'a',
-      start,
-      picks: names.map((name, i) => ({ productId: name.toLowerCase(), name, at: start + i })),
-    });
-    // Milk every ~7 days; Bread once recently; Eggs overdue vs a longer cadence.
-    const trips = [
-      trip(0, ['Milk', 'Eggs']),
-      trip(7 * day, ['Milk']),
-      trip(14 * day, ['Milk', 'Eggs']),
-      trip(21 * day, ['Milk', 'Bread']),
-    ];
-    const now = 21 * day + 8 * day; // Milk due (~7d), Eggs due (~14d), Bread not (one buy)
-    const u = usuals(trips, 24, now);
-    expect(u.find((x) => x.name === 'Milk')).toMatchObject({ intervalDays: 7, due: true, count: 4 });
-    expect(u.find((x) => x.name === 'Eggs')).toMatchObject({ intervalDays: 14, due: true, count: 2 });
-    expect(u.find((x) => x.name === 'Bread')?.due).toBeUndefined();
-    expect(u.find((x) => x.name === 'Bread')?.intervalDays).toBeUndefined();
-    // Due before not-due; among due, higher score (Milk) first.
-    expect(u.map((x) => x.name).slice(0, 3)).toEqual(['Milk', 'Eggs', 'Bread']);
   });
 });

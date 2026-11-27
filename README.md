@@ -245,17 +245,15 @@ supabase/migrations/              Database tables and access rules
 
 ## Ideas for next steps
 
-- **Track past purchases (to do)** – "Buy again" was taken out of the Lists
-  and Items screens, so there is currently no way to see what you bought
-  before. Work out how to track purchase history (what, when, how often,
-  where) and how to bring it back, for example as suggestions or a
-  restock reminder. Trips are still recorded on the phone (`aw.trips`,
-  `src/core/trips.ts`), so the raw history exists; `usuals()` there already
-  computes what's bought often and when it's due.
-  Proposed design: keep a household-synced purchase log (one row per item
-  per cleared cart: product, qty, price, store, date), and surface it as a
-  "Buy again" section in the add sheet and on the Items tab, ranked by due
-  date and frequency, with a per-item "last bought / every ~N days" line.
+- **Track past purchases (done)** – clearing the cart saves one purchase per
+  product (what, how many, price, store, date; `src/core/purchases.ts`),
+  synced with the household as `purchase` docs (run the
+  `20261127000000_purchases` migration on Supabase; older setups keep working
+  but history stays on the phone until it's applied). The add box has a
+  collapsible **Buy again** section with Due now (past the usual buying
+  rhythm), Often bought and Last trip, using the same rows as search results.
+  Ideas still open: a "last bought / every ~N days" line on the Items tab, and
+  history by store.
 - **Universal cart (done)** – the cart is one shared cart: anything checked
   off on any list is in it, and Clear cart empties it for every list.
 - **Automatic indoor location** – GPS isn't accurate inside buildings.

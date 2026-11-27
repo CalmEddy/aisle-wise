@@ -54,7 +54,7 @@ class Phone {
   engine: SyncEngine;
   sets = 0;
   constructor(server: MemoryServer, name: string, data: Partial<SyncData> = {}, shadow?: Record<string, string>) {
-    this.data = { items: [], lists: [], products: [], categories: defaultCategories, layouts: [demoLayout], ...data };
+    this.data = { items: [], lists: [], products: [], categories: defaultCategories, layouts: [demoLayout], purchases: [], ...data };
     this.engine = new SyncEngine(server.remote(), name, () => this.data, (d) => { this.data = d; this.sets++; }, { delay: 0, shadow, saveShadow: (s) => (this.savedShadow = s) });
   }
   savedShadow: Record<string, string> = {};
@@ -97,6 +97,19 @@ describe('household sync', () => {
     await ben.engine.start();
     expect(ben.names()).toEqual(['Coffee', 'Eggs', 'Milk']);
     expect(ana.names()).toEqual(['Coffee', 'Eggs', 'Milk']);
+  });
+
+  it('shares purchase history between phones', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana');
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    const purchase = { id: 'p1', name: 'Milk', productId: 'milk', tripId: 't1', at: 5 };
+    await ana.edit((d) => ({ ...d, purchases: [purchase] }));
+    expect(ben.data.purchases).toEqual([purchase]);
+    await ana.edit((d) => ({ ...d, purchases: [] }));
+    expect(ben.data.purchases).toEqual([]);
   });
 
   it('syncs categories, grocery items and stores', async () => {

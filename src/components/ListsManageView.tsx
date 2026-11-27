@@ -9,6 +9,7 @@ import { orderOf } from '../core/taxonomy';
 import type { QuickAddResult, Snapshot } from '../App';
 import { resolveListsEditSort, type Display } from '../display';
 import { AddItemsSheet } from './AddItemsSheet';
+import type { Purchase } from '../core/purchases';
 import { ListsEditSortToggle } from './DisplayToggles';
 import { ItemRows, type ItemPatch } from './ItemRows';
 import { type ListsApi } from './ListsSheet';
@@ -22,7 +23,7 @@ const NEW_LIST = '__new__';
  * (qty / rename / remove) without cart check-off.
  * Selecting a list here does not change the Shop trip list.
  */
-export function ListsManageView({ onShare, householdRow, lists, catalog, layout, looks, allItems, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, undo, snapshot, display, setDisplay }: {
+export function ListsManageView({ onShare, householdRow, lists, catalog, layout, looks, allItems, purchases, setListItems, onListIds, inCartIds, onAnyListIds, quickAddTo, undo, snapshot, display, setDisplay }: {
   /** Opens the share sheet for the list being edited. */
   onShare: (listId: string) => void;
   /** Household status row (only when household sync is configured). */
@@ -32,6 +33,8 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
   layout: StoreLayout;
   looks: Map<string, { icon?: string; color?: string }>;
   allItems: ListItem[];
+  /** Past purchases (for Buy again). */
+  purchases: Purchase[];
   /** Update one list's items without touching others. */
   setListItems: (listId: string, fn: (prev: ListItem[]) => ListItem[]) => void;
   onListIds: (listId: string) => Set<string>;
@@ -249,6 +252,7 @@ export function ListsManageView({ onShare, householdRow, lists, catalog, layout,
             onList={onListIds(current.id)}
             listedAnywhere={onAnyListIds}
             inCart={inCartIds}
+            purchases={purchases}
             whereText={(p) => whereText(p, layout, catalog)}
             iconOf={(id) => (id ? looks.get(id)?.icon : undefined)}
             onAdd={(names) => {

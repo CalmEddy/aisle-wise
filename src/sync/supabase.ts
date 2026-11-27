@@ -60,17 +60,21 @@ export function supabaseRemote(client: SupabaseClient, householdId: string): Rem
       };
       // Kinds added after the first database setup go separately, so an
       // older setup that doesn't accept them can't hold up everything else.
-      const newer = (d: (typeof docs)[number]) => d.kind === 'list';
-      await send(docs.filter((d) => !newer(d)));
-      const later = docs.filter(newer);
-      if (!later.length) return;
-      try {
-        await send(later);
-      } catch (e) {
-        // 23514: the database's list of allowed kinds is older than this app.
-        if ((e as { code?: string }).code === '23514') return { refused: ['list'] };
-        throw e;
+      const newerKinds: Kind[] = ['list', 'purchase'];
+      await send(docs.filter((d) => !newerKinds.includes(d.kind)));
+      const refused: Kind[] = [];
+      for (const kind of newerKinds) {
+        const later = docs.filter((d) => d.kind === kind);
+        if (!later.length) continue;
+        try {
+          await send(later);
+        } catch (e) {
+          // 23514: the database's list of allowed kinds is older than this app.
+          if ((e as { code?: string }).code === '23514') refused.push(kind);
+          else throw e;
+        }
       }
+      if (refused.length) return { refused };
     },
 
     subscribe(onChange, onReconnect) {

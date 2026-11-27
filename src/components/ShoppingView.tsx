@@ -29,6 +29,7 @@ import { SpotPicker } from './SpotPicker';
 import { PlaceOnMap, type PlaceMapController } from './PlaceOnMap';
 import { StoreMap, placeUnder, toGrid, type MapDot, type MapGhost } from './StoreMap';
 import { AddItemsSheet } from './AddItemsSheet';
+import type { Purchase } from '../core/purchases';
 import { WherePanel } from './WherePanel';
 import { nextAisles, type MapSpot } from './WhereBar';
 import { orderOf } from '../core/taxonomy';
@@ -70,6 +71,9 @@ interface Props {
   onOpenStores?: () => void;
   /** Full undo snapshot (every list's items). */
   listSnapshot: () => Snapshot;
+  /** Past purchases (for Buy again), and saving the cart as a purchase when it is cleared. */
+  purchases: Purchase[];
+  recordPurchases: (cart: ListItem[]) => void;
   /** Multi-list trip: source list ids for a visible row (for badges). */
   tripSourcesOf?: (item: ListItem) => string[];
   /** Move / copy a single item onto another list. */
@@ -1363,6 +1367,7 @@ export function ShoppingView(props: Props) {
   function newTrip() {
     const snapshot = props.listSnapshot();
     const n = items.filter((i) => i.done).length;
+    props.recordPurchases(items.filter((i) => i.done));
     props.where.newTrip();
     setWhereBarFor(null); // its item is leaving with the cart
     setAisleTrail([]);
@@ -1887,6 +1892,7 @@ export function ShoppingView(props: Props) {
                   ...props.lists.all.flatMap((l) => [...props.onListIds(l.id)]),
                 ])}
                 inCart={new Set(items.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
+                purchases={props.purchases}
                 hereLabel={hereLabel}
                 whereText={(p) => whereText(p, layout, catalog)}
                 iconOf={(id) => (id ? props.looks.get(id)?.icon : undefined)}

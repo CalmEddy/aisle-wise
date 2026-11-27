@@ -118,15 +118,17 @@ test('cart items have the ⋯ menu for place, aisle and price', async ({ page })
   expect(items.find((i) => i.name === 'Milk')).toMatchObject({ done: true, price: 2.49 });
 });
 
-test('Shop has no Buy again or Last trip; list sits under the map', async ({ page }) => {
+test('Shop: Buy again starts empty and collapsed; list sits under the map', async ({ page }) => {
   const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
   await fresh(page, {
     trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])],
     items: [],
     display: { noAskStores: ['demo'], mapView: 'full' },
   });
-  await expect(page.locator('.buy-again')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Last trip|Shop last trip/ })).toHaveCount(0);
+  // Only trips (not purchases) are saved here, so there is no history yet.
+  await expect(page.locator('details.buy-again')).not.toHaveAttribute('open', '');
+  await page.locator('details.buy-again > summary').click();
+  await expect(page.locator('.buy-again-scroll')).toContainText('Nothing yet');
   await expect(page.locator('.empty')).toContainText('Your list is empty');
   await addItems(page, 'apples');
   // With map open, the shopping list follows the map slot; add compose is after the list.
@@ -258,4 +260,29 @@ test('empty Shop: picture, and one action that focuses the add box', async ({ pa
   await expect(page.locator('.empty .empty-art')).toBeVisible();
   await page.getByRole('button', { name: 'Add your first item' }).click();
   await expect(page.getByLabel('Item to add')).toBeFocused();
+});
+
+test('clearing the cart saves a purchase history that Buy again offers (Last trip; undo removes it)', async ({ page }) => {
+  await addItems(page, '2 milk, bread');
+  await tick(page, 'Milk');
+  await tick(page, 'Bread');
+  await page.locator('.trip-done-card').getByRole('button', { name: 'Clear cart · start next trip' }).click();
+  // Undoing the cleared cart takes the purchases back out of the history; clearing again records them again.
+  await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
+  expect(await saved(page, 'purchases')).toEqual([]);
+  await page.locator('.trip-done-card').getByRole('button', { name: 'Clear cart · start next trip' }).click();
+  const made = await saved<{ name: string; qty?: number; tripId: string; storeId?: string }[]>(page, 'purchases');
+  expect(made.map((p) => p.name).sort()).toEqual(['Bread', 'Milk']);
+  expect(new Set(made.map((p) => p.tripId)).size).toBe(1);
+  expect(made.find((p) => p.name === 'Milk')).toMatchObject({ qty: 2, storeId: 'demo' });
+
+  const section = page.locator('details.buy-again');
+  await section.locator('summary').click();
+  const last = section.getByRole('region', { name: 'Last trip' });
+  await expect(last.locator('.suggestion')).toHaveCount(2);
+  await expect(last).toContainText('Last trip · today');
+  // Rows work like the other lists: Add puts it on the list, Got it puts it in the cart.
+  await last.locator('.suggestion', { hasText: 'Bread' }).getByRole('button', { name: 'Add to list' }).click();
+  expect((await saved<{ name: string; done?: boolean }[]>(page, 'items')).map((i) => [i.name, !!i.done])).toEqual([['Bread', false]]);
+  await expect(last.locator('.suggestion', { hasText: 'Bread' }).locator('.status-pill.on-list')).toBeVisible();
 });

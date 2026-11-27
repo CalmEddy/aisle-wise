@@ -25,6 +25,7 @@ import { hasOldAisles, migrateToShelves } from './core/migrate';
 import { areaHere, moveHere, nextLabel, pickUp, rekeyResized, step, turnPair, turnShelf, type BuildAction, type BuildChoice, type Direction, type ExtendCandidate, type SideOption } from './core/build';
 import { DEFAULT_BRUSH, paintStep, type Brush } from './core/brush';
 import { addAisle, clipAisles, removeAisle, renameAisle, selectionIn, deleteAisles, moveAisles, moveShelf, turnAisles } from './core/aisles';
+import { addPurchases, purchasesFromCart, type Purchase } from './core/purchases';
 import { recordPick, startTrip, TRIP_GAP, unrecordPick, type Trip } from './core/trips';
 import { parseAmount } from './core/items';
 import { listTotals, setStorePrice } from './core/prices';
@@ -85,6 +86,8 @@ export interface Snapshot {
   allItems?: ListItem[];
   lists?: ShoppingList[];
   activeList?: string;
+  /** Purchase history, for undoing a cleared cart. */
+  purchases?: Purchase[];
 }
 
 /** What happened when something was picked up in build mode. */
@@ -104,6 +107,8 @@ export default function App() {
   const [setupTab, setSetupTab] = usePersistentState<SetupTab>('aw.setupTab', 'lists');
   // Every list's items; the app works on the list being shopped (`items`).
   const [allItems, setAllItems] = usePersistentState<ListItem[]>('aw.items', []);
+  /** What was bought on past trips (written when the cart is cleared), synced with the household. */
+  const [purchases, setPurchases] = usePersistentState<Purchase[]>('aw.purchases', []);
   const [savedLists, setLists] = usePersistentState<ShoppingList[]>('aw.lists', defaultLists);
   // The main list always exists (items from before there were several lists are on it).
   const lists = useMemo(
@@ -170,13 +175,14 @@ export default function App() {
   }, [categories, products, layouts, setProducts, setCategories, setLayouts]);
 
   // Live sharing with a household (Supabase). Off unless configured and joined.
-  const syncData = useMemo(() => ({ items: allItems, lists, products, categories, layouts }), [allItems, lists, products, categories, layouts]);
+  const syncData = useMemo(() => ({ items: allItems, lists, products, categories, layouts, purchases }), [allItems, lists, products, categories, layouts, purchases]);
   const household = useHousehold(syncData, (d) => {
     setAllItems(() => d.items);
     setLists(() => d.lists);
     setProducts(() => d.products);
     setCategories(() => d.categories);
     setLayouts(() => (d.layouts.length ? d.layouts : [demoLayout]));
+    setPurchases(() => d.purchases);
   });
   const [householdOpen, setHouseholdOpen] = useState(false);
   const [listsOpen, setListsOpen] = useState(false);
@@ -331,6 +337,7 @@ export default function App() {
     else setItems(() => snapshot.items);
     if (snapshot.layouts) setLayouts(() => snapshot.layouts!);
     if (snapshot.lists) setLists(() => snapshot.lists!);
+    if (snapshot.purchases) setPurchases(() => snapshot.purchases!);
     if (snapshot.activeList !== undefined) setActiveListId(snapshot.activeList);
   }
 
@@ -1207,7 +1214,7 @@ export default function App() {
   }, [allItems]);
 
   const listsSnapshot = (): Snapshot => ({
-    items, products, layouts, allItems, lists, activeList: listId,
+    items, products, layouts, allItems, lists, activeList: listId, purchases,
   });
 
   /** Shop view: union of active + Also-shop overlays (no copying onto active). */
@@ -1269,6 +1276,12 @@ export default function App() {
       return result;
     });
   }, [listId, shopWith, lists, catalog, setAllItems]);
+
+  /** The cart is being cleared: remember what was in it (one purchase per product). */
+  const recordPurchases = useCallback((cart: ListItem[]) => {
+    const made = purchasesFromCart(cart, { id: layout.id, name: layout.name }, Date.now(), (i) => productFor(i, catalog)?.id);
+    setPurchases((prev) => addPurchases(prev, made));
+  }, [layout.id, layout.name, catalog, setPurchases]);
 
   /** Creates a list without switching to it. */
   function createList(name: string): string {
@@ -1486,6 +1499,8 @@ export default function App() {
     onOpenStores: openStores,
     lists: listsApi,
     listSnapshot: listsSnapshot,
+    purchases,
+    recordPurchases,
     tripSourcesOf,
     moveItemTo,
     copyItemTo,
@@ -1740,6 +1755,7 @@ export default function App() {
           layout={layout}
           looks={looks}
           allItems={allItems}
+          purchases={purchases}
           setListItems={(id, fn) => setAllItems((all) => updateList(all, id, fn))}
           onListIds={(id) => new Set(itemsOn(allItems, id).filter((i) => !i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
           inCartIds={new Set(allItems.filter((i) => i.done).map((i) => productFor(i, catalog)?.id).filter(Boolean) as string[])}
