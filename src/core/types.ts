@@ -258,6 +258,11 @@ export interface ListItem {
 export interface ShoppingList {
   id: string;
   name: string;
+  /**
+   * Shared live with the household. Only shared lists (and their items) sync;
+   * anything else stays on this phone. Unset means private.
+   */
+  shared?: boolean;
 }
 
 /** The first list everyone has. Items saved before there were several lists belong to it. */

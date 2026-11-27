@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { defaultCategories } from '../core/categories';
 import { demoLayout } from '../core/demoLayout';
-import type { ListItem } from '../core/types';
+import { setListShared } from '../core/lists';
+import type { ListItem, ShoppingList } from '../core/types';
 import { SyncEngine, stable, type Doc, type Kind, type Remote, type SyncData } from './engine';
 
 /** A pretend server shared by several phones. Like Supabase, it reorders JSON keys and echoes changes to everyone. */
@@ -52,12 +53,15 @@ class MemoryServer {
   }
 }
 
+/** Items with no list belong to this one, so most tests share it. */
+const sharedMain: ShoppingList = { id: 'main', name: 'Shopping list', shared: true };
+
 class Phone {
   data: SyncData;
   engine: SyncEngine;
   sets = 0;
   constructor(server: MemoryServer, name: string, data: Partial<SyncData> = {}, shadow?: Record<string, string>) {
-    this.data = { items: [], lists: [], products: [], categories: defaultCategories, layouts: [demoLayout], purchases: [], ...data };
+    this.data = { items: [], lists: [sharedMain], products: [], categories: defaultCategories, layouts: [demoLayout], purchases: [], ...data };
     this.engine = new SyncEngine(server.remote(), name, () => this.data, (d) => { this.data = d; this.sets++; }, { delay: 0, shadow, saveShadow: (s) => (this.savedShadow = s) });
   }
   savedShadow: Record<string, string> = {};
@@ -201,7 +205,7 @@ describe('household sync', () => {
 describe('named lists', () => {
   it('sync, and items keep their list', async () => {
     const server = new MemoryServer();
-    const ana = new Phone(server, 'ana', { lists: [{ id: 'main', name: 'Shopping list' }, { id: 'party', name: 'Party' }] });
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { id: 'party', name: 'Party', shared: true }] });
     await ana.engine.start();
     await ana.edit(addItem({ ...item('1', 'Chips'), listId: 'party' }));
     const ben = new Phone(server, 'ben');
@@ -214,7 +218,7 @@ describe('named lists', () => {
     const server = new MemoryServer();
     server.refuse.add('list');
     const refusedSeen: Kind[][] = [];
-    const ana = new Phone(server, 'ana', { lists: [{ id: 'party', name: 'Party' }], items: [item('1', 'Milk')] });
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { id: 'party', name: 'Party', shared: true }], items: [item('1', 'Milk')] });
     ana.engine = new SyncEngine(server.remote(), 'ana', () => ana.data, (d) => { ana.data = d; }, { delay: 0, onRefused: (k) => refusedSeen.push(k) });
     await ana.engine.start();
     expect(server.docs.has('item:1')).toBe(true);
@@ -229,6 +233,157 @@ describe('named lists', () => {
   });
 });
 
+describe('choosing which lists are shared', () => {
+  const party: ShoppingList = { id: 'party', name: 'Party' };
+  const onParty = (id: string, name: string): ListItem => ({ ...item(id, name), listId: 'party' });
+  const settle = () => new Promise((r) => setTimeout(r, 10));
+
+  it('never sends a private list or its items', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, party], items: [item('1', 'Milk'), onParty('2', 'Chips')] });
+    await ana.engine.start();
+    expect(server.docs.has('item:1')).toBe(true);
+    expect(server.docs.has('item:2')).toBe(false);
+    expect(server.docs.has('list:party')).toBe(false);
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    expect(ben.names()).toEqual(['Milk']);
+    expect(ben.data.lists.map((l) => l.id)).toEqual(['main']);
+  });
+
+  it('sends a list and all its items when it becomes shared', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, party], items: [onParty('2', 'Chips'), onParty('3', 'Soda')] });
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    await ana.edit((d) => ({ ...d, lists: setListShared(d.lists, 'party', true) }));
+    expect(ben.data.lists.find((l) => l.id === 'party')).toEqual({ id: 'party', name: 'Party', shared: true });
+    expect(ben.names()).toEqual(['Chips', 'Soda']);
+    await ben.edit(addItem(onParty('4', 'Cups')));
+    expect(ana.names()).toEqual(['Chips', 'Cups', 'Soda']);
+  });
+
+  it('unsharing leaves everyone with a private copy and deletes nothing', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { ...party, shared: true }], items: [onParty('2', 'Chips')] });
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    expect(ben.names()).toEqual(['Chips']);
+
+    await ana.edit((d) => ({ ...d, lists: setListShared(d.lists, 'party', false) }));
+    expect(ana.names()).toEqual(['Chips']);
+    expect(ben.names()).toEqual(['Chips']);
+    expect(ben.data.lists.find((l) => l.id === 'party')?.shared).toBe(false);
+    expect(server.docs.get('item:2')?.deleted).toBe(false);
+
+    // Edits on either side no longer travel.
+    await ben.edit(addItem(onParty('3', 'Soda')));
+    await ana.edit((d) => ({ ...d, items: d.items.map((i) => (i.id === '2' ? { ...i, done: true } : i)) }));
+    expect(ana.names()).toEqual(['Chips ✓']);
+    expect(ben.names()).toEqual(['Chips', 'Soda']);
+
+    // A phone that joins afterwards never sees the list or its leftovers.
+    const cy = new Phone(server, 'cy');
+    await cy.engine.start();
+    expect(cy.names()).toEqual([]);
+    expect(cy.data.lists.map((l) => l.id)).toEqual(['main']);
+  });
+
+  it('unsharing while offline is told to the household once back online', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { ...party, shared: true }], items: [onParty('2', 'Chips')] });
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    server.down = true;
+    await ana.edit((d) => ({ ...d, lists: setListShared(d.lists, 'party', false) }));
+    server.down = false;
+    server.reconnect();
+    await settle();
+    expect(ben.data.lists.find((l) => l.id === 'party')?.shared).toBe(false);
+    expect(ben.names()).toEqual(['Chips']);
+  });
+
+  it('moving an item off a shared list removes it for the others; moving one on shares it', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, party], items: [item('1', 'Milk'), onParty('2', 'Chips')] });
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    await ana.edit((d) => ({ ...d, items: d.items.map((i) => (i.id === '1' ? { ...i, listId: 'party' } : i)) }));
+    expect(ben.names()).toEqual([]);
+    expect(ana.names()).toEqual(['Chips', 'Milk']);
+    await ana.edit((d) => ({ ...d, items: d.items.map((i) => (i.id === '2' ? { id: '2', name: 'Chips', done: false } : i)) }));
+    expect(ben.names()).toEqual(['Chips']);
+  });
+
+  it('deleting a shared list removes it and its items for everyone', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { ...party, shared: true }], items: [onParty('2', 'Chips')] });
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    await ana.edit((d) => ({ ...d, lists: d.lists.filter((l) => l.id !== 'party'), items: [] }));
+    expect(ben.data.lists.map((l) => l.id)).toEqual(['main']);
+    expect(ben.names()).toEqual([]);
+  });
+
+  it('a private list with the same id as a household list joins it (merging items)', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { ...party, shared: true }], items: [onParty('2', 'Chips')] });
+    await ana.engine.start();
+    const ben = new Phone(server, 'ben', { lists: [sharedMain, party], items: [onParty('9', 'Mine')] });
+    await ben.engine.start(); // Ben adopts Ana's "party" (same id), so it's shared on his phone too
+    expect(ben.data.lists.find((l) => l.id === 'party')?.shared).toBe(true);
+    expect(ben.names()).toEqual(['Chips', 'Mine']);
+  });
+
+  it('keeps an item that arrives before its list, once the list shows up', async () => {
+    const server = new MemoryServer();
+    const ben = new Phone(server, 'ben'); // not started: so the two documents can be delivered one at a time
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { ...party, shared: true }], items: [onParty('2', 'Chips')] });
+    await ana.engine.start();
+    // Deliver the item first, then the list.
+    const itemDoc = structuredClone(server.docs.get('item:2')!);
+    const listDoc = structuredClone(server.docs.get('list:party')!);
+    ben.engine['receive'](itemDoc);
+    expect(ben.names()).toEqual([]);
+    ben.engine['receive'](listDoc);
+    await settle();
+    expect(ben.names()).toEqual(['Chips']);
+    await ben.engine.flush();
+    expect(server.docs.get('item:2')?.deleted).toBe(false); // never mistaken for a deletion
+  });
+
+  it('treats lists and items an older version already synced as shared', async () => {
+    const server = new MemoryServer();
+    const ana = new Phone(server, 'ana', { lists: [sharedMain, { id: 'party', name: 'Party', shared: true }], items: [onParty('2', 'Chips'), item('1', 'Milk')] });
+    await ana.engine.start();
+    // Ana's phone after upgrading: same data and saved sync state, but no sharing flags.
+    ana.engine.stop();
+    const upgraded = new Phone(
+      server, 'ana',
+      { lists: [{ id: 'main', name: 'Shopping list' }, { id: 'party', name: 'Party' }], items: ana.data.items },
+      ana.savedShadow,
+    );
+    await upgraded.engine.start();
+    expect(upgraded.data.lists.every((l) => l.shared === true)).toBe(true);
+    expect(server.docs.get('item:2')?.deleted).toBe(false);
+    expect(server.docs.get('list:party')?.deleted).toBe(false);
+  });
+
+  it('adopts lists from the household, even from versions that did not mark them shared', async () => {
+    const server = new MemoryServer();
+    server.docs.set('list:party', { kind: 'list', id: 'party', data: { id: 'party', name: 'Party' }, deleted: false });
+    server.docs.set('item:2', { kind: 'item', id: '2', data: onParty('2', 'Chips'), deleted: false });
+    const ben = new Phone(server, 'ben');
+    await ben.engine.start();
+    expect(ben.data.lists.find((l) => l.id === 'party')?.shared).toBe(true);
+    expect(ben.names()).toEqual(['Chips']);
+  });
+});
 
 describe('categories (one document each)', () => {
   const cats = defaultCategories.slice(0, 6);
@@ -402,6 +557,21 @@ describe('categories (one document each)', () => {
       expect(server.docs.get('categories:all')?.deleted).toBe(false);
       expect(server.pushed.flat().some((d) => d.kind === 'categories')).toBe(false);
       expect(Object.keys(ana.savedShadow)).not.toContain('categories:all');
+    });
+
+    it('moves categories over without sending a private list or its items', async () => {
+      const server = new MemoryServer();
+      putLegacy(server, cats);
+      const ana = new Phone(server, 'ana', {
+        categories: cats,
+        lists: [{ id: 'main', name: 'Shopping list', shared: true }, { id: 'secret', name: 'Surprise party', shared: false }],
+        items: [{ ...item('1', 'Candles'), listId: 'secret' }, item('2', 'Milk')],
+      }, { 'categories:all': stable(cats) });
+      await ana.engine.start();
+      expect(categoryDocs(server).map((d) => d.id).sort()).toEqual(ids(ana.data));
+      expect(server.docs.has('list:secret')).toBe(false);
+      expect(server.docs.has('item:1')).toBe(false);
+      expect(server.docs.has('item:2')).toBe(true);
     });
 
     it('re-uploads categories the server lost, when only the old shadow remembers them', async () => {

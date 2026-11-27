@@ -28,15 +28,14 @@ function shareSummary(share: Share) {
   return `${listSummary(share.list.items.length)} ${storeSummary(share.store)}`;
 }
 
-/** Chooser + link: shopping list, this store’s map, or both. */
-export function ShareSheet({ listName, items, layout, catalog, initial, onClose }: {
+/** Chooser + link for a one-time copy: shopping list, this store’s map, or both. */
+export function CopyPanel({ listName, items, layout, catalog, initial }: {
   listName: string;
   items: ListItem[];
   layout: StoreLayout;
   catalog: Catalog;
   /** Which boxes start checked (Shop → list; Edit map → map). */
   initial: { list: boolean; map: boolean };
-  onClose: () => void;
 }) {
   const [includeList, setIncludeList] = useState(initial.list);
   const [includeMap, setIncludeMap] = useState(initial.map);
@@ -80,61 +79,82 @@ export function ShareSheet({ listName, items, layout, catalog, initial, onClose 
   }
 
   return (
+    <>
+      <p className="muted small">
+        Send a link to anyone who uses Aisle Wise. Opening it adds a copy to their app —
+        later changes aren’t synced, so share again to send updates.
+      </p>
+
+      <div className="share-options" role="group" aria-label="What to share">
+        <label className="check share-option">
+          <input
+            type="checkbox"
+            checked={includeList}
+            onChange={(e) => setIncludeList(e.target.checked)}
+          />
+          <span>
+            <span className="share-option-title">Shopping list</span>
+            <span className="muted small"> “{listName}” · {items.filter((i) => !i.done).length} to buy</span>
+          </span>
+        </label>
+        <label className="check share-option">
+          <input
+            type="checkbox"
+            checked={includeMap}
+            onChange={(e) => setIncludeMap(e.target.checked)}
+          />
+          <span>
+            <span className="share-option-title">This store’s map</span>
+            <span className="muted small"> “{layout.name}” · layout and item places</span>
+          </span>
+        </label>
+      </div>
+
+      {canBuild && (
+        <>
+          <p className="muted small share-summary">{summary}</p>
+          <input
+            id="share-url"
+            className="share-url"
+            readOnly
+            value={url || 'Making link…'}
+            onFocus={(e) => e.target.select()}
+            aria-label="Share link"
+          />
+        </>
+      )}
+      {!canBuild && (
+        <p className="muted small share-summary">Tick at least one option above.</p>
+      )}
+
+      <div className="sheet-actions">
+        <span style={{ flex: 1 }} />
+        <button className="btn" onClick={copy} disabled={!url}>{copied ? 'Copied ✓' : 'Copy link'}</button>
+        {canShare && <button className="btn primary" onClick={shareNative} disabled={!url}>Share…</button>}
+      </div>
+    </>
+  );
+}
+
+/** Sends a one-time copy (used for store maps). */
+export function ShareSheet({ onClose, note, ...panel }: {
+  listName: string;
+  items: ListItem[];
+  layout: StoreLayout;
+  catalog: Catalog;
+  initial: { list: boolean; map: boolean };
+  /** Extra line above the options (e.g. that stores already sync with the household). */
+  note?: string;
+  onClose: () => void;
+}) {
+  return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" role="dialog" aria-label="Share" onClick={(e) => e.stopPropagation()}>
         <h2>Share</h2>
-        <p className="muted small">
-          Send a link to anyone who uses Aisle Wise. Opening it adds a copy to their app —
-          later changes aren’t synced, so share again to send updates.
-        </p>
-
-        <div className="share-options" role="group" aria-label="What to share">
-          <label className="check share-option">
-            <input
-              type="checkbox"
-              checked={includeList}
-              onChange={(e) => setIncludeList(e.target.checked)}
-            />
-            <span>
-              <span className="share-option-title">Shopping list</span>
-              <span className="muted small"> “{listName}” · {items.filter((i) => !i.done).length} to buy</span>
-            </span>
-          </label>
-          <label className="check share-option">
-            <input
-              type="checkbox"
-              checked={includeMap}
-              onChange={(e) => setIncludeMap(e.target.checked)}
-            />
-            <span>
-              <span className="share-option-title">This store’s map</span>
-              <span className="muted small"> “{layout.name}” · layout and item places</span>
-            </span>
-          </label>
-        </div>
-
-        {canBuild && (
-          <>
-            <p className="muted small share-summary">{summary}</p>
-            <input
-              id="share-url"
-              className="share-url"
-              readOnly
-              value={url || 'Making link…'}
-              onFocus={(e) => e.target.select()}
-              aria-label="Share link"
-            />
-          </>
-        )}
-        {!canBuild && (
-          <p className="muted small share-summary">Tick at least one option above.</p>
-        )}
-
+        {note && <p className="muted small">{note}</p>}
+        <CopyPanel {...panel} />
         <div className="sheet-actions">
           <button className="btn" onClick={onClose}>Close</button>
-          <span style={{ flex: 1 }} />
-          <button className="btn" onClick={copy} disabled={!url}>{copied ? 'Copied ✓' : 'Copy link'}</button>
-          {canShare && <button className="btn primary" onClick={shareNative} disabled={!url}>Share…</button>}
         </div>
       </div>
     </div>

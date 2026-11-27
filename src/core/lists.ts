@@ -9,6 +9,22 @@ export const listOf = (i: ListItem) => i.listId ?? MAIN_LIST;
 /** The lists everyone starts with. */
 export const defaultLists: ShoppingList[] = [{ id: MAIN_LIST, name: 'Shopping list' }];
 
+/** Ids of the lists shared with the household. */
+export const sharedListIds = (lists: ShoppingList[]): Set<string> =>
+  new Set(lists.filter((l) => l.shared === true).map((l) => l.id));
+
+/** Shares a list with the household, or makes it private again. Other lists are untouched. */
+export function setListShared(lists: ShoppingList[], listId: string, shared: boolean): ShoppingList[] {
+  // Explicitly false (not just unset) so the household hears it was unshared.
+  return lists.map((l) => (l.id === listId ? { ...l, shared } : l));
+}
+
+/** Makes every list private (no longer in a household). */
+export const clearShared = (lists: ShoppingList[]): ShoppingList[] =>
+  lists.some((l) => l.shared !== undefined)
+    ? lists.map((l) => { const { shared: _drop, ...rest } = l; return rest; })
+    : lists;
+
 /** Items on one list. */
 export const itemsOn = (items: ListItem[], listId: string) => items.filter((i) => listOf(i) === listId);
 

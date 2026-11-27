@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ItemsView } from './components/ItemsView';
 import { HouseholdRow, HouseholdSheet } from './components/HouseholdSheet';
+import { ListShareSheet } from './components/ListShareSheet';
 import { ImportSheet, ShareSheet } from './components/ShareSheets';
 import { ShoppingView } from './components/ShoppingView';
 import { IntroSheet } from './components/IntroSheet';
@@ -46,6 +47,7 @@ import {
   clearCart, cleanShopWith, combineLists, copyItem, defaultLists,
   itemsOn, listOf, moveItem, removeList, sameThing, setTripItemDone, shopTrip,
   updateList,
+  setListShared,
 } from './core/lists';
 import { boundsOf, clearFor } from './core/expand';
 import { clampPlace, footprint } from './core/geometry';
@@ -206,6 +208,8 @@ export default function App() {
 
   // Sharing: chooser defaults (list/map), and anything that arrived in a link.
   const [sending, setSending] = useState<{ list: boolean; map: boolean; listId?: string } | null>(null);
+  /** The list whose sharing sheet is open. */
+  const [sharingId, setSharingId] = useState<string | null>(null);
   const [incoming, setIncoming] = useState<Share | 'error' | null>(null);
   const [notice, setNotice] = useState('');
   const [confirmClearWhere, setConfirmClearWhere] = useState(false);
@@ -1288,9 +1292,9 @@ export default function App() {
   }, [layout.id, layout.name, catalog, setPurchases]);
 
   /** Creates a list without switching to it. */
-  function createList(name: string): string {
+  function createList(name: string, shared = false): string {
     const id = `l-${newId()}`;
-    setLists((prev) => [...(prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev]), { id, name }]);
+    setLists((prev) => [...(prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev]), shared ? { id, name, shared: true } : { id, name }]);
     return id;
   }
 
@@ -1403,7 +1407,16 @@ export default function App() {
 
   /** Opens the share chooser (Shop → list; Edit map → map). */
   function openShare(initial: { list: boolean; map: boolean; listId?: string }) {
-    setSending(initial);
+    if (initial.list && !initial.map) setSharingId(initial.listId ?? listId);
+    else setSending(initial);
+  }
+
+  /** Shares a list with the household, or makes it private again. */
+  function shareList(id: string, shared: boolean) {
+    setLists((prev) => {
+      const base = prev.some((l) => l.id === MAIN_LIST) ? prev : [...defaultLists, ...prev];
+      return setListShared(base, id, shared);
+    });
   }
 
   const data = () => ({ items: allItems, products, categories, layouts });
@@ -1489,6 +1502,7 @@ export default function App() {
   const listsApi = {
     all: lists, current: listId, counts: listCounts, doneCounts: listDoneCounts,
     switchTo: setActiveListId,
+    household: household.household?.name,
     create: createList, rename: renameList, remove: deleteList, combine: combineInto,
     preview: (sources: string[]) => combineLists(allItems, listId, sources, catalog),
     shopWith, setShopWith: (ids: string[]) => setShopWith(() => cleanShopWith(ids, listId, lists)),
@@ -1753,7 +1767,6 @@ export default function App() {
       {view === 'setup' && setupTab === 'lists' && (
         <ListsManageView
           onShare={(id) => openShare({ list: true, map: false, listId: id })}
-          householdRow={household.configured ? <HouseholdRow api={household} onClick={() => setHouseholdOpen(true)} /> : undefined}
           lists={listsApi}
           catalog={catalog}
           layout={layout}
@@ -1853,6 +1866,22 @@ export default function App() {
           onClose={() => { setHouseholdOpen(false); setJoinCode(undefined); }}
         />
       )}
+      {sharingId && (() => {
+        const list = lists.find((l) => l.id === sharingId);
+        if (!list) return null;
+        return (
+          <ListShareSheet
+            list={list}
+            items={itemsOn(allItems, list.id)}
+            layout={layout}
+            catalog={catalog}
+            api={household}
+            onSetShared={(shared) => shareList(list.id, shared)}
+            onManageHousehold={() => { setSharingId(null); setHouseholdOpen(true); }}
+            onClose={() => setSharingId(null)}
+          />
+        );
+      })()}
       {sending && (
         <ShareSheet
           listName={lists.find((l) => l.id === (sending.listId ?? listId))?.name ?? 'Shopping list'}
@@ -1860,6 +1889,7 @@ export default function App() {
           layout={layout}
           catalog={catalog}
           initial={{ list: sending.list, map: sending.map }}
+          note={household.household ? 'Your stores already sync with your household. A copy is for people outside it.' : undefined}
           onClose={() => setSending(null)}
         />
       )}
