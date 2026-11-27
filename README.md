@@ -178,10 +178,15 @@ For a new Supabase project:
    `supabase/migrations/20261024000000_households.sql`, and run it. It's
    safe to run again. To confirm it worked, run `supabase/check.sql`: every
    row should say OK.
-2. **Turn on in-app sign-in without emails.** In **Authentication → Sign In
-   / Providers → Email**, make sure **Email** is enabled and turn **Confirm
-   email** off, then save. Accounts are then ready the moment they're
-   created, and Supabase never needs to send an email.
+2. **Set up email for sign-up confirmation.** In **Authentication → Sign In
+   / Providers → Email**, keep **Confirm email** on. Supabase's built-in
+   sender is limited to a few emails an hour and only to your team, so under
+   **Authentication → Emails → SMTP Settings** enable **custom SMTP** with a
+   provider such as Resend (verify your sending domain, then use the SMTP
+   host, port, username and API key). Under **Authentication → URL
+   Configuration** set the **Site URL** and add it to **Redirect URLs**
+   (the app address, e.g. `https://calmeddy.github.io/aisle-wise/`).
+   Sign-up then shows "check your email", and the sheet can resend the link.
 3. **Point the app at the project.** Put the **Project URL** and **anon
    public** key in `.env.production` as `VITE_SUPABASE_URL` and
    `VITE_SUPABASE_ANON_KEY`, or set the GitHub Variables above.
