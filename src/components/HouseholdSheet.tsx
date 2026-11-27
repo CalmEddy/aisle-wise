@@ -9,6 +9,7 @@ import {
   sortMembers,
   type Member,
 } from '../sync/members';
+import { MAIN_LIST, type ShoppingList } from '../core/types';
 import { MIN_PASSWORD } from '../sync/password';
 import type { HouseholdApi } from '../sync/useHousehold';
 import { Icon } from './Icon';
@@ -29,20 +30,29 @@ export function HouseholdRow({ api, onClick }: { api: HouseholdApi; onClick: () 
       type="button"
       className={`menu-row household-row status-${live ? api.status : 'off'}`}
       onClick={onClick}
-      aria-label={live ? `Household ${api.household!.name}: ${STATUS_TEXT[api.status]}` : 'Share with household'}
+      aria-label={live ? `Household ${api.household!.name}: ${STATUS_TEXT[api.status]}` : 'Household'}
     >
       <span className="dot" aria-hidden="true" />
       <Icon name="users" />
       <span className="household-row-text">
-        <b>{live ? api.household!.name : 'Share with your household'}</b>
-        <span className="muted small">{live ? STATUS_TEXT[api.status] : 'Everyone sees the same lists'}</span>
+        <b>{live ? api.household!.name : 'Household'}</b>
+        <span className="muted small">{live ? STATUS_TEXT[api.status] : 'Share lists live with family or roommates'}</span>
       </span>
       <Icon name="chevron-right" className="chev" />
     </button>
   );
 }
 
-export function HouseholdSheet({ api, joinCode, onClose }: { api: HouseholdApi; joinCode?: string; onClose: () => void }) {
+export function HouseholdSheet({ api, joinCode, lists, onSetListShared, onClose }: {
+  api: HouseholdApi;
+  joinCode?: string;
+  /** This phone's lists, so the household screen can show and change which are shared. */
+  lists: ShoppingList[];
+  onSetListShared: (listId: string, shared: boolean) => void;
+  onClose: () => void;
+}) {
+  // Right after creating or joining: offer to share some lists (none are shared by default).
+  const [choosing, setChoosing] = useState(false);
   return (
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet household" role="dialog" aria-label="Household" onClick={(e) => e.stopPropagation()}>
@@ -60,9 +70,16 @@ export function HouseholdSheet({ api, joinCode, onClose }: { api: HouseholdApi; 
         ) : !api.signedIn ? (
           <SignIn api={api} joining={!!joinCode} />
         ) : !api.household ? (
-          <CreateOrJoin api={api} joinCode={joinCode} />
+          <CreateOrJoin api={api} joinCode={joinCode} onDone={() => setChoosing(true)} />
+        ) : choosing ? (
+          <ShareListsStep
+            householdName={api.household.name}
+            lists={lists}
+            onSetShared={onSetListShared}
+            onDone={() => setChoosing(false)}
+          />
         ) : (
-          <InHousehold api={api} />
+          <InHousehold api={api} lists={lists} onSetListShared={onSetListShared} />
         )}
         <div className="sheet-actions">
           <span style={{ flex: 1 }} />
@@ -148,10 +165,11 @@ function SignIn({ api, joining }: { api: HouseholdApi; joining: boolean }) {
 
   return (
     <>
-      <h2>{joining ? 'Join a household' : 'Share with your household'}</h2>
+      <h2>{joining ? 'You’ve been invited to a household' : 'Household'}</h2>
       <p className="muted small">
-        Everyone in a household shares one shopping list, grocery items and stores. Changes show up on
-        everyone’s phone as you shop. {joining ? 'Sign in first, then you’ll join.' : ''}
+        {joining
+          ? 'Sign in or create an account, then you’ll join. Your own lists stay private until you choose to share them.'
+          : 'A household shares its grocery items and stores, and any lists you choose to share. Changes show up on everyone’s phone as you shop.'}
       </p>
       <div className="segmented" role="tablist">
         <button type="button" className={!creating ? 'active' : ''} onClick={() => setMode('signin')}>Sign in</button>
@@ -284,19 +302,19 @@ function SetNewPassword({ api }: { api: HouseholdApi }) {
   );
 }
 
-function CreateOrJoin({ api, joinCode }: { api: HouseholdApi; joinCode?: string }) {
+function CreateOrJoin({ api, joinCode, onDone }: { api: HouseholdApi; joinCode?: string; onDone?: () => void }) {
   const [name, setName] = useState('');
   const [code, setCode] = useState(joinCode ?? '');
   const { busy, error, run } = useAction();
 
   return (
     <>
-      <h2>{joinCode ? 'Join the household' : 'Share with your household'}</h2>
+      <h2>{joinCode ? 'Join the household' : 'Household'}</h2>
       <p className="muted small">
         Signed in as {api.email}. Your stores and grocery items will be added to the household.
         Your lists stay private until you choose to share them.
       </p>
-      <form className="card inset" onSubmit={(e) => { e.preventDefault(); void run(() => api.join(code)); }}>
+      <form className="card inset" onSubmit={(e) => { e.preventDefault(); void run(async () => { await api.join(code); onDone?.(); }); }}>
         <h3>Join with an invite code</h3>
         <div className="add-row">
           <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. 7F3A9C21B4D05E68" aria-label="Invite code" autoCapitalize="characters" />
@@ -304,7 +322,7 @@ function CreateOrJoin({ api, joinCode }: { api: HouseholdApi; joinCode?: string 
         </div>
       </form>
       {!joinCode && (
-        <form className="card inset" onSubmit={(e) => { e.preventDefault(); void run(() => api.create(name)); }}>
+        <form className="card inset" onSubmit={(e) => { e.preventDefault(); void run(async () => { await api.create(name); onDone?.(); }); }}>
           <h3>Or start a new household</h3>
           <div className="add-row">
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. The Smiths" aria-label="Household name" />
@@ -345,6 +363,90 @@ export function InviteButton({ code, className = 'btn primary wide' }: { code: s
   }
 
   return <button type="button" className={className} onClick={invite}>{copied ? 'Link copied ✓' : 'Send invite link'}</button>;
+}
+
+/** One checkbox per list. Lists are private unless ticked. */
+function ListChecks({ lists, checked, onToggle }: {
+  lists: ShoppingList[];
+  checked: (l: ShoppingList) => boolean;
+  onToggle: (l: ShoppingList, on: boolean) => void;
+}) {
+  return (
+    <div className="share-options" role="group" aria-label="Lists">
+      {lists.map((l) => (
+        <label key={l.id} className="check share-option">
+          <input type="checkbox" checked={checked(l)} onChange={(e) => onToggle(l, e.target.checked)} />
+          <span>
+            <span className="share-option-title">{l.name}</span>
+            {l.id === MAIN_LIST && (
+              <span className="muted small"> Joins the household’s “Shopping list” if it has one, combining the items.</span>
+            )}
+          </span>
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** Right after creating or joining a household: choose which lists to share (none by default). */
+export function ShareListsStep({ householdName, lists, onSetShared, onDone }: {
+  householdName: string;
+  lists: ShoppingList[];
+  onSetShared: (listId: string, shared: boolean) => void;
+  onDone: () => void;
+}) {
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  return (
+    <>
+      <h2>Share any of your lists?</h2>
+      <p className="muted small">
+        You’re in {householdName}. Only the lists you tick are shared with it. Your others stay private,
+        and you can change this any time from a list’s Share button.
+      </p>
+      <ListChecks
+        lists={lists}
+        checked={(l) => picked.has(l.id)}
+        onToggle={(l, on) => setPicked((prev) => {
+          const next = new Set(prev);
+          if (on) next.add(l.id);
+          else next.delete(l.id);
+          return next;
+        })}
+      />
+      <button
+        type="button"
+        className="btn primary wide"
+        onClick={() => {
+          picked.forEach((id) => onSetShared(id, true));
+          onDone();
+        }}
+      >
+        {picked.size ? `Share ${picked.size} list${picked.size === 1 ? '' : 's'}` : 'Skip for now'}
+      </button>
+    </>
+  );
+}
+
+/** The household screen’s view of which lists are shared, with a switch for each. */
+export function SharedListsCard({ lists, onSetShared }: {
+  lists: ShoppingList[];
+  onSetShared: (listId: string, shared: boolean) => void;
+}) {
+  if (lists.length === 0) return null;
+  return (
+    <div className="card inset">
+      <h3>Shared lists</h3>
+      <p className="muted small">Only ticked lists sync with this household. The rest stay on your phone.</p>
+      <ListChecks
+        lists={lists}
+        checked={(l) => l.shared === true}
+        onToggle={(l, on) => {
+          if (!on && !confirm(`Stop sharing “${l.name}”? Everyone keeps their own copy, but changes stop syncing.`)) return;
+          onSetShared(l.id, on);
+        }}
+      />
+    </div>
+  );
 }
 
 /** Who is in the household; owners also get a Remove button next to everyone else. */
@@ -417,7 +519,11 @@ function DeleteAccount({ api }: { api: HouseholdApi }) {
   );
 }
 
-function InHousehold({ api }: { api: HouseholdApi }) {
+function InHousehold({ api, lists, onSetListShared }: {
+  api: HouseholdApi;
+  lists: ShoppingList[];
+  onSetListShared: (listId: string, shared: boolean) => void;
+}) {
   const h = api.household!;
   const [members, setMembers] = useState<Member[]>([]);
   const [refresh, setRefresh] = useState(0);
@@ -443,6 +549,8 @@ function InHousehold({ api }: { api: HouseholdApi }) {
           and keeps your data. Everything else is syncing normally.
         </p>
       )}
+
+      <SharedListsCard lists={lists} onSetShared={onSetListShared} />
 
       <div className="card inset">
         <h3>Invite someone</h3>
