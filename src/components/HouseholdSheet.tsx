@@ -1,4 +1,14 @@
 import { useEffect, useState } from 'react';
+import {
+  DELETE_ACCOUNT_CONFIRM_WORD,
+  NEW_CODE_WARNING,
+  REMOVE_MEMBER_WARNING,
+  isOwner,
+  leaveWarning,
+  rolesKnown,
+  sortMembers,
+  type Member,
+} from '../sync/members';
 import type { HouseholdApi } from '../sync/useHousehold';
 import { Icon } from './Icon';
 
@@ -188,7 +198,7 @@ function CreateOrJoin({ api, joinCode }: { api: HouseholdApi; joinCode?: string 
       <form className="card inset" onSubmit={(e) => { e.preventDefault(); void run(() => api.join(code)); }}>
         <h3>Join with an invite code</h3>
         <div className="add-row">
-          <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. 7F3A9C21" aria-label="Invite code" autoCapitalize="characters" />
+          <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="e.g. 7F3A9C21B4D05E68" aria-label="Invite code" autoCapitalize="characters" />
           <button disabled={busy || code.trim().length < 6}>Join</button>
         </div>
       </form>
@@ -203,20 +213,96 @@ function CreateOrJoin({ api, joinCode }: { api: HouseholdApi; joinCode?: string 
       )}
       {error && <p className="error">{error}</p>}
       <button className="link" onClick={() => void run(api.signOut)}>Sign out</button>
+      <DeleteAccount api={api} />
     </>
+  );
+}
+
+/** Who is in the household; owners also get a Remove button next to everyone else. */
+export function MembersCard({ members, myId, canRemove, busy, onRemove }: {
+  members: Member[];
+  myId: string | undefined;
+  canRemove: boolean;
+  busy: boolean;
+  onRemove: (m: Member) => void;
+}) {
+  if (members.length === 0) return null;
+  return (
+    <div className="card inset">
+      <h3>Members</h3>
+      <ul className="members">
+        {sortMembers(members).map((m) => (
+          <li key={m.userId}>
+            <span>
+              {m.email}{m.userId === myId ? ' (you)' : ''}
+              {m.role === 'owner' && <span className="muted small"> · Owner</span>}
+            </span>
+            {canRemove && m.userId !== myId && (
+              <button type="button" className="btn small danger" disabled={busy} onClick={() => onRemove(m)}>
+                Remove
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Erases the account, after typing a confirmation word. */
+function DeleteAccount({ api }: { api: HouseholdApi }) {
+  const [open, setOpen] = useState(false);
+  const [word, setWord] = useState('');
+  const { busy, error, run } = useAction();
+
+  if (!open) {
+    return <button className="link" onClick={() => setOpen(true)}>Delete my account…</button>;
+  }
+  return (
+    <form
+      className="card inset"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (word.trim().toUpperCase() === DELETE_ACCOUNT_CONFIRM_WORD) void run(api.deleteAccount);
+      }}
+    >
+      <h3>Delete my account</h3>
+      <p className="muted small">
+        This erases your login for good. If other people are in your household, it stays with them (the longest-standing
+        member becomes its owner). If you’re the only one, the household and its shared data are deleted. Your phone
+        keeps its own copy of your lists.
+      </p>
+      <label className="field">
+        <span>Type {DELETE_ACCOUNT_CONFIRM_WORD} to confirm</span>
+        <input value={word} onChange={(e) => setWord(e.target.value)} autoCapitalize="characters" autoComplete="off" />
+      </label>
+      {error && <p className="error">{error}</p>}
+      <div className="sheet-actions">
+        <button type="button" className="btn" disabled={busy} onClick={() => { setOpen(false); setWord(''); }}>Cancel</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn danger" disabled={busy || word.trim().toUpperCase() !== DELETE_ACCOUNT_CONFIRM_WORD}>
+          {busy ? 'One moment…' : 'Delete my account'}
+        </button>
+      </div>
+    </form>
   );
 }
 
 function InHousehold({ api }: { api: HouseholdApi }) {
   const h = api.household!;
-  const [members, setMembers] = useState<string[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [refresh, setRefresh] = useState(0);
   const [copied, setCopied] = useState(false);
   const { busy, error, run } = useAction();
   const link = `${location.origin}${location.pathname}#join=${h.invite_code}`;
 
+  const { members: loadMembers } = api;
   useEffect(() => {
-    void api.members().then(setMembers);
-  }, [api]);
+    void loadMembers().then(setMembers);
+  }, [loadMembers, refresh]);
+
+  // Owner buttons only make sense once the database knows about owners.
+  const owner = rolesKnown(members) && isOwner(members, api.userId);
 
   async function invite() {
     const text = `Join our shopping list in Aisle Wise. Invite code: ${h.invite_code}`;
@@ -244,7 +330,7 @@ function InHousehold({ api }: { api: HouseholdApi }) {
       {api.needsDbUpdate && (
         <p className="card inset problems small">
           <b>List names aren’t syncing yet.</b> Your household’s database needs the latest setup: open Supabase → SQL Editor,
-          paste in the setup script (<code>supabase/migrations/20261024000000_households.sql</code>) and run it. It’s safe to run again
+          run the files in <code>supabase/migrations</code> in order. It’s safe to run again
           and keeps your data. Everything else is syncing normally.
         </p>
       )}
@@ -254,24 +340,38 @@ function InHousehold({ api }: { api: HouseholdApi }) {
         <p className="muted small">They open the link (or enter the code), sign in with their email, and they’re in.</p>
         <div className="invite-code" aria-label="Invite code">{h.invite_code}</div>
         <button className="btn primary wide" onClick={invite}>{copied ? 'Link copied ✓' : 'Send invite link'}</button>
+        {owner && (
+          <button
+            className="link"
+            disabled={busy}
+            onClick={() => confirm(NEW_CODE_WARNING) && void run(async () => { await api.rotateInviteCode(); setCopied(false); })}
+          >
+            Make a new invite code
+          </button>
+        )}
       </div>
 
-      {members.length > 0 && (
-        <div className="card inset">
-          <h3>Members</h3>
-          <ul className="members">{members.map((m) => <li key={m}>{m}{m === api.email ? ' (you)' : ''}</li>)}</ul>
-        </div>
-      )}
+      <MembersCard
+        members={members}
+        myId={api.userId}
+        canRemove={owner}
+        busy={busy}
+        onRemove={(m) => confirm(REMOVE_MEMBER_WARNING(m.email)) && void run(async () => {
+          await api.removeMember(m.userId);
+          setRefresh((n) => n + 1);
+        })}
+      />
 
       {error && <p className="error">{error}</p>}
       <div className="sheet-actions">
-        <button className="btn danger" disabled={busy} onClick={() => confirm('Leave this household? Your phone keeps a copy of everything, but stops getting updates.') && void run(api.leave)}>
+        <button className="btn danger" disabled={busy} onClick={() => confirm(leaveWarning(members, api.userId)) && void run(api.leave)}>
           Leave household
         </button>
         <span style={{ flex: 1 }} />
         <button className="btn" disabled={busy} onClick={() => void run(api.signOut)}>Sign out</button>
       </div>
       <p className="muted small">Signed in as {api.email}</p>
+      <DeleteAccount api={api} />
     </>
   );
 }
