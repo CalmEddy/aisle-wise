@@ -1,3 +1,4 @@
+import type { Purchase } from '../core/purchases';
 import type { Category, ListItem, Product, ShoppingList, StoreLayout } from '../core/types';
 
 /**
@@ -11,7 +12,7 @@ import type { Category, ListItem, Product, ShoppingList, StoreLayout } from '../
  * shadow. The last write to a document wins.
  */
 
-export type Kind = 'item' | 'product' | 'layout' | 'categories' | 'list';
+export type Kind = 'item' | 'product' | 'layout' | 'categories' | 'list' | 'purchase';
 
 export interface Doc {
   kind: Kind;
@@ -29,6 +30,8 @@ export interface SyncData {
   products: Product[];
   categories: Category[];
   layouts: StoreLayout[];
+  /** What was bought on past trips (feeds Buy again). */
+  purchases: Purchase[];
 }
 
 /** Where documents are stored and how changes arrive. Supabase in the app; memory in tests. */
@@ -67,13 +70,14 @@ export function toDocs(d: SyncData): Map<string, Doc> {
   d.lists.forEach((x) => add('list', x.id, x));
   d.products.forEach((x) => add('product', x.id, x));
   d.layouts.forEach((x) => add('layout', x.id, x));
+  d.purchases.forEach((x) => add('purchase', x.id, x));
   add('categories', 'all', d.categories);
   return docs;
 }
 
 /** Applies server documents to local data. */
 export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
-  let { items, lists, products, categories, layouts } = d;
+  let { items, lists, products, categories, layouts, purchases } = d;
   const put = <T extends { id: string }>(list: T[], doc: Doc): T[] => {
     const without = list.filter((x) => x.id !== doc.id);
     if (doc.deleted || !doc.data) return without.length === list.length ? list : without;
@@ -88,9 +92,10 @@ export function applyDocs(d: SyncData, docs: Doc[]): SyncData {
     else if (doc.kind === 'list') lists = put(lists, doc);
     else if (doc.kind === 'product') products = put(products, doc);
     else if (doc.kind === 'layout') layouts = put(layouts, doc);
+    else if (doc.kind === 'purchase') purchases = put(purchases, doc);
     else if (doc.kind === 'categories' && doc.id === 'all' && !doc.deleted && Array.isArray(doc.data)) categories = doc.data as Category[];
   }
-  return { items, lists, products, categories, layouts };
+  return { items, lists, products, categories, layouts, purchases };
 }
 
 export class SyncEngine {

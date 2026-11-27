@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react';
 import { guessCategory } from '../core/guess';
 import type { QuickAddResult } from '../App';
 import type { Catalog } from '../core/catalog';
 import { amountText, parseAmount, withAmount } from '../core/items';
+import { ago, buyAgain, type Purchase, type Usual } from '../core/purchases';
 import { splitSpokenItems } from '../core/speech';
 import type { Product } from '../core/types';
 import { usePersistentState } from '../usePersistentState';
@@ -14,7 +15,7 @@ import { useVoiceMic } from './useVoiceMic';
  * Default docks as a sheet. `inline` embeds it on the Setup → Lists screen.
  * "Got it" (in the cart) is Shop-only — pass `allowCart={false}` when editing lists.
  */
-export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, hereLabel, whereText, iconOf, onAdd, onUndo, onClose, allowCart = true, inline = false, tools }: {
+export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCart, purchases, hereLabel, whereText, iconOf, onAdd, onUndo, onClose, allowCart = true, inline = false, tools }: {
   listName: string;
   catalog: Catalog;
   /** Master-list items already waiting on this target list. */
@@ -23,6 +24,8 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
   listedAnywhere?: Set<string>;
   /** Product ids currently checked off (in the cart) on any list. */
   inCart?: Set<string>;
+  /** Past purchases: shown as the collapsible Buy again section while nothing is typed. */
+  purchases?: Purchase[];
   /** Where you're standing, if anywhere (new things put in the cart go there). */
   hereLabel?: string;
   whereText: (p: Product) => string;
@@ -53,6 +56,12 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
   const suggestions = useMemo(() => catalog.suggest(query, 12), [catalog, query]);
   const isNew = query.length > 0 && !catalog.exact(query);
   const guess = isNew ? guessCategory(query, catalog)?.categoryId : undefined;
+
+  const [buyAgainOpen, setBuyAgainOpen] = usePersistentState('aw.buyAgainOpen', false);
+  const history = useMemo(() => buyAgain(purchases ?? []), [purchases]);
+  const historyCount = history.due.length + history.often.length + history.lastTrip.length;
+  /** Different things offered (one thing can be both often bought and on the last trip). */
+  const historyDistinct = new Set([...history.due, ...history.often, ...history.lastTrip].map((u) => u.productId ?? u.name.toLowerCase())).size;
 
   const [gotItHintSeen, setGotItHintSeen] = usePersistentState('aw.gotItHintSeen', false);
 
@@ -99,7 +108,8 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
     return whereText(p);
   }
 
-  const row = (p: Product) => {
+  const row = (p: Product, extra?: { sub?: string; amt?: { qty?: number; note?: string } }) => {
+    const amt = extra?.amt ?? amount;
     const waiting = onList.has(p.id);
     const onSomeList = anywhere.has(p.id);
     const held = cart.has(p.id);
@@ -109,25 +119,85 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
         <div className="s-text">
           <span>
             <span className="item-name">{p.name}</span>
-            {(amount.qty || amount.note) ? <span className="muted small"> · {amountText(amount)}</span> : null}
+            {(amt.qty || amt.note) ? <span className="muted small"> · {amountText(amt)}</span> : null}
             {onSomeList && <span className="status-pill on-list" aria-hidden="true"><Icon name="list-checks" />List</span>}
             {held && <span className="status-pill in-cart" aria-hidden="true"><Icon name="shopping-cart" />Cart</span>}
           </span>
-          <span className="muted small">{statusLine(p)}</span>
+          <span className="muted small">{waiting || anywhere.has(p.id) || cart.has(p.id) || !extra?.sub ? statusLine(p) : extra.sub}</span>
         </div>
-        {(!waiting || amount.qty || amount.note) && (
-          <button type="button" className="s-btn" aria-label={waiting ? 'Update on list' : 'Add to list'} onClick={() => addFromBox(withAmount(p.name, amount), 'list')}>
+        {(!waiting || amt.qty || amt.note) && (
+          <button type="button" className="s-btn" aria-label={waiting ? 'Update on list' : 'Add to list'} onClick={() => addFromBox(withAmount(p.name, amt), 'list')}>
             {waiting ? 'Update' : <><Icon name="plus" />Add</>}
           </button>
         )}
         {allowCart && (
-          <button type="button" className="s-btn cart" aria-label="Got it: put in cart" onClick={() => addFromBox(withAmount(p.name, amount), 'cart')}>
+          <button type="button" className="s-btn cart" aria-label="Got it: put in cart" onClick={() => addFromBox(withAmount(p.name, amt), 'cart')}>
             <Icon name="shopping-cart" />Got it
           </button>
         )}
       </li>
     );
   };
+
+  /** A past purchase as a normal suggestion row (its master-list item if it still has one). */
+  const usualRow = (u: Usual, sub: string, section: string) => {
+    const p = (u.productId ? catalog.productById.get(u.productId) : undefined) ?? catalog.exact(u.name)
+      ?? { id: `name:${u.name.toLowerCase()}`, name: u.name };
+    return <Fragment key={`${section}-${p.id}`}>{row(p, { sub, amt: u.qty ? { qty: u.qty } : {} })}</Fragment>;
+  };
+  const times = (n: number) => (n === 1 ? 'once' : `${n} times`);
+  const lastTripWaiting = history.lastTrip.filter((u) => {
+    const id = (u.productId ? catalog.productById.get(u.productId) : undefined)?.id ?? catalog.exact(u.name)?.id;
+    return !id || (!anywhere.has(id) && !cart.has(id));
+  });
+
+  const buyAgainSection = !typed && (
+    <details className="buy-again" open={buyAgainOpen} onToggle={(e) => setBuyAgainOpen(e.currentTarget.open)}>
+      <summary>
+        <Icon name="history" /> Buy again
+        {historyCount > 0 && <span className="muted small count-pill">{historyDistinct}</span>}
+      </summary>
+      <div className="buy-again-scroll">
+        {historyCount === 0 ? (
+          <p className="muted small">Nothing yet. When you clear your cart after a trip, what you bought shows up here.</p>
+        ) : (
+          <>
+            {history.due.length > 0 && (
+              <section aria-label="Due now">
+                <h4>Due now</h4>
+                <ul className="suggestions buy-list">
+                  {history.due.map((u) => usualRow(u, `Bought ${ago(u.last)} · about every ${u.intervalDays} day${u.intervalDays === 1 ? '' : 's'}`, 'due'))}
+                </ul>
+              </section>
+            )}
+            {history.often.length > 0 && (
+              <section aria-label="Often bought">
+                <h4>Often bought</h4>
+                <ul className="suggestions buy-list">
+                  {history.often.map((u) => usualRow(u, `Bought ${times(u.count)} · last ${ago(u.last)}`, 'often'))}
+                </ul>
+              </section>
+            )}
+            {history.lastTrip.length > 0 && (
+              <section aria-label="Last trip">
+                <h4>
+                  Last trip · {history.lastTripAt ? ago(history.lastTripAt) : ''}{history.lastTripStore ? ` · ${history.lastTripStore}` : ''}
+                  {lastTripWaiting.length > 0 && (
+                    <button type="button" className="link" onClick={() => add(lastTripWaiting.map((u) => withAmount(u.name, { qty: u.qty })), 'list')}>
+                      Add all ({lastTripWaiting.length})
+                    </button>
+                  )}
+                </h4>
+                <ul className="suggestions buy-list">
+                  {history.lastTrip.map((u) => usualRow(u, 'Bought on your last trip', 'last'))}
+                </ul>
+              </section>
+            )}
+          </>
+        )}
+      </div>
+    </details>
+  );
 
   const body = (
     <>
@@ -177,6 +247,8 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
         </p>
       )}
 
+      {buyAgainSection}
+
       {typed ? (
         <>
         {allowCart && !gotItHintSeen && (
@@ -202,7 +274,7 @@ export function AddItemsSheet({ listName, catalog, onList, listedAnywhere, inCar
               )}
             </li>
           )}
-          {suggestions.map(row)}
+          {suggestions.map((p) => row(p))}
         </ul>
         </>
       ) : null}

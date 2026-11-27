@@ -141,7 +141,7 @@ test('Setup Lists: sort cycles and search badges show List / Cart', async ({ pag
   await expect(appleSug.locator('.status-pill.on-list')).toHaveText('List');
 });
 
-test('Lists: no Buy again, no Duplicate / Clear buttons; each item has a Remove button', async ({ page }) => {
+test('Lists: Buy again lives under the add box; no Duplicate / Clear buttons; each item has a Remove button', async ({ page }) => {
   const t = (start: number, names: string[]) => ({ layoutId: 'demo', start, picks: names.map((name, i) => ({ name, at: start + i })) });
   await fresh(page, {
     trips: [t(1, ['Milk', 'Bread', 'Eggs']), t(2, ['Milk', 'Bread']), t(3, ['Milk', 'Apples'])],
@@ -149,7 +149,7 @@ test('Lists: no Buy again, no Duplicate / Clear buttons; each item has a Remove 
     display: { noAskStores: ['demo'] },
   });
   await goTab(page, 'Lists');
-  await expect(page.locator('.buy-again')).toHaveCount(0);
+  await expect(page.locator('details.buy-again')).toHaveCount(1);
   for (const name of ['Duplicate', 'Clear checked', 'Clear to-buy']) {
     await expect(page.getByRole('button', { name })).toHaveCount(0);
   }
@@ -158,7 +158,7 @@ test('Lists: no Buy again, no Duplicate / Clear buttons; each item has a Remove 
   await expect(page.locator('.lists-manage-items .name')).toContainText(['Bread']);
   await page.locator('.toast').getByRole('button', { name: 'Undo' }).click();
   await expect(page.locator('.lists-manage-items .name')).toContainText(['Apples']);
-  // Items tab has no Buy again either.
+  // The Items tab has no Buy again.
   await goTab(page, 'Items');
   await expect(page.locator('.buy-again')).toHaveCount(0);
 });
