@@ -29,6 +29,9 @@ from (values
       and policyname in ('members can leave', 'members rename their household'))),
   ('10. size and quota limits on documents',
     exists (select 1 from pg_trigger where tgrelid = to_regclass('public.docs') and tgname = 'docs_limits' and not tgisinternal)
-    and exists (select 1 from pg_trigger where tgrelid = to_regclass('public.docs') and tgname = 'docs_quota' and not tgisinternal))
+    and exists (select 1 from pg_trigger where tgrelid = to_regclass('public.docs') and tgname = 'docs_quota' and not tgisinternal)),
+  ('11. categories and purchases can sync one by one',
+    exists (select 1 from pg_constraint where conrelid = to_regclass('public.docs') and conname = 'docs_kind_check'
+      and pg_get_constraintdef(oid) like '%''category''%' and pg_get_constraintdef(oid) like '%''purchase''%'))
 ) as t(part, ok)
 order by (regexp_match(part, '^[0-9]+'))[1]::int;

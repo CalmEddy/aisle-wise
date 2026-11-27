@@ -171,8 +171,9 @@ household's one, combining the items. Manage everything else (members, invite
 code, which lists are shared, leaving) under **Household** in the list options.
 
 How it works: the shared data is split into small documents stored in
-Supabase (`docs` table), one per list item, grocery item, named list and
-store, plus one for the category list. Each phone sends what changed and
+Supabase (`docs` table), one per list item, grocery item, category, named
+list and store, so two people editing different things never overwrite each
+other (if you both change the very same thing at once, the last change wins). Each phone sends what changed and
 receives other phones' changes live; the last change to a document wins
 (`src/sync/engine.ts`). Database rules only let members of a household read
 or change its data (`supabase/migrations/`). Each household has an **owner**
@@ -199,9 +200,9 @@ For a new Supabase project:
 1. **Create the tables.** In your Supabase project, open **SQL Editor**,
    paste the contents of each file in `supabase/migrations/`, in order
    (`20261024…households`, then `20261127…purchases`, then
-   `20261128…hardening`), and run them. They're safe to run again, except
+   `20261128…hardening`, then `20261129…category_docs`), and run them. They're safe to run again, except
    that re-running the first one puts its older, looser rules back; if you
-   do, run the hardening file again. To confirm it worked, run
+   do, run the later files again. To confirm it worked, run
    `supabase/check.sql`: every row should say OK.
 2. **Set up email for sign-up confirmation.** In **Authentication → Sign In
    / Providers → Email**, keep **Confirm email** on. Supabase's built-in

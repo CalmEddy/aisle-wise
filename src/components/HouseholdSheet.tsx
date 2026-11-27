@@ -544,7 +544,7 @@ function InHousehold({ api, lists, onSetListShared }: {
       <p className="muted small">Grocery items and stores are shared with everyone here and update live. Lists sync only when you share them.</p>
       {api.needsDbUpdate && (
         <p className="card inset problems small">
-          <b>List names aren’t syncing yet.</b> Your household’s database needs the latest setup: open Supabase → SQL Editor,
+          <b>Some changes aren’t syncing yet</b> (list names, purchase history or categories). Your household’s database needs the latest setup: open Supabase → SQL Editor,
           run the files in <code>supabase/migrations</code> in order. It’s safe to run again
           and keeps your data. Everything else is syncing normally.
         </p>
