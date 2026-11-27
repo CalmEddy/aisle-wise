@@ -1863,6 +1863,8 @@ export default function App() {
         <HouseholdSheet
           api={household}
           joinCode={household.household ? undefined : joinCode}
+          lists={lists}
+          onSetListShared={shareList}
           onClose={() => { setHouseholdOpen(false); setJoinCode(undefined); }}
         />
       )}

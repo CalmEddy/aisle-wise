@@ -122,13 +122,13 @@ Tap the list name under the store (📝) to manage lists:
   shopping; the sources stay intact for next time.
 - **⋯** on a list: rename, duplicate, reorder, clear checked/to-buy, or
   delete (with Undo). On an item: **Move to…** / **Copy to…** another list.
-- Which list you're shopping stays per phone; the lists and their items
-  sync with the household.
+- Which list you're shopping stays per phone. Lists are private unless you
+  share them with your household (see **Households** below).
 
 ## Sharing
 
-Tap **Share** at the top of the Shop tab (or **Share** in **Edit map** /
-store settings). Choose what to send:
+To send a one-time copy, tap **Share** on a list, then **Send a copy
+instead…** (or **Share this store** in the Stores tab). Choose what to send:
 
 - **Shopping list** — unchecked items on the list you’re shopping.
 - **This store’s map** — the layout, its categories, where items are in
@@ -144,17 +144,31 @@ chosen list, and new grocery names join their master catalog.
 The shared data is packed into the link itself, after `#`, so it is never
 uploaded anywhere. Links are copies: later changes aren't synced, so share
 again to send updates (`src/core/share.ts`). For lists that stay in sync,
-use a household.
+share them with a household.
 
 ## Households (live sharing)
 
-Tap the **Share with household** button under the store name. Create an
-account (email + password) or sign in, right in the app, then create a
-household or join one with an invite code or link. Everyone in a household
-shares shopping lists, grocery items, categories and stores, and changes
-appear on everyone's phone as you shop. Where you're standing, which store
-you're in, and which list you're shopping stay per phone. It keeps working
-offline and catches up when the signal returns.
+Sharing is per list. Tap **Share** on a list and switch on **Share with
+household**. If you don't have a household yet, the sheet walks you through
+creating an account (email + password) or signing in, then creating a
+household or joining one with an invite code or link, and the list is shared
+when you're done. Lists you don't share never leave your phone, including
+their items, and new lists start private. (A list can also be shared as you
+create it.)
+
+Everyone in a household shares its grocery items, categories and stores, plus
+the lists that have been shared with it, and changes appear on everyone's
+phone as you shop. Where you're standing, which store you're in, and which
+list you're shopping stay per phone. It keeps working offline and catches up
+when the signal returns.
+
+Stopping is gentle: unsharing a list gives everyone their own copy and stops
+syncing, and nothing is deleted. Sharing it again later merges the copies.
+Leaving a household (or signing out) makes all your lists private again. When
+you join or create a household you're asked which of your lists to share, and
+none are ticked to start with. The default **Shopping list** joins the
+household's one, combining the items. Manage everything else (members, invite
+code, which lists are shared, leaving) under **Household** in the list options.
 
 How it works: the shared data is split into small documents stored in
 Supabase (`docs` table), one per list item, grocery item, category, named
@@ -256,7 +270,8 @@ src/components/ShoppingView.tsx   Shopping list with suggestions and drag-and-dr
 src/components/ItemsView.tsx      Grocery items and categories editor
 src/components/LayoutEditor.tsx   Store layout editor
 src/components/StoreMap.tsx       Store map used by both
-src/components/ShareSheets.tsx    Share link and import screens
+src/components/ListShareSheet.tsx Sharing one list: household switch or a copy
+src/components/ShareSheets.tsx    Copy-link and import screens
 src/core/share.ts                 Packing lists/stores into links, and importing them
 src/sync/engine.ts                Household sync: sending and receiving changes
 src/sync/supabase.ts              Supabase connection
@@ -292,8 +307,9 @@ https://calmeddy.github.io/aisle-wise/
 
 - **On your own:** lists and stores stay on that phone/browser (localStorage).
   Use **Share** to send a one-off copy of a list or map as a link.
-- **With a household:** tap **Share with household**, create an account or
-  sign in, then create or join a household for live sync across phones.
+- **With a household:** tap **Share** on a list and switch on **Share with
+  household**, create an account or sign in, then create or join a household
+  for live sync of that list across phones.
 
 Every push to `main` is tested, built and published to that URL.
 

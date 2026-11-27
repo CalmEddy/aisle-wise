@@ -14,6 +14,8 @@ const render = (over: Partial<HouseholdApi>) =>
         recovering: false, passwordChanged: false, linkProblem: '', userId: undefined,
         ...over,
       } as unknown as HouseholdApi,
+      lists: [],
+      onSetListShared: () => {},
       onClose: () => {},
     }),
   );
