@@ -63,11 +63,21 @@ export const defaultCategories: Category[] = SEED_CATEGORIES.flatMap((c) => [
   ...c.subs.map(([id, name]) => ({ id, name, parent: c.id, ...(SUB_ICONS[id] && { icon: SUB_ICONS[id] }) })),
 ]);
 
-/** A category's colour and icon, falling back to sensible defaults. */
+const hashOf = (s: string): number => {
+  let h = 0;
+  for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return h;
+};
+
+/**
+ * A category's colour and icon, falling back to sensible defaults. A category
+ * with no colour of its own gets one from its id, so every phone shows the
+ * same colour whatever order its list of categories is in.
+ */
 export function categoryLook(cat: Category | undefined, index = 0): { color: string; icon: string } {
   const d = cat ? looks[cat.id] ?? looks[cat.parent ?? parentOf(cat.id) ?? ''] : undefined;
   return {
-    color: cat?.color || d?.[0] || PALETTE[Math.abs(index) % PALETTE.length],
+    color: cat?.color || d?.[0] || PALETTE[(cat ? hashOf(cat.id) : Math.abs(index)) % PALETTE.length],
     icon: cat?.icon || d?.[1] || '🛒',
   };
 }

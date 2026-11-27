@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Catalog } from './catalog';
-import { categoryLook, defaultCategories, defaultProducts } from './categories';
+import { categoryLook, defaultCategories, defaultProducts, PALETTE } from './categories';
 import { demoLayout } from './demoLayout';
 import { Floor } from './floor';
 import { categorySpot, sectionShapes } from './geometry';
@@ -112,7 +112,12 @@ describe('category looks', () => {
   });
 
   it('falls back to a palette colour and a basket for new categories', () => {
-    expect(categoryLook({ id: 'c-x', name: 'International' }, 2)).toEqual({ color: '#4f9fd8', icon: '🛒' });
+    const look = categoryLook({ id: 'c-x', name: 'International' }, 2);
+    expect(PALETTE).toContain(look.color);
+    expect(look.icon).toBe('🛒');
+    // The colour comes from the category itself, so every phone shows the same one whatever order its list is in.
+    expect(categoryLook({ id: 'c-x', name: 'International' }, 9)).toEqual(look);
+    expect(categoryLook(undefined, 2).color).toBe(PALETTE[2]);
     expect(categoryLook({ id: 'c-x', name: 'Intl', color: '#123456', icon: '🌮' })).toEqual({ color: '#123456', icon: '🌮' });
   });
 });
